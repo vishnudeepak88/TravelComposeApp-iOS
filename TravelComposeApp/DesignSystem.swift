@@ -3,31 +3,53 @@ import SwiftUI
 // MARK: - Design System
 
 struct VoygoTheme {
-    // Brand Colors
-    static let primary      = Color(hue: 0.62, saturation: 0.82, brightness: 0.92)   // Rich violet-blue
-    static let primaryDark  = Color(hue: 0.64, saturation: 0.88, brightness: 0.72)
-    static let accent       = Color(hue: 0.52, saturation: 0.78, brightness: 0.96)   // Teal accent
-    static let success      = Color(hue: 0.38, saturation: 0.72, brightness: 0.82)
-    static let warning      = Color(hue: 0.10, saturation: 0.85, brightness: 0.95)
-    static let danger       = Color(hue: 0.02, saturation: 0.80, brightness: 0.88)
+    // Android Material color tokens from TravelAppTheme.
+    static let primary      = Color.adaptive(light: 0x1F4E8C, dark: 0x95B9FF)
+    static let onPrimary    = Color.adaptive(light: 0xFFFFFF, dark: 0x0A2242)
+    static let primaryContainer = Color.adaptive(light: 0xD6E4FF, dark: 0x274D80)
+    static let onPrimaryContainer = Color.adaptive(light: 0x0A2242, dark: 0xD6E4FF)
+    static let secondary    = Color.adaptive(light: 0x3F5F85, dark: 0xB5CAE8)
+    static let secondaryContainer = Color.adaptive(light: 0xDCE7F7, dark: 0x385276)
+    static let accent       = Color.adaptive(light: 0x365E99, dark: 0xABC8FF)
+    static let success      = Color.adaptive(light: 0x2E7D32, dark: 0x81C784)
+    static let warning      = Color.adaptive(light: 0xB26A00, dark: 0xFFCA28)
+    static let danger       = Color.adaptive(light: 0xBA1A1A, dark: 0xFFB4AB)
 
-    // Backgrounds
-    static let background   = Color(hue: 0.65, saturation: 0.04, brightness: 0.07)   // Near-black
-    static let surface      = Color(hue: 0.65, saturation: 0.06, brightness: 0.12)
-    static let surfaceHigh  = Color(hue: 0.65, saturation: 0.08, brightness: 0.17)
-    static let cardBorder   = Color.white.opacity(0.07)
+    static let background   = Color.adaptive(light: 0xF3F7FF, dark: 0x1D3557)
+    static let surface      = Color.adaptive(light: 0xFFFFFF, dark: 0x233E63)
+    static let surfaceHigh  = Color.adaptive(light: 0xDCE7F7, dark: 0x385276)
+    static let cardBorder   = Color.adaptive(light: 0xC8D2E4, dark: 0x49627F)
+    static let outline      = Color.adaptive(light: 0x73839B, dark: 0x8EA3C1)
 
-    // Text
-    static let textPrimary  = Color.white
-    static let textSecondary = Color.white.opacity(0.55)
-    static let textHint     = Color.white.opacity(0.30)
+    static let textPrimary  = Color.adaptive(light: 0x13233A, dark: 0xE5EEFF)
+    static let textSecondary = Color.adaptive(light: 0x3F5F85, dark: 0xB5CAE8)
+    static let textHint     = Color.adaptive(light: 0x65758D, dark: 0xDCE7F7).opacity(0.82)
 
     // Gradient
     static var primaryGradient: LinearGradient {
-        LinearGradient(colors: [primary, primaryDark], startPoint: .topLeading, endPoint: .bottomTrailing)
+        LinearGradient(colors: [primary, secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
     static var cardGradient: LinearGradient {
-        LinearGradient(colors: [surface, surfaceHigh], startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: [surface, surface], startPoint: .top, endPoint: .bottom)
+    }
+}
+
+private extension Color {
+    static func adaptive(light: UInt, dark: UInt) -> Color {
+        Color(UIColor { traits in
+            UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
+        })
+    }
+}
+
+private extension UIColor {
+    convenience init(hex: UInt) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xff) / 255,
+            green: CGFloat((hex >> 8) & 0xff) / 255,
+            blue: CGFloat(hex & 0xff) / 255,
+            alpha: 1
+        )
     }
 }
 
@@ -44,8 +66,9 @@ struct VoygoCard<Content: View>: View {
         content
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(VoygoTheme.surfaceHigh)
-                    .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(VoygoTheme.cardBorder, lineWidth: 1))
+                    .fill(VoygoTheme.surface)
+                    .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(VoygoTheme.cardBorder.opacity(0.55), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.10), radius: 5, x: 0, y: 2)
             )
     }
 }
@@ -65,10 +88,10 @@ struct PrimaryButton: View {
                 else { Text(title).fontWeight(.semibold) }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(isEnabled ? VoygoTheme.primaryGradient : LinearGradient(colors: [VoygoTheme.surfaceHigh], startPoint: .leading, endPoint: .trailing))
-            .foregroundColor(isEnabled ? .white : VoygoTheme.textHint)
-            .cornerRadius(14)
+            .frame(height: 56)
+            .background(isEnabled ? VoygoTheme.primary : VoygoTheme.primary.opacity(0.45))
+            .foregroundColor(isEnabled ? VoygoTheme.onPrimary : VoygoTheme.onPrimary.opacity(0.6))
+            .cornerRadius(12)
         }
         .disabled(!isEnabled || isLoading)
     }
@@ -82,8 +105,8 @@ struct SecondaryButton: View {
             Text(title)
                 .fontWeight(.semibold)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(RoundedRectangle(cornerRadius: 14).stroke(VoygoTheme.primary, lineWidth: 1.5))
+                .frame(height: 56)
+                .background(RoundedRectangle(cornerRadius: 12).stroke(VoygoTheme.outline, lineWidth: 1))
                 .foregroundColor(VoygoTheme.primary)
         }
     }
@@ -97,8 +120,8 @@ struct DestructiveButton: View {
             Text(title)
                 .fontWeight(.semibold)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(RoundedRectangle(cornerRadius: 14).stroke(VoygoTheme.danger, lineWidth: 1.5))
+                .frame(height: 56)
+                .background(RoundedRectangle(cornerRadius: 12).stroke(VoygoTheme.danger, lineWidth: 1))
                 .foregroundColor(VoygoTheme.danger)
         }
     }
@@ -124,10 +147,10 @@ struct VoygoTextField: View {
                     .tint(VoygoTheme.primary)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .frame(minHeight: 56)
             .background(VoygoTheme.surface)
             .cornerRadius(12)
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(VoygoTheme.cardBorder, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(VoygoTheme.outline.opacity(0.7), lineWidth: 1))
         }
     }
 }
@@ -153,8 +176,8 @@ struct AvatarView: View {
         Text(initial)
             .font(.system(size: size * 0.42, weight: .bold))
             .frame(width: size, height: size)
-            .background(VoygoTheme.primaryGradient)
-            .foregroundColor(.white)
+            .background(VoygoTheme.secondaryContainer)
+            .foregroundColor(VoygoTheme.onPrimaryContainer)
             .clipShape(Circle())
     }
 }
@@ -216,22 +239,23 @@ struct VoygoNavBar: View {
         HStack {
             if showBack, let back = onBack {
                 Button(action: back) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(VoygoTheme.primary)
-                        .frame(width: 36, height: 36)
-                        .background(VoygoTheme.surfaceHigh)
-                        .clipShape(Circle())
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(VoygoTheme.textPrimary)
+                        .frame(width: 44, height: 44)
                 }
+            } else {
+                Color.clear.frame(width: 44, height: 44)
             }
             Spacer()
-            Text(title).font(.headline.weight(.bold)).foregroundColor(VoygoTheme.textPrimary)
+            Text(title).font(.title3.weight(.semibold)).foregroundColor(VoygoTheme.textPrimary).lineLimit(1)
             Spacer()
-            if let trailing = trailingContent { trailing }
-            else { Color.clear.frame(width: 36, height: 36) }
+            if let trailing = trailingContent { trailing.frame(width: 44, height: 44) }
+            else { Color.clear.frame(width: 44, height: 44) }
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.vertical, 6)
+        .background(VoygoTheme.background)
     }
 }
 
@@ -241,7 +265,7 @@ struct ReliabilityBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 4).fill(VoygoTheme.surface).frame(height: 6)
-                RoundedRectangle(cornerRadius: 4).fill(VoygoTheme.success).frame(width: geo.size.width * value, height: 6)
+                RoundedRectangle(cornerRadius: 4).fill(VoygoTheme.primary).frame(width: geo.size.width * value, height: 6)
             }
         }.frame(height: 6)
     }

@@ -17,7 +17,7 @@ struct DriverDashboardView: View {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VoygoNavBar(title: "Driver Dashboard", showBack: true, onBack: onBack)
-                    .background(VoygoTheme.surface)
+                    .background(VoygoTheme.background)
 
                 if dashboards.isEmpty {
                     EmptyStateView(icon: "car.badge.plus", title: "No routes yet",
@@ -225,7 +225,7 @@ final class CreateRouteViewModel: ObservableObject {
                                        pickupNames: pickupPoints, dropNames: dropPoints)
         switch result {
         case .success(let id): createState = .success(id)
-        case .failure(let err): createState = .error(err.localizedDescription ?? "Failed")
+        case .failure(let err): createState = .error(err.localizedDescription)
         }
     }
 }
@@ -241,7 +241,7 @@ struct CreateRouteView: View {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VoygoNavBar(title: "Create Route", showBack: true, onBack: onBack)
-                    .background(VoygoTheme.surface)
+                    .background(VoygoTheme.background)
 
                 ScrollView {
                     VStack(spacing: 16) {

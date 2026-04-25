@@ -30,7 +30,7 @@ struct MySubscriptionsView: View {
                         }
                     )
                 )
-                .background(VoygoTheme.surface)
+                .background(VoygoTheme.background)
 
                 if items.isEmpty {
                     EmptyStateView(icon: "mappin.slash", title: "No subscriptions",
@@ -184,7 +184,7 @@ struct UpcomingCalendarView: View {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VoygoNavBar(title: "Upcoming Commutes", showBack: true, onBack: onBack)
-                    .background(VoygoTheme.surface)
+                    .background(VoygoTheme.background)
 
                 if items.isEmpty {
                     EmptyStateView(icon: "calendar.badge.exclamationmark",

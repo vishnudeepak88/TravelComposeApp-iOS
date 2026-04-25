@@ -14,29 +14,29 @@ struct ProfileView: View {
         NavigationStack {
             ZStack(alignment: .top) {
                 VoygoTheme.background.ignoresSafeArea()
-                ScrollView {
-                    VStack(spacing: 0) {
-                        // Profile header gradient
-                        ZStack {
-                            VoygoTheme.primaryGradient
-                            VStack(spacing: 12) {
-                                Spacer().frame(height: 16)
-                                AvatarView(initial: store.currentUser.initial, size: 72)
-                                    .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 2))
-                                Text(store.currentUser.name)
-                                    .font(.title3.bold()).foregroundColor(.white)
-                                HStack(spacing: 4) {
-                                    Image(systemName: "star.fill").foregroundColor(.yellow).font(.caption)
-                                    Text("\(store.currentUser.rating, specifier: "%.1f") Rating")
-                                        .font(.caption).foregroundColor(.white.opacity(0.8))
-                                }
-                                Spacer().frame(height: 20)
-                            }
-                        }
-                        .frame(height: 200)
-                        .clipShape(RoundedCorner(radius: 28, corners: [.bottomLeft, .bottomRight]))
+                VStack(spacing: 0) {
+                    VoygoNavBar(title: "Profile")
 
-                        VStack(spacing: 20) {
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            HStack(spacing: 16) {
+                                AvatarView(initial: store.currentUser.initial, size: 80)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(store.currentUser.name)
+                                        .font(.title2.weight(.bold))
+                                        .foregroundColor(VoygoTheme.textPrimary)
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "checkmark.seal.fill")
+                                            .font(.subheadline)
+                                            .foregroundColor(VoygoTheme.primary)
+                                        Text("\(store.currentUser.rating, specifier: "%.1f") Rating")
+                                            .font(.subheadline)
+                                            .foregroundColor(VoygoTheme.textSecondary)
+                                    }
+                                }
+                                Spacer()
+                            }
+
                             // KYC card
                             Button(action: { showVerification = true }) {
                                 VoygoCard {
@@ -61,10 +61,13 @@ struct ProfileView: View {
                             .buttonStyle(.plain)
 
                             // Settings
-                            VoygoCard {
-                                VStack(spacing: 0) {
-                                    SectionHeader(title: "Settings").padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 8)
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Settings")
+                                    .font(.headline)
+                                    .foregroundColor(VoygoTheme.textPrimary)
 
+                                VoygoCard {
+                                    VStack(spacing: 0) {
                                     SettingsRow(icon: "bell.fill", title: "Notifications", color: VoygoTheme.warning) {
                                         HStack {
                                             Toggle("", isOn: $notificationsEnabled).labelsHidden().tint(VoygoTheme.primary)
@@ -79,6 +82,7 @@ struct ProfileView: View {
                                         Image(systemName: "chevron.right").font(.caption).foregroundColor(VoygoTheme.textHint)
                                     } action: { showHelp = true }
                                     Spacer().frame(height: 8)
+                                    }
                                 }
                             }
 
@@ -97,8 +101,8 @@ struct ProfileView: View {
                             .buttonStyle(.plain)
                         }
                         .padding(.horizontal, 16)
-                        .padding(.top, 20)
-                        .padding(.bottom, 40)
+                        .padding(.top, 16)
+                        .padding(.bottom, 108)
                     }
                 }
             }
@@ -204,7 +208,7 @@ struct VerificationView: View {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VoygoNavBar(title: "Identity Verification", showBack: true, onBack: onBack)
-                    .background(VoygoTheme.surface)
+                    .background(VoygoTheme.background)
 
                 StepperHeaderView(currentStep: vm.step, totalSteps: 3, titles: ["Documents", "Selfie", "Vehicle"])
                     .padding(.horizontal, 24).padding(.vertical, 16)
@@ -300,7 +304,7 @@ struct PrivacySecurityView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(title: "Privacy & Security", showBack: true, onBack: onBack).background(VoygoTheme.surface)
+                VoygoNavBar(title: "Privacy & Security", showBack: true, onBack: onBack).background(VoygoTheme.background)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         Text("Privacy Controls").font(.title3.bold()).foregroundColor(VoygoTheme.textPrimary)
@@ -334,7 +338,7 @@ struct HelpCenterView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(title: "Help Center", showBack: true, onBack: onBack).background(VoygoTheme.surface)
+                VoygoNavBar(title: "Help Center", showBack: true, onBack: onBack).background(VoygoTheme.background)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         HStack {
@@ -396,7 +400,7 @@ struct LiveTripView: View {
             VStack(spacing: 0) {
                 // Map placeholder
                 ZStack(alignment: .topLeading) {
-                    LinearGradient(colors: [VoygoTheme.primaryDark.opacity(0.6), VoygoTheme.background],
+                    LinearGradient(colors: [VoygoTheme.primaryContainer.opacity(0.8), VoygoTheme.background],
                                    startPoint: .top, endPoint: .bottom)
                     VStack {
                         HStack {

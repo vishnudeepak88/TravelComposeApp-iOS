@@ -11,20 +11,21 @@ struct InboxView: View {
             ZStack(alignment: .top) {
                 VoygoTheme.background.ignoresSafeArea()
                 VStack(spacing: 0) {
-                    HStack {
-                        Text("Inbox").font(.title2.bold()).foregroundColor(VoygoTheme.textPrimary)
-                        Spacer()
-                        if store.threads.contains(where: { $0.unreadCount > 0 }) {
-                            Text("\(store.threads.map(\.unreadCount).reduce(0, +))")
-                                .font(.caption.bold())
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(VoygoTheme.danger)
-                                .foregroundColor(.white)
-                                .clipShape(Capsule())
-                        }
-                    }
-                    .padding(.horizontal, 20).padding(.vertical, 16)
-                    .background(VoygoTheme.surface)
+                    VoygoNavBar(
+                        title: "Inbox",
+                        trailingContent: AnyView(
+                            Group {
+                                if store.threads.contains(where: { $0.unreadCount > 0 }) {
+                                    Text("\(store.threads.map(\.unreadCount).reduce(0, +))")
+                                        .font(.caption.bold())
+                                        .padding(.horizontal, 8).padding(.vertical, 3)
+                                        .background(VoygoTheme.danger)
+                                        .foregroundColor(.white)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        )
+                    )
 
                     if store.threads.isEmpty {
                         EmptyStateView(icon: "bubble.left.and.bubble.right",
@@ -41,6 +42,7 @@ struct InboxView: View {
                                 }
                             }
                             .padding(.vertical, 12)
+                            .padding(.bottom, 96)
                         }
                     }
                 }
@@ -130,8 +132,7 @@ struct ChatThreadView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(VoygoTheme.surface, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbarBackground(VoygoTheme.background, for: .navigationBar)
     }
 
     private func sendMessage() {

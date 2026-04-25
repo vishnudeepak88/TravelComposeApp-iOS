@@ -13,38 +13,21 @@ struct AuthPhoneView: View {
         ZStack {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                // Hero top
-                ZStack {
-                    VoygoTheme.primaryGradient.ignoresSafeArea(edges: .top)
-                    VStack(spacing: 12) {
-                        Spacer().frame(height: 60)
-                        Image(systemName: "car.2.fill")
-                            .font(.system(size: 58, weight: .bold))
-                            .foregroundColor(.white)
-                        Text("Voygo")
-                            .font(.system(size: 36, weight: .black))
-                            .foregroundColor(.white)
-                        Text("Your daily commute, simplified.")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.75))
-                        Spacer().frame(height: 36)
-                    }
-                }
-                .frame(height: 260)
-                .clipShape(RoundedCorner(radius: 32, corners: [.bottomLeft, .bottomRight]))
+                VoygoNavBar(title: "Welcome")
 
                 ScrollView {
                     VStack(spacing: 28) {
+                        Spacer(minLength: 120)
+
                         VStack(spacing: 8) {
-                            Text("Welcome back")
-                                .font(.title2.bold())
+                            Text("Enter your mobile number")
+                                .font(.title2.weight(.semibold))
                                 .foregroundColor(VoygoTheme.textPrimary)
-                            Text("Enter your Malaysia mobile number to continue")
+                            Text("We will send you a verification code")
                                 .font(.subheadline)
                                 .foregroundColor(VoygoTheme.textSecondary)
                                 .multilineTextAlignment(.center)
                         }
-                        .padding(.top, 32)
 
                         VoygoTextField(label: "Phone Number", text: $phone, placeholder: "12-3456789",
                                        keyboardType: .phonePad, prefix: "+60")
@@ -75,7 +58,7 @@ struct AuthPhoneView: View {
                             .multilineTextAlignment(.center)
                     }
                     .padding(.horizontal, 24)
-                    .padding(.bottom, 32)
+                    .padding(.bottom, 40)
                 }
             }
         }
@@ -96,7 +79,7 @@ struct AuthOtpView: View {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VoygoNavBar(title: "Verify Number", showBack: true, onBack: onBack)
-                    .background(VoygoTheme.surface)
+                    .background(VoygoTheme.background)
 
                 ScrollView {
                     VStack(spacing: 28) {

@@ -109,22 +109,21 @@ struct FindCommuteRoutesView: View {
             VoygoTheme.background.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Nav bar
-                HStack {
-                    Text("Find Routes").font(.title2.bold()).foregroundColor(VoygoTheme.textPrimary)
-                    Spacer()
-                    Menu {
-                        Button("My Subscriptions", action: onMySubscriptions)
-                        Button("Create Route",     action: onCreateRoute)
-                        Button("Driver Dashboard", action: onDriverDashboard)
-                    } label: {
-                        Image(systemName: "ellipsis.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(VoygoTheme.primary)
-                    }
-                }
-                .padding(.horizontal, 20).padding(.vertical, 16)
-                .background(VoygoTheme.surface)
+                VoygoNavBar(
+                    title: "Find Commute Routes",
+                    trailingContent: AnyView(
+                        Menu {
+                            Button("My Subscriptions", action: onMySubscriptions)
+                            Button("Create Route", action: onCreateRoute)
+                            Button("Driver Dashboard", action: onDriverDashboard)
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundColor(VoygoTheme.textPrimary)
+                                .frame(width: 44, height: 44)
+                        }
+                    )
+                )
 
                 ScrollView {
                     VStack(spacing: 14) {
@@ -147,7 +146,7 @@ struct FindCommuteRoutesView: View {
                                     VoygoTextField(label: "Earliest", text: $vm.earliestTime, placeholder: "07:00")
                                     VoygoTextField(label: "Latest",   text: $vm.latestTime,   placeholder: "09:30")
                                 }
-                                PrimaryButton("Search Routes", isLoading: vm.isSearching) {
+                                PrimaryButton("Search Recurring Routes", isLoading: vm.isSearching) {
                                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                     vm.searchRoutes()
                                 }
@@ -170,7 +169,7 @@ struct FindCommuteRoutesView: View {
                             }
                         }
                     }
-                    .padding(.bottom, 24)
+                    .padding(.bottom, 108)
                 }
             }
         }

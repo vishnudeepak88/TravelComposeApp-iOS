@@ -8,7 +8,6 @@ struct TravelComposeApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(store)
-                .preferredColorScheme(.dark)
         }
     }
 }

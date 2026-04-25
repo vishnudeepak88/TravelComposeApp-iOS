@@ -37,7 +37,7 @@ final class RouteDetailsViewModel: ObservableObject {
         let result = store.subscribe(routeId: route.id, pickupId: pickupId, dropId: dropId, days: days)
         switch result {
         case .success(let id): subscribeState = .success(id)
-        case .failure(let err): subscribeState = .error(err.localizedDescription ?? "Failed")
+        case .failure(let err): subscribeState = .error(err.localizedDescription)
         }
     }
 }
@@ -53,7 +53,7 @@ struct RouteDetailsView: View {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VoygoNavBar(title: "Route Details", showBack: true, onBack: onBack)
-                    .background(VoygoTheme.surface)
+                    .background(VoygoTheme.background)
 
                 if vm.isLoading {
                     LoadingView()
