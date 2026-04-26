@@ -175,6 +175,53 @@ async function seedIfEmpty(pool) {
     activeStatus: "ACTIVE"
   });
 
+  await createRoute(pool, {
+    driverId: "driver-3",
+    driverName: "Siti Rahman",
+    startLocation: "Damansara",
+    endLocation: "Penang",
+    pickupPoints: [
+      {
+        label: "Kota Damansara MRT",
+        clusterId: "cluster-damansara",
+        lat: 3.1502,
+        lng: 101.5939
+      },
+      {
+        label: "KL Sentral",
+        clusterId: "cluster-klsentral",
+        lat: 3.134,
+        lng: 101.6869
+      },
+      {
+        label: "TBS Kuala Lumpur",
+        clusterId: "cluster-tbs",
+        lat: 3.0766,
+        lng: 101.7114
+      }
+    ],
+    dropPoints: [
+      {
+        label: "George Town",
+        clusterId: "cluster-penang",
+        lat: 5.4141,
+        lng: 100.3288
+      },
+      {
+        label: "Penang Airport",
+        clusterId: "cluster-penang",
+        lat: 5.2971,
+        lng: 100.277
+      }
+    ],
+    departureTime: "07:45:00",
+    daysOfWeek: weekdays,
+    seatCount: 2,
+    pricePerSeat: 32,
+    carType: "SUV",
+    activeStatus: "ACTIVE"
+  });
+
   const routePoints = await pool.query(
     `SELECT id, kind
      FROM route_points
