@@ -32,7 +32,7 @@ async function seedDefaultChatThread(pool) {
   const title = `${route.driver_name || "Driver"} - Morning Commute`;
   const threadId = randomUUID();
   const initialMessages = [
-    { sender: "OTHER", text: "Morning! Pickup at Downtown Station works for you?" },
+    { sender: "OTHER", text: "Morning! Pickup at Kota Damansara MRT works for you?" },
     { sender: "ME", text: "Yes, that works. See you at 8:15 AM." },
     { sender: "OTHER", text: "Great, drive safe and see you soon." }
   ];
@@ -89,35 +89,47 @@ async function seedIfEmpty(pool) {
 
   const route1Id = await createRoute(pool, {
     driverId: "driver-1",
-    driverName: "Driver One",
-    startLocation: "Daly City",
-    endLocation: "Financial District",
+    driverName: "Nina Cruz",
+    startLocation: "Damansara",
+    endLocation: "KLCC",
     pickupPoints: [
       {
-        label: "Downtown Station",
-        clusterId: "cluster-downtown",
-        lat: 37.7749,
-        lng: -122.4194
+        label: "Kota Damansara MRT",
+        clusterId: "cluster-damansara",
+        lat: 3.1502,
+        lng: 101.5939
       },
       {
-        label: "Civic Center",
-        clusterId: "cluster-downtown",
-        lat: 37.7793,
-        lng: -122.4192
+        label: "Mutiara Damansara",
+        clusterId: "cluster-damansara",
+        lat: 3.1565,
+        lng: 101.6085
+      },
+      {
+        label: "TTDI MRT",
+        clusterId: "cluster-ttdi",
+        lat: 3.1363,
+        lng: 101.6304
+      },
+      {
+        label: "Masjid Jamek Hub",
+        clusterId: "cluster-central",
+        lat: 3.149,
+        lng: 101.6967
       }
     ],
     dropPoints: [
       {
-        label: "SoMa Tech Block",
-        clusterId: "cluster-soma",
-        lat: 37.7818,
-        lng: -122.4009
+        label: "KLCC Office Park",
+        clusterId: "cluster-klcc",
+        lat: 3.1571,
+        lng: 101.7123
       },
       {
-        label: "Market Office Park",
-        clusterId: "cluster-market",
-        lat: 37.7897,
-        lng: -122.3942
+        label: "Mid Valley Offices",
+        clusterId: "cluster-midvalley",
+        lat: 3.1183,
+        lng: 101.6787
       }
     ],
     departureTime: "08:15:00",
@@ -130,23 +142,29 @@ async function seedIfEmpty(pool) {
 
   await createRoute(pool, {
     driverId: "driver-2",
-    driverName: "Driver Two",
-    startLocation: "Sunset District",
-    endLocation: "Downtown SF",
+    driverName: "Evan Brooks",
+    startLocation: "Putrajaya",
+    endLocation: "Mid Valley",
     pickupPoints: [
       {
-        label: "Sunset Depot",
-        clusterId: "cluster-sunset",
-        lat: 37.7534,
-        lng: -122.4944
+        label: "Putrajaya Sentral",
+        clusterId: "cluster-putra",
+        lat: 2.9291,
+        lng: 101.6967
       }
     ],
     dropPoints: [
       {
-        label: "Mission Bay Offices",
-        clusterId: "cluster-missionbay",
-        lat: 37.7706,
-        lng: -122.391
+        label: "Mid Valley Offices",
+        clusterId: "cluster-midvalley",
+        lat: 3.1183,
+        lng: 101.6787
+      },
+      {
+        label: "Cerdas Tech Hub",
+        clusterId: "cluster-cerdas",
+        lat: 3.088,
+        lng: 101.689
       }
     ],
     departureTime: "08:00:00",

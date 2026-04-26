@@ -389,6 +389,8 @@ async function findCommuteMatches(pool, payload) {
   const homeLng = payload.homeLng != null ? Number(payload.homeLng) : null;
   const officeLat = payload.officeLat != null ? Number(payload.officeLat) : null;
   const officeLng = payload.officeLng != null ? Number(payload.officeLng) : null;
+  const hasHomeCoords = Number.isFinite(homeLat) && Number.isFinite(homeLng);
+  const hasOfficeCoords = Number.isFinite(officeLat) && Number.isFinite(officeLng);
 
   const matches = [];
   for (const ctx of contexts) {
@@ -402,7 +404,7 @@ async function findCommuteMatches(pool, payload) {
     }
 
     let pickupDistance = 1200;
-    if (homeLat != null && homeLng != null) {
+    if (hasHomeCoords) {
       pickupDistance = Math.min(
         ...pickupPoints.map((point) =>
           haversineDistanceM(homeLat, homeLng, Number(point.lat), Number(point.lng))
@@ -411,7 +413,7 @@ async function findCommuteMatches(pool, payload) {
     }
 
     let dropDistance = 1800;
-    if (officeLat != null && officeLng != null) {
+    if (hasOfficeCoords) {
       dropDistance = Math.min(
         ...dropPoints.map((point) =>
           haversineDistanceM(officeLat, officeLng, Number(point.lat), Number(point.lng))
@@ -419,11 +421,20 @@ async function findCommuteMatches(pool, payload) {
       );
     }
 
+    if (hasHomeCoords && pickupDistance > 40000) {
+      continue;
+    }
+    if (hasOfficeCoords && dropDistance > 40000) {
+      continue;
+    }
+
     const reliability = mapReliability(ctx.reliabilityRow);
     const reliabilityValue = reliabilityScore(reliability);
-    const overlapScore = clamp(1.0 - dropDistance / 6000.0, 0.0, 1.0);
+    const pickupScore = hasHomeCoords ? clamp(1.0 - pickupDistance / 12000.0, 0.0, 1.0) : 1.0;
+    const dropScore = hasOfficeCoords ? clamp(1.0 - dropDistance / 12000.0, 0.0, 1.0) : 1.0;
+    const overlapScore = clamp((pickupScore + dropScore) / 2.0, 0.0, 1.0);
     const recurringPriority = recurringRouteIds.has(String(ctx.route.id));
-    const detourMinutes = Math.max(1.0, pickupDistance / 450.0);
+    const detourMinutes = Math.max(1.0, ((pickupDistance + dropDistance) / 1000.0) * 2.8);
 
     const rankingScore = clamp(
       (recurringPriority ? 0.35 : 0.0) +
