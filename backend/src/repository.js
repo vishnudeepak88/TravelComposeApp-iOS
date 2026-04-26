@@ -47,6 +47,19 @@ function reliabilityScore(reliability) {
   return clamp(value, 0.0, 1.0);
 }
 
+function parseMinutes(value) {
+  const match = String(value || "").trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) {
+    return null;
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    return null;
+  }
+  return hours * 60 + minutes;
+}
+
 function normalizeActiveStatus(status) {
   if (typeof status === "boolean") {
     return status;
@@ -389,11 +402,18 @@ async function findCommuteMatches(pool, payload) {
   const homeLng = payload.homeLng != null ? Number(payload.homeLng) : null;
   const officeLat = payload.officeLat != null ? Number(payload.officeLat) : null;
   const officeLng = payload.officeLng != null ? Number(payload.officeLng) : null;
+  const earliestMinutes = parseMinutes(payload.earliestDeparture) ?? 0;
+  const latestMinutes = parseMinutes(payload.latestDeparture) ?? 24 * 60 - 1;
   const hasHomeCoords = Number.isFinite(homeLat) && Number.isFinite(homeLng);
   const hasOfficeCoords = Number.isFinite(officeLat) && Number.isFinite(officeLng);
 
   const matches = [];
   for (const ctx of contexts) {
+    const routeMinutes = parseMinutes(ctx.route.departure_time);
+    if (routeMinutes == null || routeMinutes < earliestMinutes || routeMinutes > latestMinutes) {
+      continue;
+    }
+
     const pickupPoints = ctx.points.filter((item) => item.kind === "pickup");
     const dropPoints = ctx.points.filter((item) => item.kind === "drop");
     if (pickupPoints.length === 0 || dropPoints.length === 0) {

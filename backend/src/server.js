@@ -181,6 +181,7 @@ app.post(
       carType: bodyValue(body, "carType", "car_type"),
       activeStatus: "ACTIVE"
     });
+    await generateRideInstances(pool, todayIso(), 30);
     res.json({ id: routeId });
   })
 );
@@ -204,6 +205,7 @@ app.put(
       res.status(404).json({ detail: "Route not found" });
       return;
     }
+    await generateRideInstances(pool, todayIso(), 30);
     res.status(204).send();
   })
 );
@@ -223,6 +225,7 @@ app.put(
       res.status(404).json({ detail: "Route not found" });
       return;
     }
+    await generateRideInstances(pool, todayIso(), 30);
     res.status(204).send();
   })
 );
@@ -291,6 +294,7 @@ app.post(
       dropPointId: bodyValue(body, "dropPointId", "drop_point_id", "selectedDropPointId", "selected_drop_point_id"),
       status: "ACTIVE"
     });
+    await generateRideInstances(pool, todayIso(), 30);
     res.json({ id });
   })
 );
@@ -310,6 +314,7 @@ app.put(
       res.status(404).json({ detail: "Subscription not found" });
       return;
     }
+    await generateRideInstances(pool, todayIso(), 30);
     res.status(204).send();
   })
 );
@@ -363,6 +368,7 @@ app.post(
       },
       { rawActiveStatus: Boolean(body.active_status) }
     );
+    await generateRideInstances(pool, todayIso(), 30);
     res.json({ route_id: routeId });
   })
 );
@@ -381,6 +387,7 @@ app.post(
       dropPointId: body.selected_drop_point_id,
       status: body.status || "ACTIVE"
     });
+    await generateRideInstances(pool, todayIso(), 30);
     res.json({ subscription_id: id });
   })
 );
