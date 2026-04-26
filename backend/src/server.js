@@ -57,6 +57,30 @@ function toInt(value, fallback, min, max) {
   return Math.max(min, Math.min(max, parsed));
 }
 
+function bodyValue(body, ...keys) {
+  for (const key of keys) {
+    if (body?.[key] != null) {
+      return body[key];
+    }
+  }
+  return undefined;
+}
+
+function normalizeCommuteSearchBody(body) {
+  return {
+    ...body,
+    riderId: bodyValue(body, "riderId", "rider_id"),
+    homeLocation: bodyValue(body, "homeLocation", "home_location"),
+    officeLocation: bodyValue(body, "officeLocation", "office_location"),
+    earliestDeparture: bodyValue(body, "earliestDeparture", "earliest_departure"),
+    latestDeparture: bodyValue(body, "latestDeparture", "latest_departure"),
+    homeLat: bodyValue(body, "homeLat", "home_lat"),
+    homeLng: bodyValue(body, "homeLng", "home_lng"),
+    officeLat: bodyValue(body, "officeLat", "office_lat"),
+    officeLng: bodyValue(body, "officeLng", "office_lng")
+  };
+}
+
 app.get(
   "/health",
   asyncHandler(async (_req, res) => {
@@ -144,17 +168,17 @@ app.post(
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     const routeId = await createRoute(pool, {
-      driverId: body.driverId,
-      driverName: body.driverName,
-      startLocation: body.startLocation,
-      endLocation: body.endLocation,
-      pickupPoints: body.pickupPoints || [],
-      dropPoints: body.dropPoints || [],
-      departureTime: body.departureTime,
-      daysOfWeek: body.daysOfWeek,
-      seatCount: body.seatCount,
-      pricePerSeat: body.pricePerSeat,
-      carType: body.carType,
+      driverId: bodyValue(body, "driverId", "driver_id"),
+      driverName: bodyValue(body, "driverName", "driver_name"),
+      startLocation: bodyValue(body, "startLocation", "start_location"),
+      endLocation: bodyValue(body, "endLocation", "end_location"),
+      pickupPoints: bodyValue(body, "pickupPoints", "pickup_points") || [],
+      dropPoints: bodyValue(body, "dropPoints", "drop_points") || [],
+      departureTime: bodyValue(body, "departureTime", "departure_time"),
+      daysOfWeek: bodyValue(body, "daysOfWeek", "days_of_week"),
+      seatCount: bodyValue(body, "seatCount", "seat_count"),
+      pricePerSeat: bodyValue(body, "pricePerSeat", "price_per_seat"),
+      carType: bodyValue(body, "carType", "car_type"),
       activeStatus: "ACTIVE"
     });
     res.json({ id: routeId });
@@ -170,7 +194,11 @@ app.put(
       `UPDATE recurring_routes
        SET departure_time = $2, days_of_week = $3::jsonb
        WHERE id = $1`,
-      [routeId, body.departureTime, JSON.stringify(normalizeDaysOfWeek(body.daysOfWeek))]
+      [
+        routeId,
+        bodyValue(body, "departureTime", "departure_time"),
+        JSON.stringify(normalizeDaysOfWeek(bodyValue(body, "daysOfWeek", "days_of_week")))
+      ]
     );
     if (result.rowCount === 0) {
       res.status(404).json({ detail: "Route not found" });
@@ -189,7 +217,7 @@ app.put(
       `UPDATE recurring_routes
        SET active_status = $2
        WHERE id = $1`,
-      [routeId, normalizeActiveStatus(body.activeStatus)]
+      [routeId, normalizeActiveStatus(bodyValue(body, "activeStatus", "active_status"))]
     );
     if (result.rowCount === 0) {
       res.status(404).json({ detail: "Route not found" });
@@ -254,13 +282,13 @@ app.post(
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     const id = await createSubscription(pool, {
-      routeId: body.routeId,
-      riderId: body.riderId,
-      riderName: body.riderName,
-      startDate: body.startDate,
-      endDate: body.endDate,
-      pickupPointId: body.pickupPointId,
-      dropPointId: body.dropPointId,
+      routeId: bodyValue(body, "routeId", "route_id"),
+      riderId: bodyValue(body, "riderId", "rider_id"),
+      riderName: bodyValue(body, "riderName", "rider_name"),
+      startDate: bodyValue(body, "startDate", "start_date"),
+      endDate: bodyValue(body, "endDate", "end_date"),
+      pickupPointId: bodyValue(body, "pickupPointId", "pickup_point_id", "selectedPickupPointId", "selected_pickup_point_id"),
+      dropPointId: bodyValue(body, "dropPointId", "drop_point_id", "selectedDropPointId", "selected_drop_point_id"),
       status: "ACTIVE"
     });
     res.json({ id });
@@ -289,7 +317,7 @@ app.put(
 app.post(
   "/commute/search",
   asyncHandler(async (req, res) => {
-    const matches = await findCommuteMatches(pool, req.body || {});
+    const matches = await findCommuteMatches(pool, normalizeCommuteSearchBody(req.body || {}));
     res.json({ matches, candidates: matches });
   })
 );
