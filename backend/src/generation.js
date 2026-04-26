@@ -13,13 +13,22 @@ async function generateRideInstances(pool, startDateStr, days) {
 
   try {
     await client.query("BEGIN");
+    const startDate = parseDate(startDateStr);
+    const endDateStr = formatDateUtc(addDaysUtc(startDate, days));
+
+    await client.query(
+      `DELETE FROM commute_ride_instances
+       WHERE date >= $1
+         AND date < $2`,
+      [startDateStr, endDateStr]
+    );
+
     const routesRes = await client.query(
       `SELECT id, seat_count, days_of_week
        FROM recurring_routes
        WHERE active_status = TRUE`
     );
     const routes = routesRes.rows;
-    const startDate = parseDate(startDateStr);
 
     for (let offset = 0; offset < days; offset += 1) {
       const currentDate = addDaysUtc(startDate, offset);
