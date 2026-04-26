@@ -64,7 +64,6 @@ async function autocompletePlaces({ query, limit = 8, lat = null, lon = null, cl
       "viewbox",
       `${clampedLon - delta},${clampedLat + delta},${clampedLon + delta},${clampedLat - delta}`
     );
-    url.searchParams.set("bounded", "1");
   }
 
   const response = await fetch(url, {
