@@ -66,15 +66,25 @@ async function autocompletePlaces({ query, limit = 8, lat = null, lon = null, cl
     );
   }
 
-  const response = await fetch(url, {
-    headers: { "User-Agent": "VoygoLocalDev/1.0" }
-  });
-  if (!response.ok) {
-    throw new Error(`autocomplete_failed_${response.status}`);
+  const rows = knownPlaceRows(cleaned);
+  let payload = [];
+  try {
+    const response = await fetch(url, {
+      headers: { "User-Agent": "VoygoLocalDev/1.0" }
+    });
+    if (!response.ok) {
+      throw new Error(`autocomplete_failed_${response.status}`);
+    }
+    payload = await response.json();
+  } catch (error) {
+    if (rows.length > 0) {
+      cache.set(key, { rows, expiresAt: Date.now() + CACHE_TTL_MS });
+      sweepCache();
+      return rows.slice(0, boundedLimit);
+    }
+    throw error;
   }
 
-  const payload = await response.json();
-  const rows = [];
   if (Array.isArray(payload)) {
     for (const row of payload) {
       try {
@@ -113,5 +123,65 @@ async function autocompletePlaces({ query, limit = 8, lat = null, lon = null, cl
 function isMalaysiaCoordinate(lat, lon) {
   return lat >= 0.8 && lat <= 7.5 && lon >= 99.0 && lon <= 120.5;
 }
+
+function knownPlaceRows(query) {
+  const normalized = normalize(query);
+  if (!normalized) {
+    return [];
+  }
+
+  return KNOWN_PLACES.filter((place) =>
+    place.terms.some((term) => {
+      const normalizedTerm = normalize(term);
+      return normalizedTerm.includes(normalized) || normalized.includes(normalizedTerm);
+    })
+  ).map((place) => ({
+    display_name: place.displayName,
+    name: place.name,
+    lat: place.lat,
+    lon: place.lon,
+    osm_type: "known",
+    osm_id: place.id,
+    class: "office",
+    type: "workplace",
+    address: place.address
+  }));
+}
+
+function normalize(value) {
+  return String(value || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter(Boolean)
+    .join(" ");
+}
+
+const KNOWN_PLACES = [
+  {
+    id: "known-motorola-solutions-bayan-lepas",
+    name: "Motorola Solutions",
+    displayName: "Motorola Solutions, Bayan Lepas, Penang, Malaysia",
+    lat: 5.28577,
+    lon: 100.2688,
+    terms: [
+      "motorola solutions",
+      "motorla solutions",
+      "motorola",
+      "innoplex",
+      "technoplex",
+      "medan bayan lepas",
+      "bayan lepas"
+    ],
+    address: {
+      road: "Medan Bayan Lepas",
+      suburb: "Bayan Lepas",
+      city: "Bayan Lepas",
+      state: "Penang",
+      postcode: "11900",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  }
+];
 
 module.exports = { autocompletePlaces };

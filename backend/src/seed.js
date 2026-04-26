@@ -212,6 +212,12 @@ async function seedIfEmpty(pool) {
         clusterId: "cluster-penang",
         lat: 5.2971,
         lng: 100.277
+      },
+      {
+        label: "Motorola Solutions, Bayan Lepas",
+        clusterId: "cluster-bayanlepas",
+        lat: 5.28577,
+        lng: 100.2688
       }
     ],
     departureTime: "07:45:00",
