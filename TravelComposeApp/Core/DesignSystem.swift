@@ -3,27 +3,27 @@ import SwiftUI
 // MARK: - Design System
 
 struct VoygoTheme {
-    // Android Material color tokens from TravelAppTheme.
-    static let primary      = Color.adaptive(light: 0x1F4E8C, dark: 0x95B9FF)
-    static let onPrimary    = Color.adaptive(light: 0xFFFFFF, dark: 0x0A2242)
-    static let primaryContainer = Color.adaptive(light: 0xD6E4FF, dark: 0x274D80)
-    static let onPrimaryContainer = Color.adaptive(light: 0x0A2242, dark: 0xD6E4FF)
-    static let secondary    = Color.adaptive(light: 0x3F5F85, dark: 0xB5CAE8)
-    static let secondaryContainer = Color.adaptive(light: 0xDCE7F7, dark: 0x385276)
-    static let accent       = Color.adaptive(light: 0x365E99, dark: 0xABC8FF)
-    static let success      = Color.adaptive(light: 0x2E7D32, dark: 0x81C784)
-    static let warning      = Color.adaptive(light: 0xB26A00, dark: 0xFFCA28)
-    static let danger       = Color.adaptive(light: 0xBA1A1A, dark: 0xFFB4AB)
+    // KL Morning Commute palette.
+    static let primary      = Color.adaptive(light: 0x0E6B62, dark: 0x7CE0D1)
+    static let onPrimary    = Color.adaptive(light: 0xFFFFFF, dark: 0x073B36)
+    static let primaryContainer = Color.adaptive(light: 0xD7F2EA, dark: 0x164E48)
+    static let onPrimaryContainer = Color.adaptive(light: 0x12302D, dark: 0xD7F2EA)
+    static let secondary    = Color.adaptive(light: 0x47736C, dark: 0xA9D4CC)
+    static let secondaryContainer = Color.adaptive(light: 0xE2F0EC, dark: 0x244B46)
+    static let accent       = Color.adaptive(light: 0x2E7D72, dark: 0x8FE6D7)
+    static let success      = Color.adaptive(light: 0x2F855A, dark: 0x8ED9AD)
+    static let warning      = Color.adaptive(light: 0xC27803, dark: 0xF6C85F)
+    static let danger       = Color.adaptive(light: 0xC53030, dark: 0xFFB4AB)
 
-    static let background   = Color.adaptive(light: 0xF3F7FF, dark: 0x1D3557)
-    static let surface      = Color.adaptive(light: 0xFFFFFF, dark: 0x233E63)
-    static let surfaceHigh  = Color.adaptive(light: 0xDCE7F7, dark: 0x385276)
-    static let cardBorder   = Color.adaptive(light: 0xC8D2E4, dark: 0x49627F)
-    static let outline      = Color.adaptive(light: 0x73839B, dark: 0x8EA3C1)
+    static let background   = Color.adaptive(light: 0xF7FAF8, dark: 0x102522)
+    static let surface      = Color.adaptive(light: 0xFFFFFF, dark: 0x183530)
+    static let surfaceHigh  = Color.adaptive(light: 0xE7F3EF, dark: 0x244B46)
+    static let cardBorder   = Color.adaptive(light: 0xC9DCD6, dark: 0x3D665F)
+    static let outline      = Color.adaptive(light: 0x6D8A84, dark: 0x90B8B0)
 
-    static let textPrimary  = Color.adaptive(light: 0x13233A, dark: 0xE5EEFF)
-    static let textSecondary = Color.adaptive(light: 0x3F5F85, dark: 0xB5CAE8)
-    static let textHint     = Color.adaptive(light: 0x65758D, dark: 0xDCE7F7).opacity(0.82)
+    static let textPrimary  = Color.adaptive(light: 0x12302D, dark: 0xE7F3EF)
+    static let textSecondary = Color.adaptive(light: 0x47736C, dark: 0xA9D4CC)
+    static let textHint     = Color.adaptive(light: 0x6D8A84, dark: 0xC7DED8).opacity(0.82)
 
     // Gradient
     static var primaryGradient: LinearGradient {
@@ -133,6 +133,9 @@ struct VoygoTextField: View {
     var placeholder: String = ""
     var keyboardType: UIKeyboardType = .default
     var prefix: String? = nil
+    var trailingIcon: String? = nil
+    var isTrailingLoading = false
+    var onTrailingTap: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -145,6 +148,23 @@ struct VoygoTextField: View {
                     .keyboardType(keyboardType)
                     .foregroundColor(VoygoTheme.textPrimary)
                     .tint(VoygoTheme.primary)
+                if let trailingIcon, let onTrailingTap {
+                    Button(action: onTrailingTap) {
+                        ZStack {
+                            if isTrailingLoading {
+                                ProgressView()
+                                    .tint(VoygoTheme.primary)
+                            } else {
+                                Image(systemName: trailingIcon)
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundColor(VoygoTheme.primary)
+                            }
+                        }
+                        .frame(width: 34, height: 34)
+                    }
+                    .disabled(isTrailingLoading)
+                    .accessibilityLabel("Use current location")
+                }
             }
             .padding(.horizontal, 14)
             .frame(minHeight: 56)
@@ -327,10 +347,19 @@ struct PlaceAutocompleteField: View {
     let isLoading: Bool
     let onSuggestionTap: (PlaceSuggestion) -> Void
     var onCommit: (() -> Void)? = nil
+    var trailingIcon: String? = nil
+    var isTrailingLoading = false
+    var onTrailingTap: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VoygoTextField(label: label, text: $text)
+            VoygoTextField(
+                label: label,
+                text: $text,
+                trailingIcon: trailingIcon,
+                isTrailingLoading: isTrailingLoading,
+                onTrailingTap: onTrailingTap
+            )
             if isLoading {
                 HStack { ProgressView().tint(VoygoTheme.primary).padding(8); Spacer() }
                     .background(VoygoTheme.surface).cornerRadius(10)

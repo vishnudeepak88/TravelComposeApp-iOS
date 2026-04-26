@@ -1,35 +1,175 @@
 import Foundation
 import Combine
 
-// MARK: - App Store (session + seed data, mirrors Android AppStore)
+// MARK: - App Store (session + hybrid repository, mirrors Android AppGraph)
+
+enum AppConnectionState: Equatable {
+    case idle
+    case syncing
+    case online
+    case offline(String)
+
+    var bannerText: String? {
+        switch self {
+        case .idle:
+            return nil
+        case .syncing:
+            return "Syncing latest commute data..."
+        case .online:
+            return nil
+        case .offline(let message):
+            return message
+        }
+    }
+
+    var isOffline: Bool {
+        if case .offline = self { return true }
+        return false
+    }
+}
 
 @MainActor
 final class AppStore: ObservableObject {
-    @Published var isAuthenticated = false
-    @Published var phoneNumber = ""
+    @Published private(set) var isAuthenticated = false
+    @Published private(set) var phoneNumber = ""
     @Published var kycStatus: KycStatus = .notStarted
     @Published var currentUser = User(id: "rider-me", name: "You", rating: 4.9)
+    @Published private(set) var riderId = "rider-me"
+    @Published private(set) var driverId = "driver-1"
+    @Published private(set) var isSyncing = false
+    @Published private(set) var lastSyncError: String? = nil
+    @Published private(set) var connectionState: AppConnectionState = .idle
 
-    // Shared in-memory data (seeded — wire to backend when ready)
+    // Shared in-memory cache. Network calls update this first, then fall back to seed/local data.
     @Published var routes: [RecurringRoute] = []
     @Published var subscriptions: [RouteSubscription] = []
     @Published var rideInstances: [CommuteRideInstance] = []
     @Published var threads: [ChatThread] = []
     @Published var messages: [ChatMessage] = []
 
-    let riderId = "rider-me"
-    let driverId = "driver-1"
+    var useOnline = true
 
-    init() { seed() }
+    private enum SessionKeys {
+        static let authenticated = "voygo.session.authenticated"
+        static let riderId = "voygo.session.riderId"
+        static let driverId = "voygo.session.driverId"
+        static let displayName = "voygo.session.displayName"
+        static let phone = "voygo.session.phone"
+    }
+
+    init() {
+        seed()
+        loadSession()
+    }
+
+    func startPhoneVerification(phone: String) {
+        let digitsOnly = phone.trimmingCharacters(in: .whitespacesAndNewlines).filter(\.isNumber)
+        guard !digitsOnly.isEmpty else { return }
+        let localDigits = digitsOnly.hasPrefix("0") ? String(digitsOnly.dropFirst()) : String(digitsOnly)
+        phoneNumber = "+60\(localDigits)"
+        persistSession()
+    }
 
     func completeSignIn(code: String) {
         guard code.count == 6 else { return }
+        let phoneDigits = phoneNumber.filter(\.isNumber)
+        let suffix = phoneDigits.count >= 4 ? String(phoneDigits.suffix(4)) : "0000"
+        let stableSuffix = code.isEmpty ? suffix : "\(suffix)\(code.suffix(2))"
+        riderId = "rider-\(stableSuffix)"
+        driverId = "driver-\(stableSuffix)"
+        currentUser = User(id: riderId, name: "User \(suffix)", rating: currentUser.rating)
         isAuthenticated = true
+        persistSession()
+        ensureLocalUserData()
     }
 
     func logout() {
         isAuthenticated = false
         phoneNumber = ""
+        riderId = "rider-me"
+        driverId = "driver-1"
+        currentUser = User(id: riderId, name: "You", rating: 4.9)
+        UserDefaults.standard.removeObject(forKey: SessionKeys.authenticated)
+        UserDefaults.standard.removeObject(forKey: SessionKeys.riderId)
+        UserDefaults.standard.removeObject(forKey: SessionKeys.driverId)
+        UserDefaults.standard.removeObject(forKey: SessionKeys.displayName)
+        UserDefaults.standard.removeObject(forKey: SessionKeys.phone)
+        seed()
+    }
+
+    func refreshAll() async {
+        guard useOnline else { return }
+        connectionState = .syncing
+        isSyncing = true
+        defer { isSyncing = false }
+        do {
+            async let driverRoutes = VoygoAPIClient.getDriverRoutes(driverId: driverId)
+            async let riderSubscriptions = VoygoAPIClient.getRiderSubscriptions(riderId: riderId)
+            async let chatThreads = VoygoAPIClient.getThreads()
+
+            let remoteRoutes = try await driverRoutes.map { $0.toModel() }
+            let remoteSubs = try await riderSubscriptions.map { $0.toModel() }
+            let remoteThreads = try await chatThreads
+
+            mergeRoutes(remoteRoutes)
+            subscriptions = mergeSubscriptions(remoteSubs, into: subscriptions)
+            threads = remoteThreads
+
+            for subscription in remoteSubs where routes.first(where: { $0.id == subscription.routeId }) == nil {
+                if let route = try? await VoygoAPIClient.getRoute(id: subscription.routeId).toModel() {
+                    mergeRoutes([route])
+                }
+            }
+
+            await refreshCalendar()
+            lastSyncError = nil
+            connectionState = .online
+        } catch {
+            let message = "Using offline data. \(error.localizedDescription)"
+            lastSyncError = message
+            connectionState = .offline(message)
+            regenerateRides()
+        }
+    }
+
+    func refreshRouteDetails(routeId: String) async {
+        guard useOnline else { return }
+        do {
+            async let route = VoygoAPIClient.getRoute(id: routeId)
+            async let routeSubs = VoygoAPIClient.getRouteSubscriptions(routeId: routeId)
+            async let routeRides = VoygoAPIClient.getRouteRides(routeId: routeId, fromDate: todayString(), days: 30)
+            mergeRoutes([try await route.toModel()])
+            subscriptions = mergeSubscriptions(try await routeSubs.map { $0.toModel() }, into: subscriptions)
+            rideInstances = mergeRideInstances(try await routeRides.map { $0.toModel() }, into: rideInstances)
+            lastSyncError = nil
+            connectionState = .online
+        } catch {
+            lastSyncError = "Route loaded from offline data."
+            connectionState = .offline("Route loaded from offline data.")
+        }
+    }
+
+    func refreshCalendar(routeId: String? = nil) async {
+        guard useOnline else { regenerateRides(); return }
+        do {
+            if let routeId {
+                let rides = try await VoygoAPIClient.getRouteRides(routeId: routeId, fromDate: todayString(), days: 30).map { $0.toModel() }
+                rideInstances = mergeRideInstances(rides, into: rideInstances.filter { $0.routeId != routeId })
+            } else {
+                let items = try await VoygoAPIClient.getRiderCalendar(riderId: riderId, fromDate: todayString(), days: 30)
+                for item in items where routes.first(where: { $0.id == item.routeId }) == nil {
+                    if let route = try? await VoygoAPIClient.getRoute(id: item.routeId).toModel() {
+                        mergeRoutes([route])
+                    }
+                }
+            }
+            lastSyncError = nil
+            connectionState = .online
+        } catch {
+            regenerateRides()
+            lastSyncError = "Calendar loaded from offline data."
+            connectionState = .offline("Calendar loaded from offline data.")
+        }
     }
 
     func mySubscriptions() -> [RouteSubscriptionWithRoute] {
@@ -77,7 +217,52 @@ final class AppStore: ObservableObject {
             }
     }
 
-    func subscribe(routeId: String, pickupId: String, dropId: String, days: Int) -> Result<String, AppError> {
+    func findCommuteRoutes(homeLocation: String, officeLocation: String, earliestDeparture: String, latestDeparture: String,
+                           homeLat: Double?, homeLng: Double?, officeLat: Double?, officeLng: Double?) async -> [CommuteRouteMatchResult] {
+        if useOnline {
+            do {
+                let request = CommuteRouteSearchRequest(
+                    riderId: riderId,
+                    homeLocation: homeLocation,
+                    officeLocation: officeLocation,
+                    earliestDeparture: earliestDeparture,
+                    latestDeparture: latestDeparture,
+                    homeLat: homeLat,
+                    homeLng: homeLng,
+                    officeLat: officeLat,
+                    officeLng: officeLng
+                )
+                let response = try await VoygoAPIClient.findCommuteRoutes(request: request)
+                let matches = response.candidates.map { $0.toModel() }
+                mergeRoutes(matches.map(\.route))
+                lastSyncError = nil
+                connectionState = .online
+                return matches
+            } catch {
+                lastSyncError = "Search used offline matching."
+                connectionState = .offline("Search used offline matching.")
+            }
+        }
+
+        let earliest = parseMinutes(earliestDeparture) ?? 7 * 60
+        let latest = parseMinutes(latestDeparture) ?? 9 * 60 + 30
+        return CommuteMatchingEngine.matchRoutes(
+            riderId: riderId,
+            homeLocation: homeLocation,
+            officeLocation: officeLocation,
+            homeLat: homeLat,
+            homeLng: homeLng,
+            officeLat: officeLat,
+            officeLng: officeLng,
+            earliestMinutes: earliest,
+            latestMinutes: latest,
+            routes: routes,
+            subscriptions: subscriptions,
+            rideInstances: rideInstances
+        )
+    }
+
+    func subscribe(routeId: String, pickupId: String, dropId: String, days: Int) async -> Result<String, AppError> {
         guard let route = routes.first(where: { $0.id == routeId }) else { return .failure(.message("Route not found")) }
         guard let pickup = route.pickupPoints.first(where: { $0.id == pickupId }) else { return .failure(.message("Pickup not found")) }
         guard let drop   = route.dropPoints.first(where: { $0.id == dropId })    else { return .failure(.message("Drop not found")) }
@@ -88,7 +273,26 @@ final class AppStore: ObservableObject {
             && !($0.endDate < start || $0.startDate > end)
         }
         guard !overlap else { return .failure(.message("Already subscribed for these dates")) }
-        let id = "sub-\(UUID().uuidString)"
+        let request = RouteSubscriptionRequest(
+            routeId: routeId,
+            riderId: riderId,
+            riderName: currentUser.name,
+            startDate: start,
+            endDate: end,
+            selectedPickupPointId: pickupId,
+            selectedDropPointId: dropId
+        )
+        let id: String
+        if useOnline, let response = try? await VoygoAPIClient.subscribeToRoute(request: request),
+           let remoteId = response.subscriptionId ?? response.id {
+            id = remoteId
+        } else {
+            id = "sub-\(UUID().uuidString)"
+            if useOnline {
+                lastSyncError = "Subscription saved offline."
+                connectionState = .offline("Subscription saved offline.")
+            }
+        }
         subscriptions.append(RouteSubscription(id: id, routeId: routeId, riderId: riderId, riderName: currentUser.name,
                                                startDate: start, endDate: end, selectedPickupPoint: pickup,
                                                selectedDropPoint: drop, status: .active))
@@ -96,15 +300,29 @@ final class AppStore: ObservableObject {
         return .success(id)
     }
 
-    func updateSubscription(id: String, status: RouteSubscriptionStatus) {
-        guard let i = subscriptions.firstIndex(where: { $0.id == id }) else { return }
+    func updateSubscription(id: String, status: RouteSubscriptionStatus) async -> Result<Void, AppError> {
+        guard let i = subscriptions.firstIndex(where: { $0.id == id }) else { return .failure(.message("Subscription not found")) }
+        let oldStatus = subscriptions[i].status
         subscriptions[i].status = status
         regenerateRides()
+        if useOnline {
+            do {
+                try await VoygoAPIClient.updateSubscriptionStatus(id: id, status: status.rawValue)
+                lastSyncError = nil
+                connectionState = .online
+            } catch {
+                subscriptions[i].status = oldStatus
+                regenerateRides()
+                connectionState = .offline("Could not update subscription online.")
+                return .failure(.message(error.localizedDescription))
+            }
+        }
+        return .success(())
     }
 
     func createRoute(startLocation: String, endLocation: String, departureTime: String,
                      seatCount: Int, pricePerSeat: Int, carType: CarType, daysOfWeek: DaysOfWeekFlags,
-                     pickupNames: [String], dropNames: [String]) -> Result<String, AppError> {
+                     pickupNames: [String], dropNames: [String]) async -> Result<String, AppError> {
         guard !startLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !endLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else { return .failure(.message("Start and destination required")) }
@@ -112,41 +330,114 @@ final class AppStore: ObservableObject {
         guard seatCount > 0 else { return .failure(.message("Seat count must be > 0")) }
         guard pricePerSeat > 0 else { return .failure(.message("Price per seat must be > 0")) }
 
-        let pickups = makePoints(from: pickupNames, prefix: "pk", baseLat: 3.14, baseLng: 101.71)
-        let drops   = makePoints(from: dropNames,   prefix: "dp", baseLat: 3.16, baseLng: 101.73)
-        let id = "rr-\(UUID().uuidString)"
-        routes.append(RecurringRoute(id: id, driverId: driverId, driverName: currentUser.name,
-                                     startLocation: startLocation, endLocation: endLocation,
-                                     pickupPoints: pickups, dropPoints: drops, departureTime: departureTime,
-                                     daysOfWeek: daysOfWeek, seatCount: seatCount, pricePerSeat: pricePerSeat,
-                                     carType: carType, activeStatus: .active,
-                                     reliability: DriverReliability(onTimeRate: 0.9, cancellationRate: 0.05, repeatRiders: 0, averageRating: 5.0)))
+        let pickups = await makePoints(from: pickupNames, prefix: "pk", baseLat: 3.14, baseLng: 101.71)
+        let drops   = await makePoints(from: dropNames,   prefix: "dp", baseLat: 3.16, baseLng: 101.73)
+        let routePointInputs = pickups.map { CreateRecurringRouteRequest.RoutePointIn(label: $0.label, lat: $0.lat, lng: $0.lng, clusterId: $0.clusterId) }
+        let dropPointInputs = drops.map { CreateRecurringRouteRequest.RoutePointIn(label: $0.label, lat: $0.lat, lng: $0.lng, clusterId: $0.clusterId) }
+        let request = CreateRecurringRouteRequest(
+            driverId: driverId,
+            startLocation: startLocation,
+            endLocation: endLocation,
+            pickupPoints: routePointInputs,
+            dropPoints: dropPointInputs,
+            departureTime: departureTime,
+            daysOfWeek: daysOfWeek.asDictionary,
+            seatCount: seatCount,
+            pricePerSeat: pricePerSeat,
+            carType: carType.rawValue
+        )
+        let id: String
+        if useOnline, let response = try? await VoygoAPIClient.createRoute(request: request),
+           let remoteId = response.routeId ?? response.id {
+            id = remoteId
+        } else {
+            id = "rr-\(UUID().uuidString)"
+            if useOnline {
+                lastSyncError = "Route created offline."
+                connectionState = .offline("Route created offline.")
+            }
+        }
+        mergeRoutes([RecurringRoute(id: id, driverId: driverId, driverName: currentUser.name,
+                                    startLocation: startLocation, endLocation: endLocation,
+                                    pickupPoints: pickups, dropPoints: drops, departureTime: departureTime,
+                                    daysOfWeek: daysOfWeek, seatCount: seatCount, pricePerSeat: pricePerSeat,
+                                    carType: carType, activeStatus: .active,
+                                    reliability: DriverReliability(onTimeRate: 0.9, cancellationRate: 0.05, repeatRiders: 0, averageRating: 5.0))])
         regenerateRides()
         return .success(id)
     }
 
-    func setRouteActive(routeId: String, active: Bool) {
-        guard let i = routes.firstIndex(where: { $0.id == routeId }) else { return }
+    func setRouteActive(routeId: String, active: Bool) async -> Result<Void, AppError> {
+        guard let i = routes.firstIndex(where: { $0.id == routeId }) else { return .failure(.message("Route not found")) }
+        let oldStatus = routes[i].activeStatus
         routes[i].activeStatus = active ? .active : .paused
         regenerateRides()
-    }
-
-    func updateRouteSchedule(routeId: String, departureTime: String, daysOfWeek: DaysOfWeekFlags) -> Result<Void, AppError> {
-        guard parseTime(departureTime) != nil else { return .failure(.message("Invalid time format")) }
-        guard let i = routes.firstIndex(where: { $0.id == routeId }) else { return .failure(.message("Route not found")) }
-        routes[i].departureTime = departureTime
-        routes[i].daysOfWeek = daysOfWeek
-        regenerateRides()
+        if useOnline {
+            do {
+                try await VoygoAPIClient.updateRouteStatus(routeId: routeId, active: active)
+                lastSyncError = nil
+                connectionState = .online
+            } catch {
+                routes[i].activeStatus = oldStatus
+                regenerateRides()
+                connectionState = .offline("Could not update route status online.")
+                return .failure(.message(error.localizedDescription))
+            }
+        }
         return .success(())
     }
 
-    func sendMessage(threadId: String, text: String) {
+    func updateRouteSchedule(routeId: String, departureTime: String, daysOfWeek: DaysOfWeekFlags) async -> Result<Void, AppError> {
+        guard parseTime(departureTime) != nil else { return .failure(.message("Invalid time format")) }
+        guard let i = routes.firstIndex(where: { $0.id == routeId }) else { return .failure(.message("Route not found")) }
+        let oldTime = routes[i].departureTime
+        let oldDays = routes[i].daysOfWeek
+        routes[i].departureTime = departureTime
+        routes[i].daysOfWeek = daysOfWeek
+        regenerateRides()
+        if useOnline {
+            do {
+                try await VoygoAPIClient.updateRouteSchedule(routeId: routeId, departureTime: departureTime, daysOfWeek: daysOfWeek)
+                lastSyncError = nil
+                connectionState = .online
+            } catch {
+                routes[i].departureTime = oldTime
+                routes[i].daysOfWeek = oldDays
+                regenerateRides()
+                connectionState = .offline("Could not update schedule online.")
+                return .failure(.message(error.localizedDescription))
+            }
+        }
+        return .success(())
+    }
+
+    func refreshMessages(threadId: String) async {
+        guard useOnline else { return }
+        if let remoteMessages = try? await VoygoAPIClient.getMessages(threadId: threadId) {
+            messages.removeAll { $0.threadId == threadId }
+            messages.append(contentsOf: remoteMessages)
+            messages.sort { $0.timestamp < $1.timestamp }
+            connectionState = .online
+        }
+    }
+
+    func sendMessage(threadId: String, text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         messages.append(ChatMessage(id: "m-\(UUID())", threadId: threadId, sender: .me, text: trimmed, timestamp: Date()))
         if let i = threads.firstIndex(where: { $0.id == threadId }) {
             threads[i].lastMessage = trimmed
             threads[i].unreadCount = 0
+        }
+        if useOnline {
+            do {
+                try await VoygoAPIClient.sendMessage(threadId: threadId, text: trimmed)
+                lastSyncError = nil
+                connectionState = .online
+            } catch {
+                lastSyncError = "Message queued locally."
+                connectionState = .offline("Message queued locally.")
+            }
         }
     }
 
@@ -175,13 +466,26 @@ final class AppStore: ObservableObject {
         rideInstances = generated
     }
 
-    private func makePoints(from names: [String], prefix: String, baseLat: Double, baseLng: Double) -> [RoutePoint] {
+    private func makePoints(from names: [String], prefix: String, baseLat: Double, baseLng: Double) async -> [RoutePoint] {
         let cleaned = names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         let values = cleaned.isEmpty ? ["Default stop"] : cleaned
-        return values.enumerated().map { i, name in
+        var points: [RoutePoint] = []
+        for (i, name) in values.enumerated() {
+            if let resolved = try? await VoygoLocationService.shared.resolveCoordinate(label: name) {
+                points.append(RoutePoint(id: "\(prefix)-\(UUID())", label: name, clusterId: resolved.clusterId, lat: resolved.lat, lng: resolved.lng))
+            } else {
+                points.append(
             RoutePoint(id: "\(prefix)-\(UUID())", label: name, clusterId: "cluster-\(prefix)-\(i)",
                        lat: baseLat + Double(i) * 0.01, lng: baseLng + Double(i) * 0.01)
+                )
+            }
         }
+        return points
+    }
+
+    private func parseMinutes(_ text: String) -> Int? {
+        guard let (h, m) = parseTime(text) else { return nil }
+        return h * 60 + m
     }
 
     private func parseTime(_ text: String) -> (Int, Int)? {
@@ -189,6 +493,90 @@ final class AppStore: ObservableObject {
         guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]),
               (0...23).contains(h), (0...59).contains(m) else { return nil }
         return (h, m)
+    }
+
+    private func loadSession() {
+        let defaults = UserDefaults.standard
+        isAuthenticated = defaults.bool(forKey: SessionKeys.authenticated)
+        if isAuthenticated {
+            riderId = defaults.string(forKey: SessionKeys.riderId) ?? "rider-me"
+            driverId = defaults.string(forKey: SessionKeys.driverId) ?? "driver-1"
+            phoneNumber = defaults.string(forKey: SessionKeys.phone) ?? ""
+            let name = defaults.string(forKey: SessionKeys.displayName) ?? "You"
+            currentUser = User(id: riderId, name: name, rating: 4.9)
+            ensureLocalUserData()
+        }
+    }
+
+    private func persistSession() {
+        let defaults = UserDefaults.standard
+        defaults.set(isAuthenticated, forKey: SessionKeys.authenticated)
+        defaults.set(riderId, forKey: SessionKeys.riderId)
+        defaults.set(driverId, forKey: SessionKeys.driverId)
+        defaults.set(currentUser.name, forKey: SessionKeys.displayName)
+        defaults.set(phoneNumber, forKey: SessionKeys.phone)
+    }
+
+    private func ensureLocalUserData() {
+        if subscriptions.first(where: { $0.riderId == riderId }) == nil, let firstRoute = routes.first,
+           let pickup = firstRoute.pickupPoints.first, let drop = firstRoute.dropPoints.first {
+            let today = Calendar.current.startOfDay(for: Date())
+            subscriptions.append(RouteSubscription(
+                id: "sub-\(riderId)",
+                routeId: firstRoute.id,
+                riderId: riderId,
+                riderName: currentUser.name,
+                startDate: Calendar.current.date(byAdding: .day, value: -2, to: today) ?? today,
+                endDate: Calendar.current.date(byAdding: .month, value: 1, to: today) ?? today,
+                selectedPickupPoint: pickup,
+                selectedDropPoint: drop,
+                status: .active
+            ))
+            regenerateRides()
+        }
+    }
+
+    private func todayString() -> String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .iso8601)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
+    }
+
+    private func mergeRoutes(_ newRoutes: [RecurringRoute]) {
+        for route in newRoutes {
+            if let index = routes.firstIndex(where: { $0.id == route.id }) {
+                routes[index] = route
+            } else {
+                routes.append(route)
+            }
+        }
+    }
+
+    private func mergeSubscriptions(_ newSubscriptions: [RouteSubscription], into existing: [RouteSubscription]) -> [RouteSubscription] {
+        var merged = existing
+        for subscription in newSubscriptions {
+            if let index = merged.firstIndex(where: { $0.id == subscription.id }) {
+                merged[index] = subscription
+            } else {
+                merged.append(subscription)
+            }
+        }
+        return merged
+    }
+
+    private func mergeRideInstances(_ newRides: [CommuteRideInstance], into existing: [CommuteRideInstance]) -> [CommuteRideInstance] {
+        var merged = existing
+        for ride in newRides {
+            if let index = merged.firstIndex(where: { $0.id == ride.id }) {
+                merged[index] = ride
+            } else {
+                merged.append(ride)
+            }
+        }
+        return merged
     }
 
     private func seed() {

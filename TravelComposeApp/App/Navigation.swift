@@ -16,12 +16,12 @@ struct RootView: View {
             switch authStep {
             case .phone:
                 AuthPhoneView { phone in
+                    store.startPhoneVerification(phone: phone)
                     pendingPhone = phone
                     authStep = .otp(phone: phone)
                 }
             case .otp(let phone):
                 AuthOtpView(phoneNumber: phone) { code in
-                    store.phoneNumber = phone
                     store.completeSignIn(code: code)
                 } onBack: {
                     authStep = .phone
@@ -34,6 +34,7 @@ struct RootView: View {
 // MARK: - Main Tab Bar
 
 struct MainTabView: View {
+    @EnvironmentObject var store: AppStore
     @State private var selectedTab = 0
 
     var body: some View {
@@ -53,6 +54,50 @@ struct MainTabView: View {
             VoygoTabBar(selectedIndex: $selectedTab)
         }
         .ignoresSafeArea(edges: .bottom)
+        .overlay(alignment: .top) {
+            if let message = store.connectionState.bannerText {
+                SyncStatusBanner(message: message, isOffline: store.connectionState.isOffline)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: store.connectionState)
+        .task {
+            await store.refreshAll()
+        }
+    }
+}
+
+private struct SyncStatusBanner: View {
+    let message: String
+    let isOffline: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if isOffline {
+                Image(systemName: "wifi.slash")
+                    .font(.caption.weight(.bold))
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(VoygoTheme.primary)
+            }
+            Text(message)
+                .font(.caption.weight(.semibold))
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .foregroundColor(isOffline ? VoygoTheme.warning : VoygoTheme.primary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(VoygoTheme.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke((isOffline ? VoygoTheme.warning : VoygoTheme.primary).opacity(0.22), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
     }
 }
 

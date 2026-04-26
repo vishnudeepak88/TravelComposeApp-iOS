@@ -34,10 +34,15 @@ final class RouteDetailsViewModel: ObservableObject {
         guard let store, let route, let pickupId = selectedPickupId, let dropId = selectedDropId else { return }
         let days = Int(numberOfDays) ?? 30
         subscribeState = .loading
-        let result = store.subscribe(routeId: route.id, pickupId: pickupId, dropId: dropId, days: days)
-        switch result {
-        case .success(let id): subscribeState = .success(id)
-        case .failure(let err): subscribeState = .error(err.localizedDescription)
+        Task {
+            let result = await store.subscribe(routeId: route.id, pickupId: pickupId, dropId: dropId, days: days)
+            switch result {
+            case .success(let id):
+                subscribeState = .success(id)
+                load(routeId: route.id)
+            case .failure(let err):
+                subscribeState = .error(err.localizedDescription)
+            }
         }
     }
 }
@@ -198,12 +203,22 @@ struct RouteDetailsView: View {
                         .padding(.horizontal, 16).padding(.vertical, 16)
                         .padding(.bottom, 32)
                     }
+                    .refreshable {
+                        await store.refreshRouteDetails(routeId: routeId)
+                        vm.load(routeId: routeId)
+                    }
                 } else {
                     EmptyStateView(icon: "questionmark.circle", title: "Route not found", subtitle: "This route may no longer be available")
                 }
             }
         }
         .onAppear { vm.store = store; vm.load(routeId: routeId) }
+        .task(id: routeId) {
+            vm.isLoading = vm.route == nil
+            await store.refreshRouteDetails(routeId: routeId)
+            vm.load(routeId: routeId)
+            vm.isLoading = false
+        }
     }
 }
 

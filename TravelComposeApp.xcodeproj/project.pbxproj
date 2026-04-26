@@ -9,7 +9,9 @@
 /* Begin PBXBuildFile section */
 				FB2DA33A388A4E8596121D66 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8326BF042D76456AB9676156 /* Models.swift */; };
 		D3B9BC04562F4DC2AA5509A6 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17E574B7331F4475B16CC22C /* DesignSystem.swift */; };
+		0F1E2D3C4B5A69788796A5B6 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E2D3C4B5A69788796A5B5 /* AppConfiguration.swift */; };
 		0AEAE7CC5FD8441E974D7073 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A809BB9D7E8F4080B8F68A57 /* APIClient.swift */; };
+		0F1E2D3C4B5A69788796A5B4 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */; };
 		8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DA9910E6D4CA595C6D018 /* AppStore.swift */; };
 		7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */; };
 		87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */; };
@@ -26,7 +28,9 @@
 /* Begin PBXFileReference section */
 				8326BF042D76456AB9676156 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		17E574B7331F4475B16CC22C /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		0F1E2D3C4B5A69788796A5B5 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		A809BB9D7E8F4080B8F68A57 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		AC7DA9910E6D4CA595C6D018 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindCommuteRoutesView.swift; sourceTree = "<group>"; };
@@ -63,23 +67,104 @@
 		1A2B3C4D5E6F708190A0B0C7 /* TravelComposeApp */ = {
 			isa = PBXGroup;
 			children = (
-				1A2B3C4D5E6F708190A0B0C0 /* TravelComposeApp.swift */,
-				8326BF042D76456AB9676156 /* Models.swift */,
-				17E574B7331F4475B16CC22C /* DesignSystem.swift */,
-				A809BB9D7E8F4080B8F68A57 /* APIClient.swift */,
-				AC7DA9910E6D4CA595C6D018 /* AppStore.swift */,
-				BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */,
-				123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */,
-				FF64891677064CC782317447 /* RouteDetailsView.swift */,
-				BB4DBF8769834603B3305C94 /* SubscriptionsCalendarViews.swift */,
-				D677B91474B545D29D9021EE /* DriverViews.swift */,
-				2680833C414747629762255E /* InboxViews.swift */,
-				62D381ED090343EAADD8D29E /* ProfileViews.swift */,
-				01382652F995463C8E4271A4 /* Navigation.swift */,
-
+				56B803DDB6574F3B8BA6598C /* App */,
+				B3681DADDEFA4041AE1CDC13 /* Core */,
+				20919291E6064F3BBBE16F4E /* Models */,
+				291FE55741024D9984A0B558 /* Services */,
+				8A68D56A52AC40A486194C16 /* Features */,
 				1A2B3C4D5E6F708190A0B0C2 /* Assets.xcassets */,
 			);
 			path = TravelComposeApp;
+			sourceTree = "<group>";
+		};
+		56B803DDB6574F3B8BA6598C /* App */ = {
+			isa = PBXGroup;
+			children = (
+				1A2B3C4D5E6F708190A0B0C0 /* TravelComposeApp.swift */,
+				01382652F995463C8E4271A4 /* Navigation.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		B3681DADDEFA4041AE1CDC13 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				0F1E2D3C4B5A69788796A5B5 /* AppConfiguration.swift */,
+				AC7DA9910E6D4CA595C6D018 /* AppStore.swift */,
+				17E574B7331F4475B16CC22C /* DesignSystem.swift */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		20919291E6064F3BBBE16F4E /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				8326BF042D76456AB9676156 /* Models.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		291FE55741024D9984A0B558 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A809BB9D7E8F4080B8F68A57 /* APIClient.swift */,
+				0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		8A68D56A52AC40A486194C16 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				A1ED6517D17B4A11BF8DC4BD /* Auth */,
+				E2F1F11FDE2A4B948345B3F8 /* Commute */,
+				781A9A6B86934889B5D6A777 /* Driver */,
+				84431575C694410091DD6F97 /* Inbox */,
+				A5786BD3D17F4E019566B119 /* Profile */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		A1ED6517D17B4A11BF8DC4BD /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		E2F1F11FDE2A4B948345B3F8 /* Commute */ = {
+			isa = PBXGroup;
+			children = (
+				123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */,
+				FF64891677064CC782317447 /* RouteDetailsView.swift */,
+				BB4DBF8769834603B3305C94 /* SubscriptionsCalendarViews.swift */,
+			);
+			path = Commute;
+			sourceTree = "<group>";
+		};
+		781A9A6B86934889B5D6A777 /* Driver */ = {
+			isa = PBXGroup;
+			children = (
+				D677B91474B545D29D9021EE /* DriverViews.swift */,
+			);
+			path = Driver;
+			sourceTree = "<group>";
+		};
+		84431575C694410091DD6F97 /* Inbox */ = {
+			isa = PBXGroup;
+			children = (
+				2680833C414747629762255E /* InboxViews.swift */,
+			);
+			path = Inbox;
+			sourceTree = "<group>";
+		};
+		A5786BD3D17F4E019566B119 /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				62D381ED090343EAADD8D29E /* ProfileViews.swift */,
+			);
+			path = Profile;
 			sourceTree = "<group>";
 		};
 		1A2B3C4D5E6F708190A0B0C8 /* Products */ = {
@@ -162,7 +247,9 @@
 				1A2B3C4D5E6F708190A0B0C1 /* TravelComposeApp.swift in Sources */,
 				FB2DA33A388A4E8596121D66 /* Models.swift in Sources */,
 				D3B9BC04562F4DC2AA5509A6 /* DesignSystem.swift in Sources */,
+				0F1E2D3C4B5A69788796A5B6 /* AppConfiguration.swift in Sources */,
 				0AEAE7CC5FD8441E974D7073 /* APIClient.swift in Sources */,
+				0F1E2D3C4B5A69788796A5B4 /* LocationService.swift in Sources */,
 				8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */,
 				7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */,
 				87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */,
@@ -313,6 +400,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Voygo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Voygo uses your location to suggest nearby commute pickup and drop-off points.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -345,6 +433,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Voygo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Voygo uses your location to suggest nearby commute pickup and drop-off points.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

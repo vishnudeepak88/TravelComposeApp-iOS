@@ -39,18 +39,28 @@ struct DriverDashboardView: View {
                                 DriverRouteCard(
                                     dashboard: dashboard,
                                     onTogglePause: { routeId, isActive in
-                                        store.setRouteActive(routeId: routeId, active: !isActive)
-                                        actionResult = isActive ? "Route paused." : "Route resumed."
+                                        Task {
+                                            let result = await store.setRouteActive(routeId: routeId, active: !isActive)
+                                            if case .failure(let error) = result {
+                                                actionError = error.localizedDescription
+                                            } else {
+                                                actionResult = isActive ? "Route paused." : "Route resumed."
+                                            }
+                                        }
                                     },
                                     onSetWeekdays: { routeId, time in
-                                        let r = store.updateRouteSchedule(routeId: routeId, departureTime: time, daysOfWeek: .weekdays)
-                                        if case .failure(let e) = r { actionError = e.localizedDescription }
-                                        else { actionResult = "Schedule updated to weekdays." }
+                                        Task {
+                                            let r = await store.updateRouteSchedule(routeId: routeId, departureTime: time, daysOfWeek: .weekdays)
+                                            if case .failure(let e) = r { actionError = e.localizedDescription }
+                                            else { actionResult = "Schedule updated to weekdays." }
+                                        }
                                     },
                                     onSetAllDays: { routeId, time in
-                                        let r = store.updateRouteSchedule(routeId: routeId, departureTime: time, daysOfWeek: .allDays)
-                                        if case .failure(let e) = r { actionError = e.localizedDescription }
-                                        else { actionResult = "Schedule updated to all days." }
+                                        Task {
+                                            let r = await store.updateRouteSchedule(routeId: routeId, departureTime: time, daysOfWeek: .allDays)
+                                            if case .failure(let e) = r { actionError = e.localizedDescription }
+                                            else { actionResult = "Schedule updated to all days." }
+                                        }
                                     },
                                     onCalendar: { onOpenCalendar($0) }
                                 )
@@ -59,8 +69,14 @@ struct DriverDashboardView: View {
                         }
                         .padding(.vertical, 16)
                     }
+                    .refreshable {
+                        await store.refreshAll()
+                    }
                 }
             }
+        }
+        .task {
+            await store.refreshAll()
         }
     }
 }
@@ -219,13 +235,15 @@ final class CreateRouteViewModel: ObservableObject {
         createState = .loading
         let seats = Int(seatCount) ?? 0
         let price = Int(pricePerSeat) ?? 0
-        let result = store.createRoute(startLocation: startLocation, endLocation: endLocation,
-                                       departureTime: departureTime, seatCount: seats, pricePerSeat: price,
-                                       carType: carType, daysOfWeek: daysOfWeek,
-                                       pickupNames: pickupPoints, dropNames: dropPoints)
-        switch result {
-        case .success(let id): createState = .success(id)
-        case .failure(let err): createState = .error(err.localizedDescription)
+        Task {
+            let result = await store.createRoute(startLocation: startLocation, endLocation: endLocation,
+                                                departureTime: departureTime, seatCount: seats, pricePerSeat: price,
+                                                carType: carType, daysOfWeek: daysOfWeek,
+                                                pickupNames: pickupPoints, dropNames: dropPoints)
+            switch result {
+            case .success(let id): createState = .success(id)
+            case .failure(let err): createState = .error(err.localizedDescription)
+            }
         }
     }
 }

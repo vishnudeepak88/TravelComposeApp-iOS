@@ -44,10 +44,16 @@ struct InboxView: View {
                             .padding(.vertical, 12)
                             .padding(.bottom, 96)
                         }
+                        .refreshable {
+                            await store.refreshAll()
+                        }
                     }
                 }
             }
             .navigationBarHidden(true)
+        }
+        .task {
+            await store.refreshAll()
         }
     }
 }
@@ -133,11 +139,18 @@ struct ChatThreadView: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(VoygoTheme.background, for: .navigationBar)
+        .task(id: threadId) {
+            await store.refreshMessages(threadId: threadId)
+            scrollToBottom()
+        }
     }
 
     private func sendMessage() {
-        store.sendMessage(threadId: threadId, text: newMessage)
+        let text = newMessage
         newMessage = ""
+        Task {
+            await store.sendMessage(threadId: threadId, text: text)
+        }
     }
     private func scrollToBottom() {
         if let last = messages.last { scrollProxy?.scrollTo(last.id, anchor: .bottom) }

@@ -56,16 +56,31 @@ struct MySubscriptionsView: View {
                                 SubscriptionCard(
                                     item: item,
                                     onOpen:   { onOpenRoute(item.route.id) },
-                                    onPause:  { store.updateSubscription(id: item.subscription.id, status: .paused) },
-                                    onResume: { store.updateSubscription(id: item.subscription.id, status: .active) },
-                                    onCancel: { store.updateSubscription(id: item.subscription.id, status: .cancelled) }
+                                    onPause:  { updateSubscription(item.subscription.id, status: .paused) },
+                                    onResume: { updateSubscription(item.subscription.id, status: .active) },
+                                    onCancel: { updateSubscription(item.subscription.id, status: .cancelled) }
                                 )
                                 .padding(.horizontal, 16)
                             }
                         }
                         .padding(.vertical, 16)
                     }
+                    .refreshable {
+                        await store.refreshAll()
+                    }
                 }
+            }
+        }
+        .task {
+            await store.refreshAll()
+        }
+    }
+
+    private func updateSubscription(_ id: String, status: RouteSubscriptionStatus) {
+        Task {
+            let result = await store.updateSubscription(id: id, status: status)
+            if case .failure(let error) = result {
+                actionError = error.localizedDescription
             }
         }
     }
@@ -213,8 +228,14 @@ struct UpcomingCalendarView: View {
                         }
                         .padding(.vertical, 16)
                     }
+                    .refreshable {
+                        await store.refreshCalendar(routeId: routeId)
+                    }
                 }
             }
+        }
+        .task(id: routeId ?? "all") {
+            await store.refreshCalendar(routeId: routeId)
         }
     }
 }

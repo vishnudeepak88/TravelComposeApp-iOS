@@ -4,7 +4,10 @@ import Combine
 // MARK: - API Client (mirrors Android ApiService.kt)
 
 struct VoygoAPIClient {
-    static var baseURL: URL = URL(string: "http://10.0.2.2:8000/")! // Update for real device
+    static var baseURL: URL {
+        get { AppConfiguration.apiBaseURL }
+        set { AppConfiguration.setAPIBaseURLOverride(newValue) }
+    }
 
     private static var session: URLSession {
         let config = URLSessionConfiguration.default
@@ -160,15 +163,46 @@ struct VoygoAPIClient {
     private static var decoder: JSONDecoder {
         let d = JSONDecoder()
         d.keyDecodingStrategy = .convertFromSnakeCase
-        d.dateDecodingStrategy = .iso8601
+        d.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+            if let date = isoDateTimeFormatter.date(from: value) { return date }
+            if let date = isoDateTimeNoFractionFormatter.date(from: value) { return date }
+            if let date = isoDateFormatter.date(from: value) { return date }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(value)")
+        }
         return d
     }
     private static var encoder: JSONEncoder {
         let e = JSONEncoder()
         e.keyEncodingStrategy = .convertToSnakeCase
-        e.dateEncodingStrategy = .iso8601
+        e.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(isoDateFormatter.string(from: date))
+        }
         return e
     }
+
+    private static let isoDateTimeFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    private static let isoDateTimeNoFractionFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    private static let isoDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .iso8601)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 }
 
 enum APIError: LocalizedError {
@@ -199,6 +233,18 @@ struct CommuteRouteSearchRequest: Encodable {
 
 struct CommuteRouteMatchResponse: Decodable {
     var candidates: [CommuteRouteMatchResultDTO]
+
+    private enum CodingKeys: String, CodingKey {
+        case candidates
+        case matches
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        candidates = try container.decodeIfPresent([CommuteRouteMatchResultDTO].self, forKey: .candidates)
+            ?? container.decodeIfPresent([CommuteRouteMatchResultDTO].self, forKey: .matches)
+            ?? []
+    }
 }
 
 struct CommuteRouteMatchResultDTO: Decodable {
@@ -210,6 +256,19 @@ struct CommuteRouteMatchResultDTO: Decodable {
     var recurringRiderPriority: Bool
     var availableSeats: Int
     var rankingScore: Double
+
+    func toModel() -> CommuteRouteMatchResult {
+        CommuteRouteMatchResult(
+            route: route.toModel(),
+            pickupDistanceMeters: pickupDistanceMeters,
+            reliabilityScore: reliabilityScore,
+            routeOverlapScore: routeOverlapScore,
+            estimatedDetourMinutes: estimatedDetourMinutes,
+            recurringRiderPriority: recurringRiderPriority,
+            availableSeats: availableSeats,
+            rankingScore: rankingScore
+        )
+    }
 }
 
 struct RecurringRouteDTO: Decodable {
