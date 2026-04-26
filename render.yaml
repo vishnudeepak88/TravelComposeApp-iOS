@@ -5,6 +5,24 @@ services:
     plan: free
     rootDir: backend
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: npm run start
     autoDeploy: true
     healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: voygo-postgres
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OSRM_BASE_URL
+        value: https://router.project-osrm.org
+      - key: NOMINATIM_BASE_URL
+        value: https://nominatim.openstreetmap.org
+
+databases:
+  - name: voygo-postgres
+    databaseName: voygo
+    user: voygo
+    plan: free
+    ipAllowList: []
