@@ -2,7 +2,7 @@ const { config } = require("./config");
 const { haversineDistanceM } = require("./utils");
 
 const CACHE_TTL_MS = 30_000;
-const MAX_REQ_PER_SEC = 2;
+const MAX_REQ_PER_SEC = 5;
 
 const cache = new Map();
 const hitsByIp = new Map();
@@ -37,7 +37,7 @@ function sweepCache() {
 
 async function autocompletePlaces({ query, limit = 8, lat = null, lon = null, clientIp }) {
   const cleaned = String(query || "").trim();
-  if (cleaned.length < 3) {
+  if (cleaned.length < 2) {
     return [];
   }
 
@@ -56,7 +56,7 @@ async function autocompletePlaces({ query, limit = 8, lat = null, lon = null, cl
   url.searchParams.set("addressdetails", "1");
   url.searchParams.set("limit", String(boundedLimit));
   url.searchParams.set("countrycodes", "my");
-  if (lat != null && lon != null) {
+  if (lat != null && lon != null && isMalaysiaCoordinate(Number(lat), Number(lon))) {
     const delta = 0.35;
     const clampedLat = Number(lat);
     const clampedLon = Number(lon);
@@ -108,6 +108,10 @@ async function autocompletePlaces({ query, limit = 8, lat = null, lon = null, cl
   cache.set(key, { rows, expiresAt: Date.now() + CACHE_TTL_MS });
   sweepCache();
   return rows;
+}
+
+function isMalaysiaCoordinate(lat, lon) {
+  return lat >= 0.8 && lat <= 7.5 && lon >= 99.0 && lon <= 120.5;
 }
 
 module.exports = { autocompletePlaces };
