@@ -89,7 +89,7 @@ async function seedIfEmpty(pool) {
 
   const route1Id = await createRoute(pool, {
     driverId: "driver-1",
-    driverName: "Nina Cruz",
+    driverName: "Aina Rahman",
     startLocation: "Damansara",
     endLocation: "KLCC",
     pickupPoints: [
@@ -142,7 +142,7 @@ async function seedIfEmpty(pool) {
 
   await createRoute(pool, {
     driverId: "driver-2",
-    driverName: "Evan Brooks",
+    driverName: "Wei Jian Tan",
     startLocation: "Putrajaya",
     endLocation: "Mid Valley",
     pickupPoints: [

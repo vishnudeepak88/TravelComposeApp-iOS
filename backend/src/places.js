@@ -181,6 +181,79 @@ const KNOWN_PLACES = [
       country: "Malaysia",
       country_code: "my"
     }
+  },
+  {
+    id: "known-klcc",
+    name: "KLCC",
+    displayName: "KLCC, Kuala Lumpur, Malaysia",
+    lat: 3.1579,
+    lon: 101.7116,
+    terms: ["klcc", "petronas twin towers", "kuala lumpur city centre"],
+    address: {
+      suburb: "Kuala Lumpur City Centre",
+      city: "Kuala Lumpur",
+      state: "Kuala Lumpur",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-kl-sentral",
+    name: "KL Sentral",
+    displayName: "KL Sentral, Kuala Lumpur, Malaysia",
+    lat: 3.134,
+    lon: 101.6869,
+    terms: ["kl sentral", "kuala lumpur sentral"],
+    address: {
+      suburb: "Brickfields",
+      city: "Kuala Lumpur",
+      state: "Kuala Lumpur",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-mid-valley",
+    name: "Mid Valley City",
+    displayName: "Mid Valley City, Kuala Lumpur, Malaysia",
+    lat: 3.1183,
+    lon: 101.6787,
+    terms: ["mid valley", "mid valley city", "mid valley offices"],
+    address: {
+      suburb: "Mid Valley City",
+      city: "Kuala Lumpur",
+      state: "Kuala Lumpur",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-jb-sentral",
+    name: "JB Sentral",
+    displayName: "JB Sentral, Johor Bahru, Malaysia",
+    lat: 1.4621,
+    lon: 103.7646,
+    terms: ["jb sentral", "johor bahru sentral", "johor bahru", "jb"],
+    address: {
+      city: "Johor Bahru",
+      state: "Johor",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-kuching-waterfront",
+    name: "Kuching Waterfront",
+    displayName: "Kuching Waterfront, Sarawak, Malaysia",
+    lat: 1.5589,
+    lon: 110.344,
+    terms: ["kuching waterfront", "kuching", "sarawak"],
+    address: {
+      city: "Kuching",
+      state: "Sarawak",
+      country: "Malaysia",
+      country_code: "my"
+    }
   }
 ];
 

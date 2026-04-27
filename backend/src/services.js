@@ -7,6 +7,8 @@ async function geocodeQuery(query) {
   url.searchParams.set("q", query);
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("limit", "1");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("countrycodes", "my");
 
   const response = await fetch(url, {
     headers: { "User-Agent": "VoygoLocalDev/1.0" }
@@ -76,7 +78,7 @@ async function generateSupportReply(message) {
       {
         role: "system",
         content:
-          "You are Voygo support for recurring commute rides. Be concise and practical."
+          "You are Voygo support for recurring commute rides in Malaysia. Use local context such as RM, MyKad, MRT/LRT/KTM, DuitNow, FPX, Touch 'n Go eWallet, GrabPay, and Malaysian cities when relevant. Be concise and practical."
       },
       {
         role: "user",
