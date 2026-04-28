@@ -2,6 +2,33 @@ async function initSchema(pool) {
   await pool.query("CREATE EXTENSION IF NOT EXISTS postgis");
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY,
+      phone TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL DEFAULT '',
+      kyc_status TEXT NOT NULL DEFAULT 'NOT_STARTED',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS otp_codes (
+      id UUID PRIMARY KEY,
+      phone TEXT NOT NULL,
+      code_hash TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      used_at TIMESTAMPTZ NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_otp_codes_phone ON otp_codes(phone)"
+  );
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS driver_reliability (
       driver_id TEXT PRIMARY KEY,
       on_time_rate DOUBLE PRECISION NOT NULL DEFAULT 0.9,

@@ -12,6 +12,7 @@
 		0F1E2D3C4B5A69788796A5B6 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E2D3C4B5A69788796A5B5 /* AppConfiguration.swift */; };
 		0AEAE7CC5FD8441E974D7073 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A809BB9D7E8F4080B8F68A57 /* APIClient.swift */; };
 		0F1E2D3C4B5A69788796A5B4 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */; };
+		C1A2B3D4E5F607182939A4B5 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3D4E5F607182939A4B4 /* KeychainStore.swift */; };
 		8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DA9910E6D4CA595C6D018 /* AppStore.swift */; };
 		7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */; };
 		87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */; };
@@ -31,6 +32,7 @@
 		0F1E2D3C4B5A69788796A5B5 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		A809BB9D7E8F4080B8F68A57 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
+		C1A2B3D4E5F607182939A4B4 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		AC7DA9910E6D4CA595C6D018 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindCommuteRoutesView.swift; sourceTree = "<group>"; };
@@ -109,6 +111,7 @@
 			children = (
 				A809BB9D7E8F4080B8F68A57 /* APIClient.swift */,
 				0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */,
+				C1A2B3D4E5F607182939A4B4 /* KeychainStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -250,6 +253,7 @@
 				0F1E2D3C4B5A69788796A5B6 /* AppConfiguration.swift in Sources */,
 				0AEAE7CC5FD8441E974D7073 /* APIClient.swift in Sources */,
 				0F1E2D3C4B5A69788796A5B4 /* LocationService.swift in Sources */,
+				C1A2B3D4E5F607182939A4B5 /* KeychainStore.swift in Sources */,
 				8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */,
 				7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */,
 				87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */,

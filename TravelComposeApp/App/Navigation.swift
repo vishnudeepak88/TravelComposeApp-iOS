@@ -5,9 +5,8 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject var store: AppStore
     @State private var authStep: AuthStep = .phone
-    @State private var pendingPhone = ""
 
-    enum AuthStep { case phone, otp(phone: String) }
+    enum AuthStep: Equatable { case phone, otp(phone: String) }
 
     var body: some View {
         if store.isAuthenticated {
@@ -15,17 +14,13 @@ struct RootView: View {
         } else {
             switch authStep {
             case .phone:
-                AuthPhoneView { phone in
-                    store.startPhoneVerification(phone: phone)
-                    pendingPhone = phone
-                    authStep = .otp(phone: phone)
+                AuthPhoneView { _ in
+                    authStep = .otp(phone: store.phoneNumber)
                 }
             case .otp(let phone):
-                AuthOtpView(phoneNumber: phone) { code in
-                    store.completeSignIn(code: code)
-                } onBack: {
+                AuthOtpView(phoneNumber: phone, onBack: {
                     authStep = .phone
-                }
+                })
             }
         }
     }

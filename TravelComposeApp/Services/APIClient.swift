@@ -15,6 +15,32 @@ struct VoygoAPIClient {
         return URLSession(configuration: config)
     }
 
+    // MARK: - Auth
+
+    static func requestOtp(phone: String) async throws -> RequestOtpResponse {
+        let body = RequestOtpRequest(phone: phone)
+        return try await post(body, to: baseURL.appendingPathComponent("auth/request-otp"), as: RequestOtpResponse.self)
+    }
+
+    static func verifyOtp(phone: String, code: String) async throws -> VerifyOtpResponse {
+        let body = VerifyOtpRequest(phone: phone, code: code)
+        return try await post(body, to: baseURL.appendingPathComponent("auth/verify-otp"), as: VerifyOtpResponse.self)
+    }
+
+    static func getMe() async throws -> AuthUserDTO {
+        try await get(baseURL.appendingPathComponent("auth/me"), as: AuthUserDTO.self)
+    }
+
+    static func updateKyc(status: KycStatus) async throws -> KycResponse {
+        let body = UpdateKycRequest(status: status.rawValue)
+        return try await put(body, to: baseURL.appendingPathComponent("users/me/kyc"), as: KycResponse.self)
+    }
+
+    static func updateDisplayName(_ name: String) async throws {
+        let body = UpdateDisplayNameRequest(displayName: name)
+        _ = try await putVoid(body, to: baseURL.appendingPathComponent("users/me"))
+    }
+
     // GET /places/autocomplete
     static func autocompletePlaces(query: String, lat: Double?, lon: Double?) async throws -> [PlaceSuggestion] {
         var components = URLComponents(url: baseURL.appendingPathComponent("places/autocomplete"), resolvingAgainstBaseURL: false)!
@@ -116,16 +142,27 @@ struct VoygoAPIClient {
 
     // MARK: - Private HTTP helpers
 
+    private static func authedRequest(_ url: URL, method: String) -> URLRequest {
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        if method != "GET" {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        if let token = SessionStorage.authToken, !token.isEmpty {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        return req
+    }
+
     private static func get<T: Decodable>(_ url: URL, as type: T.Type) async throws -> T {
-        let (data, response) = try await session.data(from: url)
+        let req = authedRequest(url, method: "GET")
+        let (data, response) = try await session.data(for: req)
         try validate(response)
         return try decode(T.self, from: data)
     }
 
     private static func post<B: Encodable, R: Decodable>(_ body: B, to url: URL, as type: R.Type) async throws -> R {
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var req = authedRequest(url, method: "POST")
         req.httpBody = try encoder.encode(body)
         let (data, response) = try await session.data(for: req)
         try validate(response)
@@ -133,18 +170,22 @@ struct VoygoAPIClient {
     }
 
     private static func postVoid<B: Encodable>(_ body: B, to url: URL) async throws {
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var req = authedRequest(url, method: "POST")
         req.httpBody = try encoder.encode(body)
         let (_, response) = try await session.data(for: req)
         try validate(response)
     }
 
+    private static func put<B: Encodable, R: Decodable>(_ body: B, to url: URL, as type: R.Type) async throws -> R {
+        var req = authedRequest(url, method: "PUT")
+        req.httpBody = try encoder.encode(body)
+        let (data, response) = try await session.data(for: req)
+        try validate(response)
+        return try decode(R.self, from: data)
+    }
+
     private static func putVoid<B: Encodable>(_ body: B, to url: URL) async throws {
-        var req = URLRequest(url: url)
-        req.httpMethod = "PUT"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var req = authedRequest(url, method: "PUT")
         req.httpBody = try encoder.encode(body)
         let (_, response) = try await session.data(for: req)
         try validate(response)
@@ -152,6 +193,9 @@ struct VoygoAPIClient {
 
     private static func validate(_ response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        if http.statusCode == 401 {
+            throw APIError.unauthorized
+        }
         guard (200..<300).contains(http.statusCode) else { throw APIError.serverError(http.statusCode) }
     }
 
@@ -206,16 +250,50 @@ struct VoygoAPIClient {
 }
 
 enum APIError: LocalizedError {
-    case invalidResponse, serverError(Int), decodingError, networkError
+    case invalidResponse, serverError(Int), decodingError, networkError, unauthorized
     var errorDescription: String? {
         switch self {
         case .invalidResponse: return "Invalid server response."
         case .serverError(let code): return "Server error \(code)."
         case .decodingError: return "Could not read server data."
         case .networkError: return "Network unavailable."
+        case .unauthorized: return "Your session has expired. Please sign in again."
         }
     }
 }
+
+// MARK: - Auth DTOs
+
+struct RequestOtpRequest: Encodable { var phone: String }
+
+struct RequestOtpResponse: Decodable {
+    var sent: Bool
+    var expiresAt: String?
+    var devCode: String?
+}
+
+struct VerifyOtpRequest: Encodable {
+    var phone: String
+    var code: String
+}
+
+struct VerifyOtpResponse: Decodable {
+    var token: String
+    var user: AuthUserDTO
+}
+
+struct AuthUserDTO: Decodable {
+    var id: String
+    var phone: String
+    var displayName: String
+    var kycStatus: String
+
+    var kyc: KycStatus { KycStatus(rawValue: kycStatus) ?? .notStarted }
+}
+
+struct UpdateKycRequest: Encodable { var status: String }
+struct KycResponse: Decodable { var kycStatus: String }
+struct UpdateDisplayNameRequest: Encodable { var displayName: String }
 
 // MARK: - API DTOs (mirrors Android DTOs)
 

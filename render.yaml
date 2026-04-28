@@ -15,6 +15,12 @@ services:
           property: connectionString
       - key: OPENAI_API_KEY
         sync: false
+      - key: AUTH_JWT_SECRET
+        generateValue: true
+      - key: ADMIN_API_KEY
+        generateValue: true
+      - key: NODE_ENV
+        value: production
       - key: OSRM_BASE_URL
         value: https://router.project-osrm.org
       - key: NOMINATIM_BASE_URL

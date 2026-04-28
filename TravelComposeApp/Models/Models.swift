@@ -44,7 +44,7 @@ enum CommuteRideStatus: String, Codable {
     var label: String { rawValue.replacingOccurrences(of: "_", with: " ").capitalized }
 }
 enum ChatSender: String, Codable { case me = "ME", other = "OTHER", system = "SYSTEM" }
-enum KycStatus: String { case notStarted = "NOT_STARTED", pending = "PENDING", approved = "APPROVED", rejected = "REJECTED" }
+enum KycStatus: String, Codable { case notStarted = "NOT_STARTED", pending = "PENDING", approved = "APPROVED", rejected = "REJECTED" }
 
 // MARK: - Core Models
 

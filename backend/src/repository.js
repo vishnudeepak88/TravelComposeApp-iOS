@@ -553,7 +553,17 @@ async function listChatThreads(pool) {
   }));
 }
 
-async function listChatMessages(pool, threadId) {
+function mapSenderForRequester(rawSender, requesterId) {
+  const value = String(rawSender || "").trim();
+  const upper = value.toUpperCase();
+  if (upper === "SYSTEM") return "SYSTEM";
+  if (requesterId && value === String(requesterId)) return "ME";
+  // Legacy seed rows store "ME"/"OTHER" literals before per-user senders existed
+  if (upper === "ME") return "ME";
+  return "OTHER";
+}
+
+async function listChatMessages(pool, threadId, requesterId = null) {
   const threadRes = await pool.query(
     "SELECT id FROM chat_threads WHERE id = $1 LIMIT 1",
     [threadId]
@@ -575,7 +585,7 @@ async function listChatMessages(pool, threadId) {
   return res.rows.map((row) => ({
     id: String(row.id),
     threadId: String(row.thread_id),
-    sender: String(row.sender || "OTHER").toUpperCase(),
+    sender: mapSenderForRequester(row.sender, requesterId),
     text: row.text,
     timestamp: Number(row.timestamp_ms)
   }));
@@ -601,10 +611,12 @@ async function appendChatMessage(pool, threadId, text, sender = "ME") {
 
   const messageId = randomUUID();
   const timestampMs = Date.now();
+  // Sender is stored as the user id for authenticated messages; legacy/seed rows
+  // may use "ME"/"OTHER"/"SYSTEM" literals. listChatMessages maps these per-requester.
   await pool.query(
     `INSERT INTO chat_messages (id, thread_id, sender, text, timestamp_ms)
      VALUES ($1, $2, $3, $4, $5)`,
-    [messageId, threadId, String(sender || "ME").toUpperCase(), trimmedText, timestampMs]
+    [messageId, threadId, String(sender || "ME"), trimmedText, timestampMs]
   );
 
   await pool.query(

@@ -114,6 +114,7 @@ struct ProfileView: View {
                 Button("Log Out", role: .destructive, action: store.logout)
                 Button("Cancel", role: .cancel, action: {})
             } message: { Text("You'll need to sign in again.") }
+            .task { await store.refreshMe() }
         }
     }
 
@@ -186,14 +187,20 @@ final class VerificationViewModel: ObservableObject {
     @Published var model = ""
     @Published var licensePlate = ""
     @Published var isSubmitting = false
+    @Published var error: String? = nil
     var store: AppStore?
 
     func nextStep() { if step < 3 { step += 1 } }
+
     func submit() {
-        isSubmitting = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            self.isSubmitting = false
-            self.store?.kycStatus = .pending
+        guard let store else { return }
+        Task {
+            isSubmitting = true
+            let result = await store.submitKyc(status: .pending)
+            isSubmitting = false
+            if case .failure(let err) = result {
+                error = err.localizedDescription
+            }
         }
     }
 }
@@ -230,6 +237,14 @@ struct VerificationView: View {
                             case 2: SelfieSection()
                             case 3: VehicleSection(make: $vm.make, model: $vm.model, licensePlate: $vm.licensePlate)
                             default: EmptyView()
+                            }
+
+                            if let err = vm.error {
+                                HStack {
+                                    Image(systemName: "exclamationmark.circle.fill").foregroundColor(VoygoTheme.danger)
+                                    Text(err).font(.caption).foregroundColor(VoygoTheme.danger)
+                                    Spacer()
+                                }
                             }
 
                             PrimaryButton(vm.step < 3 ? "Next" : "Submit", isLoading: vm.isSubmitting) {

@@ -1,7 +1,15 @@
+const crypto = require("crypto");
 const cors = require("cors");
 const express = require("express");
 const { config } = require("./config");
 const { pool } = require("./db");
+const {
+  signJwt,
+  requireAuth,
+  generateOtp,
+  hashOtp,
+  normalizePhone
+} = require("./auth");
 const { generateRideInstances } = require("./generation");
 const { autocompletePlaces } = require("./places");
 const {
@@ -89,8 +97,166 @@ app.get(
   })
 );
 
+const KYC_STATUSES = new Set(["NOT_STARTED", "PENDING", "APPROVED", "REJECTED"]);
+
+app.post(
+  "/auth/request-otp",
+  asyncHandler(async (req, res) => {
+    const phone = normalizePhone(req.body?.phone);
+    if (!phone) {
+      res.status(400).json({ detail: "phone is required" });
+      return;
+    }
+    const code = generateOtp();
+    const salt = crypto.randomUUID();
+    const codeHash = hashOtp(code, salt);
+    const expiresAt = new Date(Date.now() + config.otpTtlSeconds * 1000);
+    await pool.query(
+      "UPDATE otp_codes SET used_at = NOW() WHERE phone = $1 AND used_at IS NULL",
+      [phone]
+    );
+    await pool.query(
+      `INSERT INTO otp_codes (id, phone, code_hash, salt, expires_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [crypto.randomUUID(), phone, codeHash, salt, expiresAt]
+    );
+    console.log(`[auth] OTP for ${phone}: ${code} (expires ${expiresAt.toISOString()})`);
+    // TODO: integrate an SMS provider (Twilio/MessageBird). Until one is wired,
+    // the code is logged here and — when AUTH_DEV_MODE is on — echoed in the response.
+    const response = { sent: true, expiresAt: expiresAt.toISOString() };
+    if (config.authDevMode) response.devCode = code;
+    res.json(response);
+  })
+);
+
+app.post(
+  "/auth/verify-otp",
+  asyncHandler(async (req, res) => {
+    const phone = normalizePhone(req.body?.phone);
+    const submitted = String(req.body?.code || "").trim();
+    if (!phone || !/^\d{6}$/.test(submitted)) {
+      res.status(400).json({ detail: "phone and 6-digit code required" });
+      return;
+    }
+    const otpRes = await pool.query(
+      `SELECT id, code_hash, salt, expires_at, attempts
+       FROM otp_codes
+       WHERE phone = $1 AND used_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [phone]
+    );
+    const otp = otpRes.rows[0];
+    if (!otp) {
+      res.status(400).json({ detail: "no pending code; request a new one" });
+      return;
+    }
+    if (new Date(otp.expires_at).getTime() < Date.now()) {
+      res.status(400).json({ detail: "code expired; request a new one" });
+      return;
+    }
+    if (Number(otp.attempts) >= config.otpMaxAttempts) {
+      res.status(429).json({ detail: "too many attempts; request a new code" });
+      return;
+    }
+    await pool.query(
+      "UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1",
+      [otp.id]
+    );
+    const expectedHash = hashOtp(submitted, otp.salt);
+    const expectedBuf = Buffer.from(expectedHash, "hex");
+    const actualBuf = Buffer.from(String(otp.code_hash), "hex");
+    const matches =
+      expectedBuf.length === actualBuf.length &&
+      crypto.timingSafeEqual(expectedBuf, actualBuf);
+    if (!matches) {
+      res.status(400).json({ detail: "invalid code" });
+      return;
+    }
+    await pool.query(
+      "UPDATE otp_codes SET used_at = NOW() WHERE id = $1",
+      [otp.id]
+    );
+    const userRes = await pool.query(
+      `INSERT INTO users (id, phone)
+       VALUES ($1, $2)
+       ON CONFLICT (phone) DO UPDATE SET updated_at = NOW()
+       RETURNING id, phone, display_name, kyc_status`,
+      [crypto.randomUUID(), phone]
+    );
+    const user = userRes.rows[0];
+    const token = signJwt({ sub: String(user.id), phone: user.phone });
+    res.json({
+      token,
+      user: {
+        id: String(user.id),
+        phone: user.phone,
+        displayName: user.display_name || "",
+        kycStatus: user.kyc_status || "NOT_STARTED"
+      }
+    });
+  })
+);
+
+app.get(
+  "/auth/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const userRes = await pool.query(
+      "SELECT id, phone, display_name, kyc_status FROM users WHERE id = $1",
+      [req.user.id]
+    );
+    const user = userRes.rows[0];
+    if (!user) {
+      res.status(404).json({ detail: "user not found" });
+      return;
+    }
+    res.json({
+      id: String(user.id),
+      phone: user.phone,
+      displayName: user.display_name || "",
+      kycStatus: user.kyc_status || "NOT_STARTED"
+    });
+  })
+);
+
+app.put(
+  "/users/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const displayName = String(
+      req.body?.displayName || req.body?.display_name || ""
+    ).trim();
+    await pool.query(
+      "UPDATE users SET display_name = $2, updated_at = NOW() WHERE id = $1",
+      [req.user.id, displayName]
+    );
+    res.status(204).send();
+  })
+);
+
+app.put(
+  "/users/me/kyc",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const status = String(req.body?.status || req.body?.kycStatus || "")
+      .toUpperCase()
+      .trim();
+    if (!KYC_STATUSES.has(status)) {
+      res.status(400).json({ detail: "invalid kyc status" });
+      return;
+    }
+    await pool.query(
+      "UPDATE users SET kyc_status = $2, updated_at = NOW() WHERE id = $1",
+      [req.user.id, status]
+    );
+    res.json({ kycStatus: status });
+  })
+);
+
 app.post(
   "/ai/support",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const message = String(req.body?.message || "").trim();
     if (!message) {
@@ -104,6 +270,7 @@ app.post(
 
 app.get(
   "/places/autocomplete",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const query = String(req.query.q || "");
     const limit = toInt(req.query.limit, 8, 1, 8);
@@ -132,6 +299,7 @@ app.get(
 
 app.get(
   "/geo/geocode",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const query = String(req.query.q || "").trim();
     if (!query) {
@@ -145,6 +313,7 @@ app.get(
 
 app.post(
   "/route/estimate",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     if (
@@ -165,10 +334,11 @@ app.post(
 
 app.post(
   "/commute/routes",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     const routeId = await createRoute(pool, {
-      driverId: bodyValue(body, "driverId", "driver_id"),
+      driverId: req.user.id,
       driverName: bodyValue(body, "driverName", "driver_name"),
       startLocation: bodyValue(body, "startLocation", "start_location"),
       endLocation: bodyValue(body, "endLocation", "end_location"),
@@ -186,12 +356,30 @@ app.post(
   })
 );
 
+async function loadRouteOwner(routeId) {
+  const result = await pool.query(
+    "SELECT driver_id FROM recurring_routes WHERE id = $1 LIMIT 1",
+    [routeId]
+  );
+  return result.rows[0]?.driver_id ?? null;
+}
+
 app.put(
   "/commute/routes/:routeId/schedule",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const routeId = req.params.routeId;
+    const owner = await loadRouteOwner(routeId);
+    if (owner == null) {
+      res.status(404).json({ detail: "Route not found" });
+      return;
+    }
+    if (String(owner) !== req.user.id) {
+      res.status(403).json({ detail: "not your route" });
+      return;
+    }
     const body = req.body || {};
-    const result = await pool.query(
+    await pool.query(
       `UPDATE recurring_routes
        SET departure_time = $2, days_of_week = $3::jsonb
        WHERE id = $1`,
@@ -201,10 +389,6 @@ app.put(
         JSON.stringify(normalizeDaysOfWeek(bodyValue(body, "daysOfWeek", "days_of_week")))
       ]
     );
-    if (result.rowCount === 0) {
-      res.status(404).json({ detail: "Route not found" });
-      return;
-    }
     await generateRideInstances(pool, todayIso(), 30);
     res.status(204).send();
   })
@@ -212,19 +396,25 @@ app.put(
 
 app.put(
   "/commute/routes/:routeId/status",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const routeId = req.params.routeId;
+    const owner = await loadRouteOwner(routeId);
+    if (owner == null) {
+      res.status(404).json({ detail: "Route not found" });
+      return;
+    }
+    if (String(owner) !== req.user.id) {
+      res.status(403).json({ detail: "not your route" });
+      return;
+    }
     const body = req.body || {};
-    const result = await pool.query(
+    await pool.query(
       `UPDATE recurring_routes
        SET active_status = $2
        WHERE id = $1`,
       [routeId, normalizeActiveStatus(bodyValue(body, "activeStatus", "active_status"))]
     );
-    if (result.rowCount === 0) {
-      res.status(404).json({ detail: "Route not found" });
-      return;
-    }
     await generateRideInstances(pool, todayIso(), 30);
     res.status(204).send();
   })
@@ -232,7 +422,12 @@ app.put(
 
 app.get(
   "/commute/routes/driver/:driverId",
+  requireAuth,
   asyncHandler(async (req, res) => {
+    if (req.params.driverId !== req.user.id) {
+      res.status(403).json({ detail: "may only list your own driver routes" });
+      return;
+    }
     const contexts = await loadRouteContexts(pool, "driver_id = $1", [
       req.params.driverId
     ]);
@@ -242,7 +437,17 @@ app.get(
 
 app.get(
   "/commute/routes/:routeId/subscriptions",
+  requireAuth,
   asyncHandler(async (req, res) => {
+    const owner = await loadRouteOwner(req.params.routeId);
+    if (owner == null) {
+      res.status(404).json({ detail: "Route not found" });
+      return;
+    }
+    if (String(owner) !== req.user.id) {
+      res.status(403).json({ detail: "not your route" });
+      return;
+    }
     const items = await listSubscriptions(pool, "s.route_id = $1", [
       req.params.routeId
     ]);
@@ -252,6 +457,7 @@ app.get(
 
 app.get(
   "/commute/routes/:routeId/rides",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const fromDate = String(req.query.fromDate || todayIso());
     const days = toInt(req.query.days, 7, 1, 60);
@@ -262,6 +468,7 @@ app.get(
 
 app.get(
   "/commute/routes/:routeId",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const contexts = await loadRouteContexts(pool, "id = $1", [req.params.routeId]);
     if (contexts.length === 0) {
@@ -274,7 +481,12 @@ app.get(
 
 app.get(
   "/commute/subscriptions/rider/:riderId",
+  requireAuth,
   asyncHandler(async (req, res) => {
+    if (req.params.riderId !== req.user.id) {
+      res.status(403).json({ detail: "may only list your own subscriptions" });
+      return;
+    }
     const items = await listSubscriptions(pool, "s.rider_id = $1", [req.params.riderId]);
     res.json(items);
   })
@@ -282,11 +494,12 @@ app.get(
 
 app.post(
   "/commute/subscriptions",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     const id = await createSubscription(pool, {
       routeId: bodyValue(body, "routeId", "route_id"),
-      riderId: bodyValue(body, "riderId", "rider_id"),
+      riderId: req.user.id,
       riderName: bodyValue(body, "riderName", "rider_name"),
       startDate: bodyValue(body, "startDate", "start_date"),
       endDate: bodyValue(body, "endDate", "end_date"),
@@ -301,19 +514,28 @@ app.post(
 
 app.put(
   "/commute/subscriptions/:subscriptionId/status",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const subscriptionId = req.params.subscriptionId;
+    const ownerRes = await pool.query(
+      "SELECT rider_id FROM route_subscriptions WHERE id = $1 LIMIT 1",
+      [subscriptionId]
+    );
+    if (ownerRes.rows.length === 0) {
+      res.status(404).json({ detail: "Subscription not found" });
+      return;
+    }
+    if (String(ownerRes.rows[0].rider_id) !== req.user.id) {
+      res.status(403).json({ detail: "not your subscription" });
+      return;
+    }
     const status = String(req.body?.status || "ACTIVE").toUpperCase();
-    const result = await pool.query(
+    await pool.query(
       `UPDATE route_subscriptions
        SET status = $2
        WHERE id = $1`,
       [subscriptionId, status]
     );
-    if (result.rowCount === 0) {
-      res.status(404).json({ detail: "Subscription not found" });
-      return;
-    }
     await generateRideInstances(pool, todayIso(), 30);
     res.status(204).send();
   })
@@ -321,15 +543,23 @@ app.put(
 
 app.post(
   "/commute/search",
+  requireAuth,
   asyncHandler(async (req, res) => {
-    const matches = await findCommuteMatches(pool, normalizeCommuteSearchBody(req.body || {}));
+    const payload = normalizeCommuteSearchBody(req.body || {});
+    payload.riderId = req.user.id;
+    const matches = await findCommuteMatches(pool, payload);
     res.json({ matches, candidates: matches });
   })
 );
 
 app.get(
   "/commute/riders/:riderId/calendar",
+  requireAuth,
   asyncHandler(async (req, res) => {
+    if (req.params.riderId !== req.user.id) {
+      res.status(403).json({ detail: "may only view your own calendar" });
+      return;
+    }
     const fromDate = String(req.query.fromDate || todayIso());
     const days = toInt(req.query.days, 7, 1, 60);
     const rides = await listRiderCalendar(pool, req.params.riderId, fromDate, days);
@@ -337,8 +567,21 @@ app.get(
   })
 );
 
+// Internal/admin: ride generation. Gated to a static admin key, since these
+// endpoints aren't user-facing and shouldn't fall under the JWT user pool.
+function requireAdmin(req, res, next) {
+  const key = req.get("X-Admin-Key") || "";
+  const expected = process.env.ADMIN_API_KEY || "";
+  if (!expected || key !== expected) {
+    res.status(401).json({ detail: "admin key required" });
+    return;
+  }
+  next();
+}
+
 app.post(
   "/commute/rides/generate",
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const date = String(req.body?.date || todayIso());
     await generateRideInstances(pool, date, 1);
@@ -348,13 +591,14 @@ app.post(
 
 app.post(
   "/routes",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     const routeId = await createRoute(
       pool,
       {
-        driverId: body.driver_id,
-        driverName: body.driver_name || body.driver_id,
+        driverId: req.user.id,
+        driverName: body.driver_name || req.user.id,
         startLocation: body.start_location,
         endLocation: body.end_location,
         pickupPoints: body.pickup_points || [],
@@ -375,12 +619,13 @@ app.post(
 
 app.post(
   "/subscriptions",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     const id = await createSubscription(pool, {
       routeId: body.route_id,
-      riderId: body.rider_id,
-      riderName: body.rider_name || body.rider_id,
+      riderId: req.user.id,
+      riderName: body.rider_name || req.user.id,
       startDate: body.start_date,
       endDate: body.end_date,
       pickupPointId: body.selected_pickup_point_id,
@@ -394,6 +639,7 @@ app.post(
 
 app.post(
   "/admin/generate",
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const days = toInt(req.query.days, 7, 1, 60);
     const generatedInstances = await generateRideInstances(pool, todayIso(), days);
@@ -403,6 +649,7 @@ app.post(
 
 app.post(
   "/match/search",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     if (
@@ -419,10 +666,11 @@ app.post(
   })
 );
 
-app.post("/trips/:id/book", (_req, res) => res.status(204).send());
-app.get("/bookings/me", (_req, res) => res.json([]));
+app.post("/trips/:id/book", requireAuth, (_req, res) => res.status(204).send());
+app.get("/bookings/me", requireAuth, (_req, res) => res.json([]));
 app.get(
   "/chats/threads",
+  requireAuth,
   asyncHandler(async (_req, res) => {
     const threads = await listChatThreads(pool);
     res.json(threads);
@@ -430,16 +678,18 @@ app.get(
 );
 app.get(
   "/chats/:threadId",
+  requireAuth,
   asyncHandler(async (req, res) => {
-    const messages = await listChatMessages(pool, req.params.threadId);
+    const messages = await listChatMessages(pool, req.params.threadId, req.user.id);
     res.json(messages);
   })
 );
 app.post(
   "/chats/:threadId/send",
+  requireAuth,
   asyncHandler(async (req, res) => {
     const text = String(req.body?.text || "");
-    await appendChatMessage(pool, req.params.threadId, text, "ME");
+    await appendChatMessage(pool, req.params.threadId, text, req.user.id);
     res.status(204).send();
   })
 );
