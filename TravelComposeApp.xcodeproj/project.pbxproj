@@ -13,6 +13,14 @@
 		0AEAE7CC5FD8441E974D7073 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A809BB9D7E8F4080B8F68A57 /* APIClient.swift */; };
 		0F1E2D3C4B5A69788796A5B4 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */; };
 		C1A2B3D4E5F607182939A4B5 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3D4E5F607182939A4B4 /* KeychainStore.swift */; };
+		D1A2B3D4E5F607182939A001 /* Polished.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A101 /* Polished.swift */; };
+		D1A2B3D4E5F607182939A002 /* WalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A102 /* WalletView.swift */; };
+		D1A2B3D4E5F607182939A003 /* TripHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A103 /* TripHistoryView.swift */; };
+		D1A2B3D4E5F607182939A004 /* ReceiptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A104 /* ReceiptView.swift */; };
+		D1A2B3D4E5F607182939A005 /* BookingConfirmedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A105 /* BookingConfirmedView.swift */; };
+		D1A2B3D4E5F607182939A006 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A106 /* NotificationsView.swift */; };
+		D1A2B3D4E5F607182939A007 /* RateRideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A107 /* RateRideView.swift */; };
+		D1A2B3D4E5F607182939A008 /* SearchFiltersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A108 /* SearchFiltersView.swift */; };
 		8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DA9910E6D4CA595C6D018 /* AppStore.swift */; };
 		7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */; };
 		87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */; };
@@ -33,6 +41,14 @@
 		A809BB9D7E8F4080B8F68A57 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		C1A2B3D4E5F607182939A4B4 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939A101 /* Polished.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Polished.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939A102 /* WalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletView.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939A103 /* TripHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripHistoryView.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939A104 /* ReceiptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptView.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939A105 /* BookingConfirmedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingConfirmedView.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939A106 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939A107 /* RateRideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateRideView.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939A108 /* SearchFiltersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFiltersView.swift; sourceTree = "<group>"; };
 		AC7DA9910E6D4CA595C6D018 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindCommuteRoutesView.swift; sourceTree = "<group>"; };
@@ -94,6 +110,7 @@
 				0F1E2D3C4B5A69788796A5B5 /* AppConfiguration.swift */,
 				AC7DA9910E6D4CA595C6D018 /* AppStore.swift */,
 				17E574B7331F4475B16CC22C /* DesignSystem.swift */,
+				D1A2B3D4E5F607182939A101 /* Polished.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -124,8 +141,28 @@
 				781A9A6B86934889B5D6A777 /* Driver */,
 				84431575C694410091DD6F97 /* Inbox */,
 				A5786BD3D17F4E019566B119 /* Profile */,
+				D2A2B3D4E5F607182939A001 /* Money */,
+				D2A2B3D4E5F607182939A002 /* System */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		D2A2B3D4E5F607182939A001 /* Money */ = {
+			isa = PBXGroup;
+			children = (
+				D1A2B3D4E5F607182939A102 /* WalletView.swift */,
+				D1A2B3D4E5F607182939A103 /* TripHistoryView.swift */,
+				D1A2B3D4E5F607182939A104 /* ReceiptView.swift */,
+			);
+			path = Money;
+			sourceTree = "<group>";
+		};
+		D2A2B3D4E5F607182939A002 /* System */ = {
+			isa = PBXGroup;
+			children = (
+				D1A2B3D4E5F607182939A106 /* NotificationsView.swift */,
+			);
+			path = System;
 			sourceTree = "<group>";
 		};
 		A1ED6517D17B4A11BF8DC4BD /* Auth */ = {
@@ -142,6 +179,9 @@
 				123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */,
 				FF64891677064CC782317447 /* RouteDetailsView.swift */,
 				BB4DBF8769834603B3305C94 /* SubscriptionsCalendarViews.swift */,
+				D1A2B3D4E5F607182939A105 /* BookingConfirmedView.swift */,
+				D1A2B3D4E5F607182939A107 /* RateRideView.swift */,
+				D1A2B3D4E5F607182939A108 /* SearchFiltersView.swift */,
 			);
 			path = Commute;
 			sourceTree = "<group>";
@@ -254,6 +294,14 @@
 				0AEAE7CC5FD8441E974D7073 /* APIClient.swift in Sources */,
 				0F1E2D3C4B5A69788796A5B4 /* LocationService.swift in Sources */,
 				C1A2B3D4E5F607182939A4B5 /* KeychainStore.swift in Sources */,
+				D1A2B3D4E5F607182939A001 /* Polished.swift in Sources */,
+				D1A2B3D4E5F607182939A002 /* WalletView.swift in Sources */,
+				D1A2B3D4E5F607182939A003 /* TripHistoryView.swift in Sources */,
+				D1A2B3D4E5F607182939A004 /* ReceiptView.swift in Sources */,
+				D1A2B3D4E5F607182939A005 /* BookingConfirmedView.swift in Sources */,
+				D1A2B3D4E5F607182939A006 /* NotificationsView.swift in Sources */,
+				D1A2B3D4E5F607182939A007 /* RateRideView.swift in Sources */,
+				D1A2B3D4E5F607182939A008 /* SearchFiltersView.swift in Sources */,
 				8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */,
 				7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */,
 				87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */,

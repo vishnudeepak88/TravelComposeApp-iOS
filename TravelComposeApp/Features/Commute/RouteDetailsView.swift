@@ -16,6 +16,7 @@ final class RouteDetailsViewModel: ObservableObject {
     enum SubscribeState { case idle, loading, success(String), error(String) }
 
     var store: AppStore?
+    var onSubscribed: ((String) -> Void)?
 
     func load(routeId: String) {
         guard let store else { return }
@@ -40,6 +41,7 @@ final class RouteDetailsViewModel: ObservableObject {
             case .success(let id):
                 subscribeState = .success(id)
                 load(routeId: route.id)
+                onSubscribed?(id)
             case .failure(let err):
                 subscribeState = .error(err.localizedDescription)
             }
@@ -50,6 +52,7 @@ final class RouteDetailsViewModel: ObservableObject {
 struct RouteDetailsView: View {
     let routeId: String
     var onBack: () -> Void
+    var onSubscribed: ((String) -> Void)? = nil
     @EnvironmentObject var store: AppStore
     @StateObject private var vm = RouteDetailsViewModel()
 
@@ -212,7 +215,7 @@ struct RouteDetailsView: View {
                 }
             }
         }
-        .onAppear { vm.store = store; vm.load(routeId: routeId) }
+        .onAppear { vm.store = store; vm.onSubscribed = onSubscribed; vm.load(routeId: routeId) }
         .task(id: routeId) {
             vm.isLoading = vm.route == nil
             await store.refreshRouteDetails(routeId: routeId)

@@ -2,8 +2,17 @@ import SwiftUI
 
 // MARK: - Profile (mirrors ProfileScreen.kt)
 
+enum ProfileRoute: Hashable {
+    case wallet
+    case tripHistory
+    case notifications
+    case receipt(id: String)
+    case driverDashboard
+}
+
 struct ProfileView: View {
     @EnvironmentObject var store: AppStore
+    @State private var path: [ProfileRoute] = []
     @State private var notificationsEnabled = true
     @State private var showVerification = false
     @State private var showPrivacy = false
@@ -11,102 +20,54 @@ struct ProfileView: View {
     @State private var showLogoutAlert = false
 
     var body: some View {
-        NavigationStack {
-            ZStack(alignment: .top) {
-                VoygoTheme.background.ignoresSafeArea()
+        NavigationStack(path: $path) {
+            ZStack {
+                VPalette.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
-                    VoygoNavBar(title: "Profile")
+                    VPolishedNavBar(title: "Profile")
 
                     ScrollView {
-                        VStack(spacing: 24) {
-                            HStack(spacing: 16) {
-                                AvatarView(initial: store.currentUser.initial, size: 80)
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(store.currentUser.name)
-                                        .font(.title2.weight(.bold))
-                                        .foregroundColor(VoygoTheme.textPrimary)
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "checkmark.seal.fill")
-                                            .font(.subheadline)
-                                            .foregroundColor(VoygoTheme.primary)
-                                        Text("\(store.currentUser.rating, specifier: "%.1f") Rating")
-                                            .font(.subheadline)
-                                            .foregroundColor(VoygoTheme.textSecondary)
-                                    }
-                                }
-                                Spacer()
-                            }
-
-                            // KYC card
-                            Button(action: { showVerification = true }) {
-                                VoygoCard {
-                                    HStack(spacing: 14) {
-                                        Image(systemName: kycIcon)
-                                            .font(.title2)
-                                            .foregroundColor(kycColor)
-                                            .frame(width: 44, height: 44)
-                                            .background(kycColor.opacity(0.15))
-                                            .clipShape(Circle())
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text("Identity Verification").font(.subheadline.bold()).foregroundColor(VoygoTheme.textPrimary)
-                                            Text(kycMessage).font(.caption).foregroundColor(VoygoTheme.textSecondary)
-                                        }
-                                        Spacer()
-                                        StatusBadge(text: kycBadge, color: kycColor)
-                                        Image(systemName: "chevron.right").font(.caption).foregroundColor(VoygoTheme.textHint)
-                                    }
-                                    .padding(16)
-                                }
-                            }
-                            .buttonStyle(.plain)
-
-                            // Settings
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Settings")
-                                    .font(.headline)
-                                    .foregroundColor(VoygoTheme.textPrimary)
-
-                                VoygoCard {
-                                    VStack(spacing: 0) {
-                                    SettingsRow(icon: "bell.fill", title: "Notifications", color: VoygoTheme.warning) {
-                                        HStack {
-                                            Toggle("", isOn: $notificationsEnabled).labelsHidden().tint(VoygoTheme.primary)
-                                        }
-                                    }
-                                    Divider().background(VoygoTheme.cardBorder).padding(.horizontal, 16)
-                                    SettingsRow(icon: "shield.lefthalf.filled", title: "Privacy & Security", color: VoygoTheme.accent) {
-                                        Image(systemName: "chevron.right").font(.caption).foregroundColor(VoygoTheme.textHint)
-                                    } action: { showPrivacy = true }
-                                    Divider().background(VoygoTheme.cardBorder).padding(.horizontal, 16)
-                                    SettingsRow(icon: "questionmark.circle.fill", title: "Help Center", color: VoygoTheme.primary) {
-                                        Image(systemName: "chevron.right").font(.caption).foregroundColor(VoygoTheme.textHint)
-                                    } action: { showHelp = true }
-                                    Spacer().frame(height: 8)
-                                    }
-                                }
-                            }
-
-                            // Logout
-                            Button(action: { showLogoutAlert = true }) {
-                                HStack {
-                                    Image(systemName: "rectangle.portrait.and.arrow.right").foregroundColor(VoygoTheme.danger)
-                                    Text("Log Out").font(.subheadline.weight(.semibold)).foregroundColor(VoygoTheme.danger)
-                                    Spacer()
-                                }
-                                .padding(16)
-                                .background(VoygoTheme.danger.opacity(0.08))
-                                .cornerRadius(16)
-                                .overlay(RoundedRectangle(cornerRadius: 16).stroke(VoygoTheme.danger.opacity(0.25), lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
+                        VStack(spacing: 18) {
+                            identityRow
+                            kycCard
+                            quickStats
+                            walletStatsRow
+                            settingsCard
+                            driverModeCard
+                            logoutPill
                         }
                         .padding(.horizontal, 16)
-                        .padding(.top, 16)
+                        .padding(.top, 4)
                         .padding(.bottom, 108)
                     }
                 }
             }
             .navigationBarHidden(true)
+            .navigationDestination(for: ProfileRoute.self) { route in
+                switch route {
+                case .wallet:
+                    WalletView(onBack: { path.removeLast() })
+                        .navigationBarHidden(true)
+                case .tripHistory:
+                    TripHistoryView(
+                        onBack: { path.removeLast() },
+                        onOpenReceipt: { id in path.append(.receipt(id: id)) }
+                    )
+                    .navigationBarHidden(true)
+                case .notifications:
+                    NotificationsView(onBack: { path.removeLast() })
+                        .navigationBarHidden(true)
+                case .receipt(let id):
+                    ReceiptView(bookingId: id, onBack: { path.removeLast() })
+                        .navigationBarHidden(true)
+                case .driverDashboard:
+                    DriverDashboardView(
+                        onBack: { path.removeLast() },
+                        onOpenCalendar: { _ in }
+                    )
+                    .navigationBarHidden(true)
+                }
+            }
             .sheet(isPresented: $showVerification) { VerificationView(onBack: { showVerification = false }) }
             .sheet(isPresented: $showPrivacy)      { PrivacySecurityView(onBack: { showPrivacy = false }) }
             .sheet(isPresented: $showHelp)         { HelpCenterView(onBack: { showHelp = false }) }
@@ -116,6 +77,183 @@ struct ProfileView: View {
             } message: { Text("You'll need to sign in again.") }
             .task { await store.refreshMe() }
         }
+    }
+
+    private var identityRow: some View {
+        HStack(spacing: 14) {
+            VAvatar(initial: store.currentUser.initial.isEmpty ? "?" : store.currentUser.initial, size: 72)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(store.currentUser.name.isEmpty ? "Welcome" : store.currentUser.name)
+                    .font(.system(size: 20, weight: .heavy)).tracking(-0.4)
+                    .foregroundColor(VPalette.text)
+                HStack(spacing: 6) {
+                    Image(systemName: "shield.lefthalf.filled")
+                        .font(.system(size: 13)).foregroundColor(VPalette.primary)
+                    Text(String(format: "%.1f rating", store.currentUser.rating))
+                        .font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.textSec)
+                    Circle().fill(VPalette.textHint).frame(width: 3, height: 3)
+                    Text("0 rides").font(.system(size: 12)).foregroundColor(VPalette.textSec)
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var kycCard: some View {
+        Button { showVerification = true } label: {
+            HStack(spacing: 12) {
+                VIconBubble(systemName: kycIcon, color: kycColor, size: 44, iconSize: 18)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Identity Verification")
+                        .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                    Text(kycMessage).font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                }
+                Spacer()
+                VBadge(text: kycBadge, color: kycColor, container: kycColor.opacity(0.15))
+            }
+            .padding(14)
+            .background(VPalette.surface)
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var walletStatsRow: some View {
+        Button { path.append(.wallet) } label: {
+            HStack(spacing: 12) {
+                VIconBubble(systemName: "creditcard.fill", color: VPalette.primary, size: 44, iconSize: 18)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Wallet & payment methods")
+                        .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                    Text("RM 42.50 credit · DuitNow default")
+                        .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.textHint)
+            }
+            .padding(14)
+            .background(VPalette.surface)
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var quickStats: some View {
+        Button { path.append(.tripHistory) } label: {
+            HStack(spacing: 0) {
+                statCell("RM 1,820", "Saved")
+                Rectangle().fill(VPalette.border).frame(width: 1, height: 32)
+                statCell("412", "Trips")
+                Rectangle().fill(VPalette.border).frame(width: 1, height: 32)
+                statCell("97%", "On-time")
+            }
+            .padding(14)
+            .background(VPalette.surface)
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func statCell(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value).font(.system(size: 18, weight: .black)).tracking(-0.3).foregroundColor(VPalette.primary)
+            VKicker(text: label, size: 10)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var settingsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VKicker(text: "Settings").padding(.leading, 4)
+            VStack(spacing: 0) {
+                row(icon: "bell.fill", color: VPalette.warning, title: "Notifications", trailing: AnyView(Toggle("", isOn: $notificationsEnabled).labelsHidden().tint(VPalette.primary)))
+                divider()
+                row(icon: "shield.lefthalf.filled", color: VPalette.accent, title: "Privacy & Security", chevron: true) { showPrivacy = true }
+                divider()
+                row(icon: "creditcard.fill", color: VPalette.primary, title: "Payment methods", trailingText: "DuitNow · TNG") { path.append(.wallet) }
+                divider()
+                row(icon: "bell.badge.fill", color: VPalette.secondary, title: "Notifications center", chevron: true) { path.append(.notifications) }
+                divider()
+                row(icon: "doc.text.fill", color: VPalette.accent, title: "Trip history", chevron: true) { path.append(.tripHistory) }
+                divider()
+                row(icon: "questionmark.circle.fill", color: VPalette.secondary, title: "Help Center", chevron: true) { showHelp = true }
+            }
+            .background(VPalette.surface)
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+
+    private func divider() -> some View {
+        Rectangle().fill(VPalette.border).frame(height: 1).padding(.leading, 60)
+    }
+
+    @ViewBuilder
+    private func row(
+        icon: String,
+        color: Color,
+        title: String,
+        chevron: Bool = false,
+        trailing: AnyView? = nil,
+        trailingText: String? = nil,
+        action: (() -> Void)? = nil
+    ) -> some View {
+        Button { action?() } label: {
+            HStack(spacing: 12) {
+                VIconBubble(systemName: icon, color: color, size: 32, iconSize: 14)
+                Text(title).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                Spacer()
+                if let trailingText {
+                    Text(trailingText).font(.system(size: 11, weight: .bold)).foregroundColor(VPalette.textSec)
+                }
+                if let trailing {
+                    trailing
+                }
+                if chevron {
+                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.textHint)
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var driverModeCard: some View {
+        Button { path.append(.driverDashboard) } label: {
+            HStack(spacing: 12) {
+                VIconBubble(systemName: "car.fill", color: VPalette.primary, size: 44, iconSize: 18)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Driver mode").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                    Text("Manage your routes & earnings").font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.textHint)
+            }
+            .padding(14)
+            .background(VPalette.surface)
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var logoutPill: some View {
+        Button { showLogoutAlert = true } label: {
+            HStack {
+                Image(systemName: "arrow.up.right.square.fill").foregroundColor(VPalette.danger)
+                Text("Log out").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.danger)
+                Spacer()
+            }
+            .padding(14)
+            .background(VPalette.dangerContainer)
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VPalette.danger.opacity(0.2), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     private var kycIcon: String {
@@ -128,15 +266,15 @@ struct ProfileView: View {
     }
     private var kycColor: Color {
         switch store.kycStatus {
-        case .approved: return VoygoTheme.success
-        case .pending:  return VoygoTheme.warning
-        case .rejected: return VoygoTheme.danger
-        default:        return VoygoTheme.primary
+        case .approved: return VPalette.success
+        case .pending:  return VPalette.warning
+        case .rejected: return VPalette.danger
+        default:        return VPalette.primary
         }
     }
     private var kycMessage: String {
         switch store.kycStatus {
-        case .approved: return "You are fully verified"
+        case .approved: return "You are fully verified · MyKad on file"
         case .pending:  return "Verification under review"
         case .rejected: return "Verification rejected – resubmit"
         default:        return "Complete verification to drive"
@@ -403,151 +541,191 @@ struct LiveTripView: View {
     let tripId: String
     var isDriver: Bool = false
     var onBack: () -> Void
+    var onMessageDriver: (() -> Void)? = nil
+    var onEndTrip: (() -> Void)? = nil
 
     @State private var pickupConfirmed = false
     @State private var dropoffConfirmed = false
-    @State private var eta = "12 min"
     @State private var sosPressed = false
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            VoygoTheme.background.ignoresSafeArea()
+        ZStack(alignment: .top) {
+            VPalette.bg.ignoresSafeArea()
+
             VStack(spacing: 0) {
-                // Map placeholder
-                ZStack(alignment: .topLeading) {
-                    LinearGradient(colors: [VoygoTheme.primaryContainer.opacity(0.8), VoygoTheme.background],
-                                   startPoint: .top, endPoint: .bottom)
-                    VStack {
-                        HStack {
-                            Button(action: onBack) {
-                                Image(systemName: "chevron.left").font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .frame(width: 36, height: 36)
-                                    .background(.black.opacity(0.4)).clipShape(Circle())
-                            }
-                            .padding(20)
-                            Spacer()
+                ZStack(alignment: .top) {
+                    VMapPlaceholder(tone: .teal, label: "Live · Subang → KLCC", height: 360)
+
+                    HStack {
+                        Button(action: onBack) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(VPalette.text)
+                                .frame(width: 40, height: 40)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
                         }
+                        .buttonStyle(.plain)
+
                         Spacer()
-                        Image(systemName: "map.fill")
-                            .font(.system(size: 52)).foregroundColor(.white.opacity(0.15))
-                        Text("Map view — wire MapKit here").font(.caption).foregroundColor(.white.opacity(0.3))
+
+                        HStack(spacing: 8) {
+                            Circle().fill(VPalette.success).frame(width: 8, height: 8)
+                            Text("En route").font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.text)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+
                         Spacer()
+
+                        Button {} label: {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(VPalette.text)
+                                .frame(width: 40, height: 40)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 54)
+
+                    GeometryReader { geo in
+                        ZStack {
+                            Circle().fill(VPalette.primary).frame(width: 30, height: 30)
+                                .overlay(Circle().stroke(.white, lineWidth: 3))
+                                .shadow(color: VPalette.primary.opacity(0.5), radius: 12, y: 4)
+                            Image(systemName: "car.fill").font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+                        }
+                        .position(x: geo.size.width * 0.47, y: geo.size.height * 0.55)
                     }
                 }
-                .frame(height: 280)
+                .frame(height: 360)
+                Spacer(minLength: 0)
+            }
 
-                // Bottom panel
-                VoygoCard(cornerRadius: 24) {
-                    VStack(spacing: 20) {
-                        // ETA header
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text("ETA").font(.caption.weight(.semibold)).foregroundColor(VoygoTheme.textHint)
-                                Text(eta).font(.system(size: 32, weight: .black)).foregroundStyle(VoygoTheme.primaryGradient)
-                            }
-                            Spacer()
-                            HStack(spacing: 8) {
-                                ActionIconButton(icon: "flag.fill", color: VoygoTheme.danger)
-                                ActionIconButton(icon: "square.and.arrow.up.fill", color: VoygoTheme.primary)
-                            }
-                        }
-
-                        Divider().background(VoygoTheme.cardBorder)
-
-                        if isDriver {
-                            // Driver checklist
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Trip Checklist").font(.subheadline.bold()).foregroundColor(VoygoTheme.textPrimary)
-                                ChecklistRow(label: "Passenger Boarded", isChecked: $pickupConfirmed)
-                                ChecklistRow(label: "Reached Destination", isChecked: $dropoffConfirmed, isEnabled: pickupConfirmed)
-                                PrimaryButton("End Trip", isEnabled: dropoffConfirmed) {}
-                            }
-                        } else {
-                            // Rider info
-                            VStack(spacing: 10) {
-                                TripLeg(icon: "circle.fill", label: "Pickup", location: "Downtown Station", color: VoygoTheme.success)
-                                Rectangle().fill(VoygoTheme.cardBorder).frame(width: 1, height: 20).padding(.leading, 12)
-                                TripLeg(icon: "flag.fill", label: "Drop", location: "KLCC Office Park", color: VoygoTheme.primary)
-                            }
-                        }
-
-                        // Contact + SOS
-                        HStack(spacing: 12) {
-                            HStack(spacing: 10) {
-                                AvatarView(initial: isDriver ? "R" : "N", size: 38)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(isDriver ? "Rider" : "Nina Cruz").font(.subheadline.bold()).foregroundColor(VoygoTheme.textPrimary)
-                                    Text(isDriver ? "Passenger" : "Your driver").font(.caption2).foregroundColor(VoygoTheme.textHint)
-                                }
-                            }
-                            Spacer()
-                            ActionIconButton(icon: "phone.fill", color: VoygoTheme.success)
-                            ActionIconButton(icon: "bubble.left.fill", color: VoygoTheme.primary)
-                        }
-
-                        // SOS
-                        Button(action: { sosPressed.toggle() }) {
-                            HStack {
-                                Image(systemName: "sos.circle.fill").font(.title3)
-                                Text("Hold for SOS")
-                            }
-                            .font(.subheadline.bold())
-                            .frame(maxWidth: .infinity).padding(.vertical, 12)
-                            .background(VoygoTheme.danger.opacity(0.15))
-                            .foregroundColor(VoygoTheme.danger)
-                            .cornerRadius(14)
-                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(VoygoTheme.danger.opacity(0.4), lineWidth: 1.5))
-                        }
-                    }
-                    .padding(24)
-                }
-                .shadow(color: .black.opacity(0.4), radius: 20, y: -8)
+            VStack(spacing: 0) {
+                Spacer()
+                bottomSheet
             }
         }
-        .ignoresSafeArea(edges: .top)
+        .navigationBarHidden(true)
     }
-}
 
-private struct ActionIconButton: View {
-    let icon: String; let color: Color
-    var body: some View {
-        Button(action: {}) {
-            Image(systemName: icon).font(.system(size: 16, weight: .semibold))
-                .foregroundColor(color)
+    private var bottomSheet: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Capsule().fill(VPalette.border).frame(width: 40, height: 4)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 10).padding(.bottom, 14)
+
+            HStack(alignment: .lastTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    VKicker(text: "ETA")
+                    Text("12 min")
+                        .font(.system(size: 36, weight: .black))
+                        .tracking(-1.2)
+                        .foregroundStyle(VPalette.primaryGradient)
+                    Text("Arriving 8:34 AM · 8.4 km")
+                        .font(.system(size: 12, weight: .semibold)).foregroundColor(VPalette.textSec)
+                }
+                Spacer()
+                HStack(spacing: 6) {
+                    iconButton("flag.fill",            color: VPalette.danger,  bg: VPalette.dangerContainer)
+                    iconButton("square.and.arrow.up",  color: VPalette.primary, bg: VPalette.primaryContainer)
+                }
+            }
+
+            Rectangle().fill(VPalette.border).frame(height: 1).padding(.vertical, 16)
+
+            HStack(alignment: .top, spacing: 12) {
+                VRouteGlyph().frame(height: 64)
+                VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        VKicker(text: "Pickup · 7:42 ✓", color: VPalette.success, size: 10)
+                        Text("USJ 9 LRT, Subang Jaya").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        VKicker(text: "Drop · 8:34", color: VPalette.primary, size: 10)
+                        Text("KLCC Tower B, Kuala Lumpur").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+
+            Rectangle().fill(VPalette.border).frame(height: 1).padding(.vertical, 16)
+
+            HStack(spacing: 12) {
+                VAvatar(initial: "A", size: 42)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Aiman Z.").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                    Text("Tesla Model 3 · VEC 4123")
+                        .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                }
+                Spacer()
+                Button {} label: {
+                    Image(systemName: "phone.fill")
+                        .font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                        .frame(width: 38, height: 38)
+                        .background(VPalette.success).clipShape(Circle())
+                        .shadow(color: VPalette.success.opacity(0.5), radius: 8, y: 3)
+                }.buttonStyle(.plain)
+                Button { onMessageDriver?() } label: {
+                    Image(systemName: "bubble.left.fill")
+                        .font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                        .frame(width: 38, height: 38)
+                        .background(VPalette.primary).clipShape(Circle())
+                        .shadow(color: VPalette.primary.opacity(0.5), radius: 8, y: 3)
+                }.buttonStyle(.plain)
+            }
+            .padding(12)
+            .background(VPalette.surfaceHigh)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            Button { sosPressed.toggle() } label: {
+                HStack(spacing: 8) {
+                    Text("🆘").font(.system(size: 18))
+                    Text("Hold for SOS")
+                        .font(.system(size: 14, weight: .black))
+                        .tracking(0.3)
+                }
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .foregroundColor(VPalette.danger)
+                .background(VPalette.dangerContainer)
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VPalette.danger.opacity(0.35), lineWidth: 1.5))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 14)
+
+            if let onEndTrip {
+                VPrimaryButton("End trip → rate", action: onEndTrip)
+                    .padding(.top, 10)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 30)
+        .background(VPalette.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: .black.opacity(0.12), radius: 30, y: -10)
+    }
+
+    private func iconButton(_ system: String, color: Color, bg: Color) -> some View {
+        Button {} label: {
+            Image(systemName: system).font(.system(size: 14, weight: .bold)).foregroundColor(color)
                 .frame(width: 38, height: 38)
-                .background(color.opacity(0.12))
+                .background(bg)
                 .clipShape(Circle())
-        }
+        }.buttonStyle(.plain)
     }
 }
 
-private struct ChecklistRow: View {
-    let label: String
-    @Binding var isChecked: Bool
-    var isEnabled: Bool = true
+private struct _LiveTripDeprecatedHelpers: View {
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: { if isEnabled { isChecked.toggle() } }) {
-                Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 22))
-                    .foregroundColor(isChecked ? VoygoTheme.success : (isEnabled ? VoygoTheme.textHint : VoygoTheme.textHint.opacity(0.4)))
-            }
-            .disabled(!isEnabled)
-            Text(label).font(.subheadline).foregroundColor(isEnabled ? VoygoTheme.textPrimary : VoygoTheme.textHint)
-        }
-    }
-}
-
-private struct TripLeg: View {
-    let icon: String; let label: String; let location: String; let color: Color
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon).foregroundColor(color).font(.caption)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(label).font(.caption2).foregroundColor(VoygoTheme.textHint)
-                Text(location).font(.subheadline.weight(.medium)).foregroundColor(VoygoTheme.textPrimary)
-            }
-        }
+        EmptyView()
     }
 }

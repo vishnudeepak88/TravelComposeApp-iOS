@@ -164,27 +164,18 @@ struct FindCommuteRoutesView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            VoygoTheme.background.ignoresSafeArea()
+            VPalette.bg.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                VoygoNavBar(
-                    title: "Find Commute Routes",
-                    trailingContent: AnyView(
-                        Menu {
-                            Button("My Subscriptions", action: onMySubscriptions)
-                            Button("Create Route", action: onCreateRoute)
-                            Button("Driver Dashboard", action: onDriverDashboard)
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 19, weight: .semibold))
-                                .foregroundColor(VoygoTheme.textPrimary)
-                                .frame(width: 44, height: 44)
-                        }
-                    )
-                )
-
                 ScrollView {
                     VStack(spacing: 14) {
+                        homeHero
+                            .padding(.horizontal, 16)
+                            .padding(.top, 16)
+
+                        modeRail
+                            .padding(.horizontal, 16)
+
                         MapsStyleCommuteSearchPanel(
                             homeQuery: $vm.homeQuery,
                             officeQuery: $vm.officeQuery,
@@ -209,7 +200,23 @@ struct FindCommuteRoutesView: View {
                                 vm.searchRoutes()
                             }
                         )
-                        .padding(.horizontal, 16).padding(.top, 16)
+                        .padding(.horizontal, 16)
+
+                        if !vm.results.isEmpty || vm.isSearching {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Best route matches")
+                                        .font(.system(size: 16, weight: .black))
+                                        .tracking(-0.3)
+                                        .foregroundColor(VPalette.text)
+                                    Text("\(vm.results.count) routes available now")
+                                        .font(.system(size: 12)).foregroundColor(VPalette.textSec)
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.top, 6)
+                        }
 
                         // Results
                         if vm.isSearching {
@@ -219,8 +226,8 @@ struct FindCommuteRoutesView: View {
                                            subtitle: "Try adjusting your locations or departure window")
                                 .frame(height: 220)
                         } else {
-                            ForEach(vm.results) { match in
-                                RouteMatchCard(match: match, onTap: { onOpenRoute(match.route.id) })
+                            ForEach(Array(vm.results.enumerated()), id: \.element.id) { index, match in
+                                PolishedRouteCard(match: match, accentSeed: index, onTap: { onOpenRoute(match.route.id) })
                                     .padding(.horizontal, 16)
                             }
                         }
@@ -234,6 +241,176 @@ struct FindCommuteRoutesView: View {
             }
         }
         .onAppear { vm.store = store; vm.searchRoutes() }
+    }
+
+    private var homeHero: some View {
+        let greetingName = store.currentUser.name.isEmpty ? "there" : store.currentUser.name.split(separator: " ").first.map(String.init) ?? "there"
+        return VHeroGradient {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Voygo")
+                            .font(.system(size: 32, weight: .black))
+                            .tracking(-0.8)
+                            .foregroundColor(.white)
+                        Text("Good morning, \(greetingName)")
+                            .font(.system(size: 11, weight: .heavy))
+                            .tracking(0.3)
+                            .foregroundColor(.white.opacity(0.85))
+                        Text("Find or offer recurring commute seats across Malaysia")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.95))
+                            .frame(maxWidth: 240, alignment: .leading)
+                            .padding(.top, 8)
+                    }
+                    Spacer()
+                    Menu {
+                        Button("My Subscriptions", action: onMySubscriptions)
+                        Button("Create Route", action: onCreateRoute)
+                        Button("Driver Dashboard", action: onDriverDashboard)
+                    } label: {
+                        VStack(spacing: 3) {
+                            ForEach(0..<3) { _ in
+                                Capsule().fill(.white).frame(width: 16, height: 2)
+                            }
+                        }
+                        .frame(width: 38, height: 38)
+                        .background(.white.opacity(0.18))
+                        .overlay(Circle().stroke(.white.opacity(0.25)))
+                        .clipShape(Circle())
+                    }
+                }
+                HStack(spacing: 8) {
+                    heroStat("12", label: "routes")
+                    heroStat("\(store.subscriptions.count)", label: "active rides")
+                    heroStat("RM", label: "local fares")
+                }
+            }
+            .padding(20)
+        }
+    }
+
+    private func heroStat(_ value: String, label: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(value).font(.system(size: 14, weight: .black)).foregroundColor(.white)
+            Text(label).font(.system(size: 10, weight: .heavy)).foregroundColor(.white.opacity(0.85))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(.white.opacity(0.16))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var modeRail: some View {
+        HStack(spacing: 8) {
+            modeCard(icon: "mappin.circle.fill", title: "Find Ride", sub: "Match seats", color: VPalette.primary, action: {})
+            modeCard(icon: "plus.circle.fill",   title: "Offer Ride", sub: "Share seats", color: VPalette.secondary, action: onCreateRoute)
+            modeCard(icon: "car.fill",           title: "Driver",     sub: "Manage",     color: VPalette.accent,    action: onDriverDashboard)
+        }
+    }
+
+    private func modeCard(icon: String, title: String, sub: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 4) {
+                VIconBubble(systemName: icon, color: color, size: 28, iconSize: 14)
+                    .padding(.bottom, 4)
+                Text(title).font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.text)
+                Text(sub).font(.system(size: 10, weight: .semibold)).foregroundColor(VPalette.textHint)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(VPalette.surface)
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(color.opacity(0.2), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Polished route card (V-tokens; replaces the older RouteMatchCard visually)
+
+struct PolishedRouteCard: View {
+    let match: CommuteRouteMatchResult
+    let accentSeed: Int
+    let onTap: () -> Void
+
+    private var accent: Color {
+        switch accentSeed % 3 {
+        case 0: return VPalette.primary
+        case 1: return VPalette.secondary
+        default: return VPalette.accent
+        }
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    VAvatar(initial: String(match.route.driverName.prefix(1)), size: 42, accent: accent)
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 6) {
+                            Text(match.route.driverName)
+                                .font(.system(size: 14, weight: .black))
+                                .foregroundColor(VPalette.text)
+                            HStack(spacing: 2) {
+                                Image(systemName: "star.fill").font(.system(size: 11)).foregroundColor(VPalette.starGold)
+                                Text("4.\(min(9, max(0, Int(match.reliabilityScore * 10))))")
+                                    .font(.system(size: 11, weight: .bold)).foregroundColor(VPalette.text)
+                            }
+                        }
+                        Text("\(match.route.carType.label) · \(Int(match.reliabilityScore * 100))% on-time")
+                            .font(.system(size: 11)).foregroundColor(VPalette.textHint)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("RM \(match.route.pricePerSeat)")
+                            .font(.system(size: 16, weight: .black)).tracking(-0.3)
+                            .foregroundColor(VPalette.primary)
+                        VKicker(text: "per ride", size: 9)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    VRouteGlyph(squareColor: accent).frame(width: 10)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(match.route.startLocation)
+                            .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                        Text(match.route.endLocation)
+                            .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing) {
+                        Text(match.route.departureTime)
+                            .font(.system(size: 12, weight: .heavy, design: .monospaced))
+                            .foregroundColor(VPalette.text)
+                        Text("\(Int(match.estimatedDetourMinutes)) min")
+                            .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                    }
+                }
+
+                Rectangle().fill(VPalette.border).frame(height: 1)
+
+                HStack {
+                    HStack(spacing: 6) {
+                        Image(systemName: "person.fill").font(.system(size: 12)).foregroundColor(VPalette.textSec)
+                        let warning = match.availableSeats <= 1
+                        (Text("\(match.availableSeats)").fontWeight(.heavy).foregroundColor(warning ? VPalette.warning : VPalette.success)
+                         + Text(" of \(match.route.seatCount) seats left").foregroundColor(VPalette.textSec))
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Text("View details").font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.primary)
+                        Image(systemName: "arrow.right").font(.system(size: 11, weight: .heavy)).foregroundColor(VPalette.primary)
+                    }
+                }
+            }
+            .padding(14)
+            .background(VPalette.surface)
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VPalette.border, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }
 

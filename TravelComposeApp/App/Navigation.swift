@@ -100,10 +100,10 @@ struct VoygoTabBar: View {
     @Binding var selectedIndex: Int
 
     private let items: [(icon: String, selectedIcon: String, label: String)] = [
-        ("house",        "house.fill",        "Commute"),
-        ("mappin",       "mappin.circle.fill", "Commutes"),
-        ("bubble.left",  "bubble.left.fill",  "Inbox"),
-        ("person",       "person.fill",       "Profile")
+        ("car",          "car.fill",           "Routes"),
+        ("calendar",     "calendar",           "Calendar"),
+        ("bubble.left",  "bubble.left.fill",   "Inbox"),
+        ("person",       "person.fill",        "Profile")
     ]
 
     var body: some View {
@@ -153,6 +153,9 @@ struct CommuteTab: View {
         case driverDashboard
         case driverCalendar(routeId: String)
         case liveTrip(tripId: String, isDriver: Bool)
+        case bookingConfirmed(bookingId: String, pickup: String, driverName: String)
+        case rateRide(driverInitial: String, driverName: String, summary: String)
+        case searchFilters
     }
 
     var body: some View {
@@ -166,8 +169,17 @@ struct CommuteTab: View {
             .navigationDestination(for: CommuteRoute.self) { route in
                 switch route {
                 case .routeDetails(let id):
-                    RouteDetailsView(routeId: id, onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
+                    RouteDetailsView(
+                        routeId: id,
+                        onBack: { path.removeLast() },
+                        onSubscribed: { bookingId in
+                            // Push the celebratory confirmation screen on success.
+                            let routeName = "USJ 9 LRT"
+                            let driverName = "your driver"
+                            path.append(.bookingConfirmed(bookingId: bookingId, pickup: routeName, driverName: driverName))
+                        }
+                    )
+                    .navigationBarHidden(true)
 
                 case .mySubscriptions:
                     MySubscriptionsView(
@@ -203,13 +215,69 @@ struct CommuteTab: View {
                         .navigationBarHidden(true)
 
                 case .liveTrip(let id, let isDriver):
-                    LiveTripView(tripId: id, isDriver: isDriver, onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
+                    LiveTripView(
+                        tripId: id,
+                        isDriver: isDriver,
+                        onBack: { path.removeLast() },
+                        onMessageDriver: nil,
+                        onEndTrip: {
+                            path.append(.rateRide(driverInitial: "A", driverName: "Aiman", summary: "Subang Jaya → KLCC"))
+                        }
+                    )
+                    .navigationBarHidden(true)
+
+                case .bookingConfirmed(let bookingId, let pickup, let driverName):
+                    BookingConfirmedView(
+                        bookingId: bookingId,
+                        pickup: pickup,
+                        driverName: driverName,
+                        onViewReceipt: {
+                            // Receipt lives under Profile's nav stack; clear back to root for now.
+                            path = []
+                        },
+                        onSeeSubscription: {
+                            path = [.mySubscriptions]
+                        }
+                    )
+                    .navigationBarHidden(true)
+
+                case .rateRide(let init_, let name, let summary):
+                    RateRideView(
+                        driverInitial: init_,
+                        driverName: name,
+                        routeSummary: summary,
+                        dateLabel: dateLabelToday(),
+                        durationLabel: "52 min",
+                        onSubmit: { _, _, _ in path = [] },
+                        onSkip: { path = [] }
+                    )
+                    .navigationBarHidden(true)
+
+                case .searchFilters:
+                    let bindingDays = Binding<DaysOfWeekFlags>(get: { .weekdays }, set: { _ in })
+                    let bindingQuery = Binding<String>(get: { "Subang Jaya → KLCC" }, set: { _ in })
+                    let bindingEarliest = Binding<String>(get: { "06:30" }, set: { _ in })
+                    let bindingLatest = Binding<String>(get: { "09:00" }, set: { _ in })
+                    SearchFiltersView(
+                        routeQuery: bindingQuery,
+                        earliest: bindingEarliest,
+                        latest: bindingLatest,
+                        days: bindingDays,
+                        onApply: { path.removeLast() },
+                        onBack: { path.removeLast() }
+                    )
+                    .navigationBarHidden(true)
                 }
             }
             .navigationBarHidden(true)
         }
     }
+}
+
+private func dateLabelToday() -> String {
+    let f = DateFormatter()
+    f.dateFormat = "d MMM"
+    return f.string(from: Date())
 }
 
 // MARK: - Commutes Tab Navigator
