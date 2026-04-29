@@ -27,7 +27,11 @@ enum VPalette {
     static let outline           = Color(hex: 0x9DB1B7)
     static let text              = Color(hex: 0x122B32)
     static let textSec           = Color(hex: 0x4B6269)
-    static let textHint          = Color(hex: 0x72878E)
+    // QA flagged the previous #72878E at ~3.6:1 against #F8FAFB — fails
+    // WCAG 2.1 AA for body text. Darkened to #5A6E74 (~5.0:1) so kicker
+    // labels and hints are readable in bright sunlight (the daily
+    // commute use case).
+    static let textHint          = Color(hex: 0x5A6E74)
     static let starGold          = Color(hex: 0xFCD24A)
 
     static var primaryGradient: LinearGradient {

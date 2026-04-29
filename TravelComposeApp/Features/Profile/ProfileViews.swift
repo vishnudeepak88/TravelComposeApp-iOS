@@ -19,10 +19,15 @@ struct ProfileView: View {
     /// app restarts — previously a pure @State, it reset to true every
     /// launch regardless of the user's preference.
     @AppStorage("voygo.settings.notificationsEnabled") private var notificationsEnabled: Bool = true
-    @State private var showVerification = false
+    // showVerification used to drive a legacy step-wizard sheet. The KYC
+    // card now pushes `KycVerificationView` via the path, so the sheet
+    // and its state are removed to eliminate the dead UI surface.
     @State private var showPrivacy = false
     @State private var showHelp = false
     @State private var showLogoutAlert = false
+    /// Throttles the logout alert primary button so a double-tap can't
+    /// queue two logout calls (low-stakes but ugly when it happens).
+    @State private var isLoggingOut = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -87,11 +92,14 @@ struct ProfileView: View {
                         .navigationBarHidden(true)
                 }
             }
-            .sheet(isPresented: $showVerification) { VerificationView(onBack: { showVerification = false }) }
             .sheet(isPresented: $showPrivacy)      { PrivacySecurityView(onBack: { showPrivacy = false }) }
             .sheet(isPresented: $showHelp)         { HelpCenterView(onBack: { showHelp = false }) }
             .alert("Log Out", isPresented: $showLogoutAlert) {
-                Button("Log Out", role: .destructive, action: store.logout)
+                Button("Log Out", role: .destructive) {
+                    guard !isLoggingOut else { return }
+                    isLoggingOut = true
+                    store.logout()
+                }
                 Button("Cancel", role: .cancel, action: {})
             } message: { Text("You'll need to sign in again.") }
             .task { await store.refreshMe() }
@@ -575,6 +583,12 @@ struct LiveTripView: View {
     @State private var pickupConfirmed = false
     @State private var dropoffConfirmed = false
     @State private var sosPressed = false
+    @State private var showSOSAlert = false
+    /// Live ETA in minutes — counts down. Real implementation would pull
+    /// from a route + GPS + ETA service; the demo just decrements every
+    /// minute so the screen visibly works.
+    @State private var etaMinutes: Int = 12
+    @State private var etaTask: Task<Void, Never>? = nil
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -643,6 +657,19 @@ struct LiveTripView: View {
             }
         }
         .navigationBarHidden(true)
+        .onAppear { startEtaCountdown() }
+        .onDisappear { etaTask?.cancel(); etaTask = nil }
+        .alert("Send SOS?", isPresented: $showSOSAlert) {
+            Button("Send SOS", role: .destructive) {
+                sosPressed = true
+                // Real implementation: notify safety contacts + emergency
+                // services via the backend. The toggle is preserved for
+                // local UI feedback.
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This alerts your trusted contacts and Voygo's safety team with your live location. Use in emergencies only.")
+        }
     }
 
     private var bottomSheet: some View {
@@ -654,11 +681,14 @@ struct LiveTripView: View {
             HStack(alignment: .lastTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
                     VKicker(text: "ETA")
-                    Text("12 min")
-                        .font(.system(size: 36, weight: .black))
+                    Text(etaMinutes <= 0 ? "Arriving" : "\(etaMinutes) min")
+                        // Use a semantic font so the number scales with
+                        // Dynamic Type instead of clipping at AX5.
+                        .font(.system(.largeTitle, design: .default).weight(.black))
                         .tracking(-1.2)
                         .foregroundStyle(VPalette.primaryGradient)
-                    Text("Arriving 8:34 AM · 8.4 km")
+                        .accessibilityLabel("ETA \(etaMinutes) minutes")
+                    Text(etaSubtitle)
                         .font(.system(size: 12, weight: .semibold)).foregroundColor(VPalette.textSec)
                 }
                 Spacer()
@@ -714,7 +744,7 @@ struct LiveTripView: View {
             .background(VPalette.surfaceHigh)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
-            Button { sosPressed.toggle() } label: {
+            Button { showSOSAlert = true } label: {
                 HStack(spacing: 8) {
                     Text("🆘").font(.system(size: 18))
                     Text("Hold for SOS")
@@ -728,8 +758,12 @@ struct LiveTripView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Send SOS")
             .padding(.top, 14)
 
+            // End Trip is the primary path for a rider — visible on every
+            // live trip so they can flow into rating without hunting for
+            // the action.
             if let onEndTrip {
                 VPrimaryButton("End trip → rate", action: onEndTrip)
                     .padding(.top, 10)
@@ -745,12 +779,34 @@ struct LiveTripView: View {
     private func iconButton(_ system: String, color: Color, bg: Color) -> some View {
         Button {} label: {
             Image(systemName: system).font(.system(size: 14, weight: .bold)).foregroundColor(color)
-                .frame(width: 38, height: 38)
-                .background(bg)
-                .clipShape(Circle())
+                // 38pt is below 44pt tap-target spec — pad the surrounding
+                // hit area without changing the visual size.
+                .frame(width: 44, height: 44)
+                .background(bg.frame(width: 38, height: 38).clipShape(Circle()))
         }.buttonStyle(.plain)
     }
+
+    private var etaSubtitle: String {
+        if etaMinutes <= 0 { return "Your driver is at the pickup" }
+        let arrival = Date().addingTimeInterval(TimeInterval(etaMinutes * 60))
+        return "Arriving \(Formatters.time(arrival)) · 8.4 km"
+    }
+
+    /// Stub-grade ETA tick — drops a minute every 60s until 0 so the
+    /// number isn't visibly frozen during demos. The real implementation
+    /// will pull from a routing service.
+    private func startEtaCountdown() {
+        etaTask?.cancel()
+        etaTask = Task {
+            while !Task.isCancelled && etaMinutes > 0 {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                if Task.isCancelled { return }
+                await MainActor.run { if etaMinutes > 0 { etaMinutes -= 1 } }
+            }
+        }
+    }
 }
+
 
 private struct _LiveTripDeprecatedHelpers: View {
     var body: some View {

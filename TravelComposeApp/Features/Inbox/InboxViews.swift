@@ -168,6 +168,10 @@ struct ChatBubble: View {
                 Text(message.text)
                     .font(.subheadline)
                     .foregroundColor(isMe ? .white : VPalette.text)
+                    // Long messages need to be selectable / copyable —
+                    // critical for sharing addresses and phone numbers
+                    // that appear in driver chat.
+                    .textSelection(.enabled)
                     .padding(.horizontal, 14).padding(.vertical, 9)
                     .background(
                         // Outgoing: gradient that matches the rest of the

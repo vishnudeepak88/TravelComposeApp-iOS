@@ -994,10 +994,19 @@ final class AppStore: ObservableObject {
     }
 
     private func normalizePhone(_ raw: String) -> String {
-        let digits = raw.trimmingCharacters(in: .whitespacesAndNewlines).filter { $0.isNumber || $0 == "+" }
-        guard !digits.isEmpty else { return "" }
-        if digits.hasPrefix("+") { return digits }
-        let local = digits.drop(while: { $0 == "0" })
+        // Accept any combination of digits / "+" / spaces / dashes from a
+        // pasted contact and reduce to a clean E.164-style "+60XXXXXXXXX".
+        let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .filter { $0.isNumber || $0 == "+" }
+        guard !cleaned.isEmpty else { return "" }
+        // Already an international number — trust it.
+        if cleaned.hasPrefix("+") { return cleaned }
+        // Common Malaysian paste forms: "60123456789", "0123456789",
+        // "123456789". Strip a leading 60 (country code without +) and
+        // any leading zero before prepending +60.
+        var local = cleaned
+        if local.hasPrefix("60") { local = String(local.dropFirst(2)) }
+        local = String(local.drop(while: { $0 == "0" }))
         return "+60\(local)"
     }
 }

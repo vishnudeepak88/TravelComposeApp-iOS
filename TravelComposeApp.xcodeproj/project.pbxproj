@@ -31,6 +31,7 @@
 		E1A2B3D4E5F607182939A008 /* KycVerificationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A108 /* KycVerificationView.swift */; };
 		E1A2B3D4E5F607182939A009 /* MapLocationPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A109 /* MapLocationPicker.swift */; };
 		E1A2B3D4E5F607182939A00A /* PlacePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A10A /* PlacePickerSheet.swift */; };
+		E1A2B3D4E5F607182939A00B /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A10B /* Formatters.swift */; };
 		8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DA9910E6D4CA595C6D018 /* AppStore.swift */; };
 		7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */; };
 		87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */; };
@@ -69,6 +70,7 @@
 		E1A2B3D4E5F607182939A108 /* KycVerificationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KycVerificationView.swift; sourceTree = "<group>"; };
 		E1A2B3D4E5F607182939A109 /* MapLocationPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapLocationPicker.swift; sourceTree = "<group>"; };
 		E1A2B3D4E5F607182939A10A /* PlacePickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePickerSheet.swift; sourceTree = "<group>"; };
+		E1A2B3D4E5F607182939A10B /* Formatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Formatters.swift; sourceTree = "<group>"; };
 		AC7DA9910E6D4CA595C6D018 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindCommuteRoutesView.swift; sourceTree = "<group>"; };
@@ -133,6 +135,7 @@
 				D1A2B3D4E5F607182939A101 /* Polished.swift */,
 				E1A2B3D4E5F607182939A101 /* PlaceAutocompleteField.swift */,
 				E1A2B3D4E5F607182939A102 /* TimeUtils.swift */,
+				E1A2B3D4E5F607182939A10B /* Formatters.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -342,6 +345,7 @@
 				E1A2B3D4E5F607182939A008 /* KycVerificationView.swift in Sources */,
 				E1A2B3D4E5F607182939A009 /* MapLocationPicker.swift in Sources */,
 				E1A2B3D4E5F607182939A00A /* PlacePickerSheet.swift in Sources */,
+				E1A2B3D4E5F607182939A00B /* Formatters.swift in Sources */,
 				8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */,
 				7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */,
 				87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */,

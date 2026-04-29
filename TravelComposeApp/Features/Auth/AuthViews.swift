@@ -65,12 +65,24 @@ struct AuthPhoneView: View {
 
                             TextField("12-3456789", text: $phone)
                                 .keyboardType(.numberPad)
+                                .textContentType(.telephoneNumber)
+                                .autocorrectionDisabled(true)
+                                .textInputAutocapitalization(.never)
                                 .font(.system(size: 17, weight: .semibold))
                                 .tint(VPalette.primary)
                                 .foregroundColor(VPalette.text)
                                 .padding(.horizontal, 14)
                                 .frame(height: 54)
+                                .submitLabel(.send)
+                                .onSubmit {
+                                    if phone.count >= 9 { sendOtp() }
+                                }
                                 .onChange(of: phone) { _, v in
+                                    // Strip everything except digits, then
+                                    // cap at 11. Pasting "+60 12-3456789"
+                                    // from a contact lands as "60123456789"
+                                    // — we deliberately keep the prefix
+                                    // because normalizePhone collapses it.
                                     phone = String(v.filter(\.isNumber).prefix(11))
                                     error = nil
                                 }
@@ -88,18 +100,7 @@ struct AuthPhoneView: View {
                     }
 
                     VPrimaryButton("Send OTP", isLoading: isLoading, isEnabled: phone.count >= 9) {
-                        Task {
-                            isLoading = true
-                            let result = await store.requestOtp(phone: phone)
-                            isLoading = false
-                            switch result {
-                            case .success:
-                                error = nil
-                                onSent(phone)
-                            case .failure(let err):
-                                error = err.localizedDescription
-                            }
-                        }
+                        sendOtp()
                     }
 
                     Group {
@@ -170,6 +171,24 @@ struct AuthPhoneView: View {
     }
     #endif
 
+    /// Shared by the Send-OTP button and the keyboard-Send return key.
+    /// Disables itself if a request is already in flight (rapid taps).
+    private func sendOtp() {
+        guard !isLoading, phone.count >= 9 else { return }
+        Task {
+            isLoading = true
+            let result = await store.requestOtp(phone: phone)
+            isLoading = false
+            switch result {
+            case .success:
+                error = nil
+                onSent(phone)
+            case .failure(let err):
+                error = err.localizedDescription
+            }
+        }
+    }
+
     private func featureChip(icon: String, label: String) -> some View {
         VStack(spacing: 4) {
             Image(systemName: icon).font(.system(size: 14, weight: .heavy))
@@ -193,6 +212,10 @@ struct AuthOtpView: View {
     @State private var isResending = false
     @State private var error: String? = nil
     @State private var timeLeft = 30
+    /// Holds a reference to the running countdown task so we can cancel it
+    /// in `.onDisappear`. The previous Timer.publish autoconnect leaked
+    /// indefinitely after the view unmounted.
+    @State private var countdownTask: Task<Void, Never>? = nil
 
     var body: some View {
         ZStack {
@@ -259,8 +282,15 @@ struct AuthOtpView: View {
                                 isResending = false
                                 switch result {
                                 case .success:
-                                    timeLeft = 30; error = nil
+                                    timeLeft = 30
+                                    error = nil
+                                    // Restart the countdown — the previous
+                                    // task drained to zero already.
+                                    startCountdown()
                                 case .failure(let e):
+                                    // Don't reset the cooldown if the resend
+                                    // failed — user shouldn't have to wait
+                                    // 30s before retrying.
                                     error = e.localizedDescription
                                 }
                             }
@@ -284,6 +314,13 @@ struct AuthOtpView: View {
         }
         .onAppear {
             if let dev = store.devOtpCode, otp.isEmpty { otp = dev }
+            startCountdown()
+        }
+        .onDisappear {
+            // Cancel the countdown so we don't leak a Task firing 1Hz
+            // updates against a deallocated state.
+            countdownTask?.cancel()
+            countdownTask = nil
         }
         // When the user taps Resend, AppStore.requestOtp updates devOtpCode
         // with the new code. Watch the published value so the field
@@ -293,8 +330,19 @@ struct AuthOtpView: View {
             otp = newCode
             error = nil
         }
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
-            if timeLeft > 0 { timeLeft -= 1 }
+    }
+
+    /// Replaces the previous `Timer.publish(...).autoconnect()` which
+    /// never stopped. `Task.sleep` is cooperatively cancellable, so
+    /// `.onDisappear` reliably tears it down.
+    private func startCountdown() {
+        countdownTask?.cancel()
+        countdownTask = Task {
+            while !Task.isCancelled && timeLeft > 0 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { return }
+                await MainActor.run { if timeLeft > 0 { timeLeft -= 1 } }
+            }
         }
     }
 
@@ -323,18 +371,31 @@ struct AuthOtpView: View {
                     .frame(width: 44, height: 56)
                 }
             }
-            // Hidden text field captures keyboard input
+            // Hidden TextField captures keyboard input. iOS auto-fill of
+            // SMS one-time codes is wired via .textContentType(.oneTimeCode).
             TextField("", text: Binding(
                 get: { otp },
-                set: { otp = String($0.filter(\.isNumber).prefix(6)); error = nil }
+                set: { newValue in
+                    otp = String(newValue.filter(\.isNumber).prefix(6))
+                    error = nil
+                }
             ))
             .keyboardType(.numberPad)
+            .textContentType(.oneTimeCode)
             .focused($otpFocused)
             .opacity(0.01)
             .frame(width: 0.01, height: 0.01)
         }
+        // The previous `HStack(spacing: 8)` left dead zones between cells
+        // where taps wouldn't focus the hidden field. Wrapping the whole
+        // ZStack in a single tap target fixes that without changing the
+        // visual spacing.
+        .contentShape(Rectangle())
         .onTapGesture { otpFocused = true }
         .onAppear { otpFocused = true }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("OTP code")
+        .accessibilityValue(otp.isEmpty ? "Empty" : otp)
     }
 
     @FocusState private var otpFocused: Bool

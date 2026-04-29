@@ -65,8 +65,13 @@ private struct HeaderCard: View {
                         .foregroundColor(VoygoTheme.textSecondary)
                     Spacer()
                     Text("RM \(payout.netMyr)")
-                        .font(.system(size: 36, weight: .black))
+                        // Semantic font scales with Dynamic Type — the
+                        // previous hardcoded 36pt would clip mid-character
+                        // at AX5.
+                        .font(.system(.largeTitle, design: .default).weight(.black))
                         .foregroundStyle(VoygoTheme.primaryGradient)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
                 }
 
                 Text(footerText)
@@ -139,7 +144,7 @@ private struct ReliabilityCard: View {
                         .font(.subheadline.weight(.bold))
                         .foregroundColor(VoygoTheme.textPrimary)
                     Spacer()
-                    Text("\(Int((payout.onTimeRate * 100).rounded()))% on-time")
+                    Text("\(Int((max(0, min(1, payout.onTimeRate)) * 100).rounded()))% on-time")
                         .font(.subheadline.weight(.bold))
                         .foregroundColor(VoygoTheme.success)
                 }
@@ -152,7 +157,9 @@ private struct ReliabilityCard: View {
     }
 
     private var reliabilityCopy: String {
-        let pct = Int((payout.onTimeRate * 100).rounded())
+        // Clamp before display — a malformed backend value (1.5, 95) would
+        // otherwise render as "150% on-time" or "9500% on-time".
+        let pct = Int((max(0, min(1, payout.onTimeRate)) * 100).rounded())
         if pct >= 95 {
             return "Top tier. This is what gets riders to renew without thinking about it."
         } else if pct >= 85 {

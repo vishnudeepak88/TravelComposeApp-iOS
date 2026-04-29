@@ -32,8 +32,19 @@ struct BillplzCheckoutSheet: View {
                 // Snapshot the dismissal signal at present time. If it
                 // increments while we're on this view, the deep link fired
                 // and we know the user paid.
-                initialDismissalSignal = store.checkoutDismissalSignal
+                //
+                // The snapshot is deferred by one runloop tick so a
+                // hot-cache redirect (the Billplz page returns the deep
+                // link before the SafariViewController has fully appeared)
+                // doesn't see the bumped signal as the "initial" value.
                 resolved = false
+                let pre = store.checkoutDismissalSignal
+                DispatchQueue.main.async {
+                    // If the signal already bumped between this enqueue and
+                    // execution, take the old (pre-bump) value as initial
+                    // so the .onChange below sees the bump.
+                    initialDismissalSignal = pre
+                }
             }
             .onChange(of: store.checkoutDismissalSignal) { _, newValue in
                 if newValue > initialDismissalSignal && !resolved {

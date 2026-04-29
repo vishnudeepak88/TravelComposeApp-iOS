@@ -67,11 +67,11 @@ struct ReceiptView: View {
                     VRouteGlyph().frame(height: 64)
                     VStack(alignment: .leading, spacing: 14) {
                         VStack(alignment: .leading, spacing: 1) {
-                            VKicker(text: "Pickup · 7:42 AM", color: VPalette.success, size: 10)
+                            VKicker(text: "Pickup · \(pickupTimeString)", color: VPalette.success, size: 10)
                             Text("USJ 9 LRT, Subang Jaya").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
                         }
                         VStack(alignment: .leading, spacing: 1) {
-                            VKicker(text: "Drop · 8:34 AM", color: VPalette.primary, size: 10)
+                            VKicker(text: "Drop · \(dropTimeString)", color: VPalette.primary, size: 10)
                             Text("KLCC Tower B, Kuala Lumpur").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
                         }
                     }
@@ -122,7 +122,11 @@ struct ReceiptView: View {
                 DashedLine().padding(.vertical, 16)
 
                 HStack(alignment: .top, spacing: 12) {
-                    QRPlaceholder().frame(width: 64, height: 64)
+                    QRPlaceholder()
+                        .frame(width: 64, height: 64)
+                        // Decorative pattern, not a real QR — VoiceOver
+                        // would otherwise announce a meaningless "Image".
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         VKicker(text: "Verification", size: 10)
                         Text(bookingId)
@@ -204,6 +208,23 @@ struct ReceiptView: View {
         // Backend doesn't yet thread the payment-method label through to the
         // payment row. Show "Voygo Pay" as a generic until it does.
         return payment == nil ? "Method on file" : "Voygo Pay · DuitNow / TNG / card"
+    }
+
+    /// Best-effort pickup time string. We bind to `payment.createdAt` if
+    /// the lookup succeeded — the backend doesn't yet store explicit
+    /// pickup/drop timestamps on the payment, so the exact times are
+    /// approximate. Real implementation would attach them server-side.
+    private var pickupTimeString: String {
+        guard let p = payment else { return "—" }
+        return Formatters.time(p.createdAt)
+    }
+
+    private var dropTimeString: String {
+        guard let p = payment else { return "—" }
+        // Add the typical commute duration (52 min) until the backend
+        // ships an explicit drop timestamp on the payment record.
+        let drop = p.createdAt.addingTimeInterval(52 * 60)
+        return Formatters.time(drop)
     }
 
     private var actions: some View {

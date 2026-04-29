@@ -110,7 +110,12 @@ struct KycVerificationView: View {
 
     private var progressBar: some View {
         let pair = completion
-        let pct = pair.required == 0 ? 1.0 : Double(pair.uploaded) / Double(pair.required)
+        // Guard divide-by-zero AND clamp the ratio so a malformed input
+        // (uploaded > required) doesn't blow past 100%.
+        let pct: Double = {
+            guard pair.required > 0 else { return pair.uploaded > 0 ? 1.0 : 0.0 }
+            return min(1.0, Double(pair.uploaded) / Double(pair.required))
+        }()
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 VKicker(text: "Documents uploaded")
@@ -164,11 +169,13 @@ struct KycVerificationView: View {
                         ProgressView().tint(VPalette.primary)
                     } else {
                         Text(doc == nil ? "Upload" : "Replace")
-                            .font(.system(size: 12, weight: .heavy))
+                            .font(.system(size: 13, weight: .heavy))
                             .foregroundColor(VPalette.primary)
                     }
                 }
-                .frame(width: 78, height: 32)
+                // Bumped to 88×44 — the 78×32 chip was below the 44pt
+                // tap-target spec for VoiceOver / motor accessibility.
+                .frame(minWidth: 88, minHeight: 44)
                 .background(VPalette.primaryContainer)
                 .clipShape(Capsule())
             }

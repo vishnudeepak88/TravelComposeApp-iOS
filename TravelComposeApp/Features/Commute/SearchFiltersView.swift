@@ -87,41 +87,39 @@ struct SearchFiltersView: View {
     }
 
     private var departureSection: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     VKicker(text: "Earliest", size: 9)
-                    Text(earliest).font(.system(size: 18, weight: .heavy, design: .monospaced)).foregroundColor(VPalette.primary)
+                    Text(earliest)
+                        .font(.system(size: 18, weight: .heavy, design: .monospaced))
+                        .foregroundColor(VPalette.primary)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
                     VKicker(text: "Latest", size: 9)
-                    Text(latest).font(.system(size: 18, weight: .heavy, design: .monospaced)).foregroundColor(VPalette.primary)
+                    Text(latest)
+                        .font(.system(size: 18, weight: .heavy, design: .monospaced))
+                        .foregroundColor(VPalette.primary)
                 }
             }
-            // Range slider (visual)
-            ZStack(alignment: .leading) {
-                Capsule().fill(VPalette.surfaceHigh).frame(height: 6)
-                GeometryReader { g in
-                    let width = g.size.width
-                    Capsule()
-                        .fill(VPalette.primaryGradient)
-                        .frame(width: width * 0.5, height: 6)
-                        .offset(x: width * 0.2)
-                    Circle().fill(.white).frame(width: 20, height: 20)
-                        .overlay(Circle().stroke(VPalette.primary, lineWidth: 2.5))
-                        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-                        .offset(x: width * 0.2 - 10, y: -7)
-                    Circle().fill(.white).frame(width: 20, height: 20)
-                        .overlay(Circle().stroke(VPalette.primary, lineWidth: 2.5))
-                        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-                        .offset(x: width * 0.7 - 10, y: -7)
-                }
-                .frame(height: 6)
+            // Two real native Sliders backed by minutes-since-midnight,
+            // formatted back to "HH:mm" through the bindings. The
+            // previous decorative GeometryReader handles never moved
+            // because there was no DragGesture.
+            VStack(spacing: 8) {
+                Slider(value: earliestMinutesBinding, in: 5*60...11*60, step: 15)
+                    .tint(VPalette.primary)
+                    .accessibilityLabel("Earliest departure time")
+                Slider(value: latestMinutesBinding, in: 5*60...11*60, step: 15)
+                    .tint(VPalette.primary)
+                    .accessibilityLabel("Latest departure time")
             }
             HStack {
                 ForEach(["5:00", "7:00", "9:00", "11:00"], id: \.self) { t in
-                    Text(t).font(.system(size: 10, weight: .bold)).foregroundColor(VPalette.textHint)
+                    Text(t)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(VPalette.textHint)
                         .frame(maxWidth: .infinity)
                 }
             }
@@ -130,6 +128,46 @@ struct SearchFiltersView: View {
         .background(VPalette.surface)
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VPalette.border, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    /// Wrap the "HH:mm" string bindings as Doubles in minutes so SwiftUI
+    /// `Slider` can drive them. Two-way: drag updates the string binding,
+    /// and a new string from outside re-formats correctly.
+    private var earliestMinutesBinding: Binding<Double> {
+        Binding(
+            get: { Double(parseMinutes(earliest) ?? (7 * 60)) },
+            set: { newValue in
+                // Clamp the lower bound to never exceed the upper.
+                let upper = parseMinutes(latest) ?? (9 * 60)
+                let clamped = min(Int(newValue), upper)
+                earliest = formatMinutes(clamped)
+            }
+        )
+    }
+
+    private var latestMinutesBinding: Binding<Double> {
+        Binding(
+            get: { Double(parseMinutes(latest) ?? (9 * 60)) },
+            set: { newValue in
+                let lower = parseMinutes(earliest) ?? (7 * 60)
+                let clamped = max(Int(newValue), lower)
+                latest = formatMinutes(clamped)
+            }
+        )
+    }
+
+    private func parseMinutes(_ s: String) -> Int? {
+        let parts = s.split(separator: ":")
+        guard parts.count == 2,
+              let h = Int(parts[0]), let m = Int(parts[1]),
+              (0...23).contains(h), (0...59).contains(m) else { return nil }
+        return h * 60 + m
+    }
+
+    private func formatMinutes(_ minutes: Int) -> String {
+        let h = max(0, min(23, minutes / 60))
+        let m = max(0, min(59, minutes % 60))
+        return String(format: "%02d:%02d", h, m)
     }
 
     private var daysSection: some View {

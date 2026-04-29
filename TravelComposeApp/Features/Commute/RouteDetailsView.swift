@@ -87,12 +87,18 @@ final class RouteDetailsViewModel: ObservableObject {
                 case .failure(let err):
                     // Subscription was created but the charge failed. Auto-
                     // pause it so the rider doesn't believe they're booked
-                    // for tomorrow's commute when no money has moved. The
-                    // pause is silent (we already have the user's
-                    // attention via the error banner). They can reactivate
-                    // and retry payment from My Subscriptions.
-                    Task { _ = await store.updateSubscription(id: subscriptionId, status: .paused) }
-                    subscribeState = .error("Subscription paused — payment failed: \(err.localizedDescription). Retry from My Subscriptions.")
+                    // for tomorrow's commute when no money has moved. We
+                    // await the pause result so a pause failure surfaces
+                    // alongside the payment failure rather than getting
+                    // swallowed by a fire-and-forget Task.
+                    let pauseResult = await store.updateSubscription(id: subscriptionId, status: .paused)
+                    if case .failure(let pauseErr) = pauseResult {
+                        subscribeState = .error(
+                            "Payment failed (\(err.localizedDescription)) and we couldn't pause the subscription either: \(pauseErr.localizedDescription). Please cancel from My Subscriptions before retrying."
+                        )
+                    } else {
+                        subscribeState = .error("Subscription paused — payment failed: \(err.localizedDescription). Retry from My Subscriptions.")
+                    }
                     load(routeId: route.id)
                 }
             case .failure(let err):
@@ -119,9 +125,20 @@ final class RouteDetailsViewModel: ObservableObject {
         }
 
         // Abandoned — pause the subscription and tell the user how to retry.
-        Task { _ = await store?.updateSubscription(id: id, status: .paused) }
-        subscribeState = .error("Payment not completed. Subscription paused — retry from My Subscriptions.")
-        if let routeId = route?.id { load(routeId: routeId) }
+        // Awaited so a pause-failure shows up in the same banner instead
+        // of getting silently swallowed.
+        Task { [weak self] in
+            guard let self, let store = self.store else { return }
+            let result = await store.updateSubscription(id: id, status: .paused)
+            await MainActor.run {
+                if case .failure(let err) = result {
+                    self.subscribeState = .error("Payment cancelled — pause also failed: \(err.localizedDescription).")
+                } else {
+                    self.subscribeState = .error("Payment not completed. Subscription paused — retry from My Subscriptions.")
+                }
+                if let routeId = self.route?.id { self.load(routeId: routeId) }
+            }
+        }
     }
 
     /// Convenience accessor — if the success state holds an id, return it.
@@ -317,7 +334,14 @@ struct RouteDetailsView: View {
                                 PrimaryButton(
                                     subscribeButtonTitle,
                                     isLoading: vm.subscribeState.isInFlight,
-                                    isEnabled: vm.selectedPickupId != nil && vm.selectedDropId != nil,
+                                    // Disable on RM 0 totals — happens if the
+                                    // user clears `numberOfDays` to 0 or the
+                                    // tier×price math zeroes out (shouldn't,
+                                    // but defensive). Better than showing
+                                    // "Subscribe & pay RM 0".
+                                    isEnabled: vm.selectedPickupId != nil
+                                        && vm.selectedDropId != nil
+                                        && vm.subscriptionTotalMyr > 0,
                                     action: vm.subscribe
                                 )
 

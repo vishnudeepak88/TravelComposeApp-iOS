@@ -324,8 +324,45 @@ final class CreateRouteViewModel: ObservableObject {
                         thursday: thursday, friday: friday, saturday: saturday, sunday: sunday)
     }
 
-    func addPickup() { let t = newPickup.trimmingCharacters(in: .whitespaces); if !t.isEmpty { pickupPoints.append(t); newPickup = "" } }
-    func addDrop()   { let t = newDrop.trimmingCharacters(in: .whitespaces);   if !t.isEmpty { dropPoints.append(t);   newDrop = "" } }
+    func addPickup() {
+        let t = sanitizeStop(newPickup)
+        guard !t.isEmpty else { return }
+        if !pickupPoints.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) {
+            pickupPoints.append(t)
+        }
+        newPickup = ""
+        dismissKeyboard()
+    }
+
+    func addDrop() {
+        let t = sanitizeStop(newDrop)
+        guard !t.isEmpty else { return }
+        if !dropPoints.contains(where: { $0.caseInsensitiveCompare(t) == .orderedSame }) {
+            dropPoints.append(t)
+        }
+        newDrop = ""
+        dismissKeyboard()
+    }
+
+    /// Filter out emoji + zero-width chars + cap to 60 chars so a paste
+    /// from a chat doesn't destabilise the form. Trims surrounding
+    /// whitespace.
+    private func sanitizeStop(_ raw: String) -> String {
+        let allowed: Set<Character> = Set(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ,.-/'&"
+        )
+        let cleaned = raw.filter { allowed.contains($0) }
+        return String(cleaned.prefix(60)).trimmingCharacters(in: .whitespaces)
+    }
+
+    private func dismissKeyboard() {
+        // The user expects the keyboard to drop after they tap "+". The
+        // previous implementation left it up; the user had to tap somewhere
+        // empty to dismiss it.
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
+    }
 
     /// Adds a suggestion to the active list, dedupes against what's already
     /// there (case-insensitive), and removes it from the suggestion pool so
@@ -376,6 +413,38 @@ final class CreateRouteViewModel: ObservableObject {
                 self.dropSuggestions = hubs.filter { !existing.contains($0.displayName.lowercased()) }
             }
         }
+    }
+
+    /// Cancel both pickup/drop suggestion tasks. Called from
+    /// CreateRouteView's `.onDisappear` so a 3-step MKLocalSearch chain
+    /// doesn't keep firing into a dismissed screen.
+    func cancelSuggestionTasks() {
+        pickupSuggestionTask?.cancel()
+        dropSuggestionTask?.cancel()
+        pickupSuggestionTask = nil
+        dropSuggestionTask = nil
+    }
+
+    /// Bridge to drive a SwiftUI `DatePicker` against `departureTime`
+    /// while preserving the existing `HH:mm` String shape downstream.
+    var departureTimeAsDateBinding: Binding<Date> {
+        Binding(
+            get: { [self] in self.dateFromHHmm(self.departureTime) ?? Date() },
+            set: { [self] newValue in self.departureTime = self.hhmmFromDate(newValue) }
+        )
+    }
+
+    private func dateFromHHmm(_ s: String) -> Date? {
+        let parts = s.split(separator: ":")
+        guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) else { return nil }
+        return Calendar.current.date(bySettingHour: h, minute: m, second: 0, of: Date())
+    }
+
+    private func hhmmFromDate(_ d: Date) -> String {
+        let cal = Calendar.current
+        let h = cal.component(.hour, from: d)
+        let m = cal.component(.minute, from: d)
+        return String(format: "%02d:%02d", h, m)
     }
 
     func createRoute() {
@@ -442,11 +511,52 @@ struct CreateRouteView: View {
                                     value: vm.endLocation,
                                     onTap: { picker = .end }
                                 )
-                                VoygoTextField(label: "Departure Time (HH:mm)", text: $vm.departureTime,
-                                               placeholder: "08:00", keyboardType: .numbersAndPunctuation)
+                                // Native DatePicker keeps the input strictly
+                                // valid (no `??::,,..` garbage) and is what
+                                // VoiceOver users expect for time entry.
+                                // The legacy String-shaped `vm.departureTime`
+                                // is preserved via a Date↔String binding
+                                // so AppStore.createRoute keeps its existing
+                                // signature.
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("DEPARTURE TIME")
+                                        .font(.system(size: 11, weight: .heavy))
+                                        .tracking(1.2)
+                                        .foregroundColor(VPalette.textHint)
+                                    DatePicker(
+                                        "Departure",
+                                        selection: vm.departureTimeAsDateBinding,
+                                        displayedComponents: [.hourAndMinute]
+                                    )
+                                    .labelsHidden()
+                                    .datePickerStyle(.compact)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 14)
+                                    .frame(height: 54)
+                                    .background(VPalette.surface)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .stroke(VPalette.border, lineWidth: 1)
+                                    )
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                }
                                 HStack(spacing: 12) {
-                                    VoygoTextField(label: "Seats", text: $vm.seatCount, placeholder: "3", keyboardType: .numberPad)
-                                    VoygoTextField(label: "Price/Seat (RM)", text: $vm.pricePerSeat, placeholder: "8", keyboardType: .numberPad)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        VoygoTextField(label: "Seats", text: $vm.seatCount, placeholder: "3", keyboardType: .numberPad)
+                                        if (Int(vm.seatCount) ?? 0) <= 0 {
+                                            Text("Must be 1 or more")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(VPalette.danger)
+                                        }
+                                    }
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        VoygoTextField(label: "Price/Seat (RM)", text: $vm.pricePerSeat, placeholder: "8", keyboardType: .numberPad)
+                                        if (Int(vm.pricePerSeat) ?? 0) <= 0 {
+                                            Text("Must be RM 1 or more")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(VPalette.danger)
+                                        }
+                                    }
                                 }
                             }
                             .padding(16)
@@ -565,6 +675,12 @@ struct CreateRouteView: View {
         }
         .sheet(item: $picker) { target in
             mapPicker(for: target)
+        }
+        .onDisappear {
+            // The 3-call MKLocalSearch chain should not outlive the
+            // screen. Cancel both running tasks so they don't update
+            // @Published state on a deallocated VM.
+            vm.cancelSuggestionTasks()
         }
     }
 

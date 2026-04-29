@@ -79,6 +79,13 @@ struct MapLocationPickerView: View {
         .task {
             await refreshLabel(for: centerCoordinate)
         }
+        .onDisappear {
+            // Both tasks update @State; cancelling them avoids `Modifying
+            // state during view update` warnings and stops a stranded
+            // reverse-geocode from re-enabling the label after dismiss.
+            labelTask?.cancel()
+            searchTask?.cancel()
+        }
     }
 
     // MARK: - Sections
@@ -119,6 +126,8 @@ struct MapLocationPickerView: View {
             TextField("Search a place, LRT, area…", text: $query)
                 .focused($searchFocused)
                 .submitLabel(.search)
+                .textContentType(.location)
+                .autocorrectionDisabled(true)
                 .foregroundColor(VPalette.text)
                 .tint(VPalette.primary)
                 .onChange(of: query) { _, newValue in
@@ -205,28 +214,38 @@ struct MapLocationPickerView: View {
             }
 
             // Fixed crosshair pin — sits in the screen center, always at
-            // `centerCoordinate` because the map moves under it. The shadow
-            // makes it pop on busy roadway tiles.
+            // `centerCoordinate` because the map moves under it. The pin
+            // is rendered with a known geometry so we can offset it by
+            // half its rendered height — this keeps the tip on the
+            // actual coordinate at every Dynamic Type level (the
+            // previous `offset(y: -20)` was a hardcoded points value
+            // that drifted at AX1 / AX5).
+            let pinHeadDiameter: CGFloat = 18
+            let pinStemHeight:   CGFloat = 24
+            let pinTipHeight:    CGFloat = 8
+            let totalPinHeight = pinHeadDiameter + pinStemHeight + pinTipHeight
             VStack(spacing: 0) {
                 ZStack {
                     Circle()
                         .fill(.white)
-                        .frame(width: 18, height: 18)
+                        .frame(width: pinHeadDiameter, height: pinHeadDiameter)
                         .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
                     Circle()
                         .fill(VPalette.primary)
-                        .frame(width: 12, height: 12)
+                        .frame(width: pinHeadDiameter - 6, height: pinHeadDiameter - 6)
                 }
                 Rectangle()
                     .fill(VPalette.primary)
-                    .frame(width: 2, height: 24)
+                    .frame(width: 2, height: pinStemHeight)
                     .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
                 Triangle()
                     .fill(VPalette.primary)
-                    .frame(width: 12, height: 8)
+                    .frame(width: 12, height: pinTipHeight)
                     .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
             }
-            .offset(y: -20) // centers the tip on the actual coordinate
+            // Half-height upward shift so the tip lands on the camera
+            // center, not the head of the pin.
+            .offset(y: -(totalPinHeight / 2))
             .allowsHitTesting(false)
         }
     }

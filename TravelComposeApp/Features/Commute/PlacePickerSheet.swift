@@ -148,8 +148,12 @@ struct PlacePickerView: View {
 
     @State private var locating = false
     @State private var locationError: String? = nil
+    @State private var locationErrorTask: Task<Void, Never>? = nil
 
     @State private var presentMapPicker = false
+    /// First-appear flag so we don't grab focus on every state-driven
+    /// re-render (which steals VoiceOver focus from the header).
+    @State private var didInitialFocus = false
 
     @FocusState private var searchFocused: Bool
 
@@ -188,11 +192,35 @@ struct PlacePickerView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
-            recents = PlacesStorage.loadRecents(for: userId)
-            savedHome = PlacesStorage.loadSaved(.home, for: userId)
-            savedWork = PlacesStorage.loadSaved(.work, for: userId)
-            // Auto-focus the search bar — fastest path for known destinations.
-            searchFocused = true
+            // Snapshot the userId now and only render its data — if a
+            // sign-out/sign-in happens during this appear cycle, the
+            // change-of-identity is caught by the .onChange below.
+            let id = userId
+            recents = PlacesStorage.loadRecents(for: id)
+            savedHome = PlacesStorage.loadSaved(.home, for: id)
+            savedWork = PlacesStorage.loadSaved(.work, for: id)
+            // Auto-focus the search bar on the first appear only — cheaper
+            // path for known destinations. Skip when VoiceOver is running
+            // so the focus doesn't steal the screen reader's reading.
+            if !didInitialFocus && !UIAccessibility.isVoiceOverRunning {
+                searchFocused = true
+                didInitialFocus = true
+            }
+        }
+        .onDisappear {
+            // Cancel in-flight tasks so they don't update @State on a
+            // dismissed view (and don't burn API credits in the
+            // background).
+            searchTask?.cancel()
+            locationErrorTask?.cancel()
+        }
+        .onChange(of: userId) { _, newId in
+            // The signed-in user changed mid-session (logout + login).
+            // Reload recents and saved slots from the new id's keys
+            // immediately so the user doesn't see another rider's data.
+            recents = PlacesStorage.loadRecents(for: newId)
+            savedHome = PlacesStorage.loadSaved(.home, for: newId)
+            savedWork = PlacesStorage.loadSaved(.work, for: newId)
         }
         .sheet(isPresented: $presentMapPicker) {
             MapLocationPickerView(
@@ -578,6 +606,7 @@ struct PlacePickerView: View {
     private func pickCurrentLocation() async {
         locating = true
         locationError = nil
+        locationErrorTask?.cancel()
         defer { locating = false }
         do {
             let coord = try await VoygoLocationService.shared.requestCurrentCoordinate()
@@ -587,6 +616,13 @@ struct PlacePickerView: View {
             accept(suggestion)
         } catch {
             locationError = "Couldn't read your location. Allow precise location in Settings → Privacy."
+            // Auto-clear the banner after 5 seconds — the previous banner
+            // had no dismiss control and stayed up indefinitely.
+            locationErrorTask = Task {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if Task.isCancelled { return }
+                await MainActor.run { locationError = nil }
+            }
         }
     }
 
