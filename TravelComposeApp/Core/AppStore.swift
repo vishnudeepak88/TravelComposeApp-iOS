@@ -50,10 +50,16 @@ final class AppStore: ObservableObject {
     @Published var threads: [ChatThread] = []
     @Published var messages: [ChatMessage] = []
 
-    /// Driver weekly payout statement. Populated by `refreshPayout()` once the
-    /// `/payouts/me` endpoint is wired in server.js. Until then this stays nil
-    /// and DriverPayoutsView shows its empty state.
+    /// Driver weekly payout statement. Populated by `refreshPayout()` from
+    /// `/payouts/me`. Stays nil until the first sync (or if the call fails),
+    /// in which case DriverPayoutsView falls back to its empty state.
     @Published var payout: PayoutStatement? = nil
+
+    /// Recent payment history; populated by `refreshPayments()`.
+    @Published var payments: [PaymentRecord] = []
+
+    /// KYC document submissions for the signed-in user.
+    @Published var kycDocuments: [KycDocument] = []
 
     var useOnline = true
 
@@ -112,12 +118,102 @@ final class AppStore: ObservableObject {
         clearSession()
     }
 
-    /// Stub for the driver payout fetch. Once the backend `/payouts/me`
-    /// endpoint (see backend/src/payouts.js) is wired into server.js and
-    /// APIClient gains a `getMyPayout()` method, this becomes a real call.
+    /// Pulls the driver's current-week payout snapshot. Leaves `payout`
+    /// untouched on error (DriverPayoutsView shows the cached value or its
+    /// empty state).
     func refreshPayout() async {
-        // Intentionally a no-op for now; DriverPayoutsView gracefully handles
-        // `payout == nil` by rendering its empty state.
+        guard isAuthenticated else { return }
+        do {
+            payout = try await VoygoAPIClient.getMyPayout()
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal — keep last known payout if any.
+        }
+    }
+
+    func refreshPayments() async {
+        guard isAuthenticated else { return }
+        do {
+            payments = try await VoygoAPIClient.listMyPayments(limit: 30)
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal.
+        }
+    }
+
+    /// Charges the rider for a subscription tier and returns the result so
+    /// callers can either show a hosted-checkout sheet (Billplz live) or
+    /// proceed straight to confirmation (mock mode).
+    func startCharge(
+        subscriptionId: String?,
+        routeId: String?,
+        amountMyr: Int,
+        tier: SubscriptionTier
+    ) async -> Result<PaymentChargeResult, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            let result = try await VoygoAPIClient.chargeSubscription(
+                subscriptionId: subscriptionId,
+                routeId: routeId,
+                amountMyr: amountMyr,
+                tier: tier
+            )
+            await refreshPayments()
+            return .success(result)
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.message("Your session has expired. Please sign in again."))
+        } catch let error as APIError {
+            return .failure(.message(error.localizedDescription))
+        } catch {
+            return .failure(.message(error.localizedDescription))
+        }
+    }
+
+    // MARK: - KYC
+
+    func refreshKycDocuments() async {
+        guard isAuthenticated else { return }
+        do {
+            kycDocuments = try await VoygoAPIClient.listKycDocuments()
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal.
+        }
+    }
+
+    /// Uploads (or replaces) a single KYC document. The backend flips
+    /// `kycStatus` to `.pending` on first submission so the rest of the UI
+    /// reflects "under review" without a separate call.
+    func submitKycDocument(kind: KycDocumentKind, storageUrl: String? = nil) async -> Result<Void, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            let response = try await VoygoAPIClient.uploadKycDocument(kind: kind, storageUrl: storageUrl)
+            if let status = KycStatus(rawValue: response.kycStatus) {
+                kycStatus = status
+            }
+            await refreshKycDocuments()
+            return .success(())
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.message("Your session has expired. Please sign in again."))
+        } catch let error as APIError {
+            return .failure(.message(error.localizedDescription))
+        } catch {
+            return .failure(.message(error.localizedDescription))
+        }
+    }
+
+    /// Convenience: rider-required vs driver-required completeness for a UI
+    /// progress bar. Returns the ratio uploaded / required for the role.
+    func kycCompletion(role: KycSubmission.Role) -> (uploaded: Int, required: Int) {
+        let required = role == .driver ? KycDocumentKind.driverRequired : KycDocumentKind.riderRequired
+        let uploadedKinds = Set(kycDocuments.map(\.kind))
+        let uploaded = required.filter { uploadedKinds.contains($0) }.count
+        return (uploaded, required.count)
     }
 
     func refreshMe() async {
@@ -183,6 +279,10 @@ final class AppStore: ObservableObject {
             threads = remoteThreads
 
             await refreshCalendar()
+            // Pull side data — these are best-effort and don't block the
+            // primary refresh result.
+            await refreshPayout()
+            await refreshKycDocuments()
             lastSyncError = nil
             connectionState = .online
         } catch APIError.unauthorized {

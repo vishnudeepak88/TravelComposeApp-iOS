@@ -41,6 +41,44 @@ struct VoygoAPIClient {
         _ = try await putVoid(body, to: baseURL.appendingPathComponent("users/me"))
     }
 
+    // MARK: - KYC documents (Trust.swift)
+
+    static func listKycDocuments() async throws -> [KycDocument] {
+        try await get(baseURL.appendingPathComponent("users/me/kyc-documents"), as: [KycDocument].self)
+    }
+
+    static func uploadKycDocument(kind: KycDocumentKind, storageUrl: String?) async throws -> UploadKycDocumentResponse {
+        let body = UploadKycDocumentRequest(kind: kind.rawValue, storageUrl: storageUrl)
+        return try await post(body, to: baseURL.appendingPathComponent("users/me/kyc-documents"), as: UploadKycDocumentResponse.self)
+    }
+
+    // MARK: - Payments + payouts
+
+    static func chargeSubscription(
+        subscriptionId: String?,
+        routeId: String?,
+        amountMyr: Int,
+        tier: SubscriptionTier
+    ) async throws -> PaymentChargeResult {
+        let body = ChargeSubscriptionRequest(
+            subscriptionId: subscriptionId,
+            routeId: routeId,
+            amountMyr: amountMyr,
+            tier: tier.rawValue
+        )
+        return try await post(body, to: baseURL.appendingPathComponent("payments/charge"), as: PaymentChargeResult.self)
+    }
+
+    static func listMyPayments(limit: Int = 20) async throws -> [PaymentRecord] {
+        var comps = URLComponents(url: baseURL.appendingPathComponent("payments/me"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
+        return try await get(comps.url!, as: [PaymentRecord].self)
+    }
+
+    static func getMyPayout() async throws -> PayoutStatement {
+        try await get(baseURL.appendingPathComponent("payouts/me"), as: PayoutStatement.self)
+    }
+
     // GET /places/autocomplete
     static func autocompletePlaces(query: String, lat: Double?, lon: Double?) async throws -> [PlaceSuggestion] {
         var components = URLComponents(url: baseURL.appendingPathComponent("places/autocomplete"), resolvingAgainstBaseURL: false)!
@@ -472,4 +510,25 @@ struct CreateRecurringRouteRequest: Encodable {
         var lng: Double
         var clusterId: String?
     }
+}
+
+// MARK: - Payments / KYC DTOs
+
+struct ChargeSubscriptionRequest: Encodable {
+    var subscriptionId: String?
+    var routeId: String?
+    var amountMyr: Int
+    var tier: String
+}
+
+struct UploadKycDocumentRequest: Encodable {
+    var kind: String
+    var storageUrl: String?
+}
+
+struct UploadKycDocumentResponse: Decodable {
+    var id: String
+    var kind: String
+    var storageUrl: String?
+    var kycStatus: String
 }

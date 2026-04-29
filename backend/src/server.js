@@ -30,6 +30,19 @@ const {
 const { initSchema } = require("./schema");
 const { seedIfEmpty } = require("./seed");
 const { estimateRoute, geocodeQuery, generateSupportReply } = require("./services");
+const {
+  ensurePaymentsSchema,
+  chargeSubscription,
+  markPaymentPaid,
+  listUserPayments,
+  verifyBillplzSignature
+} = require("./payments");
+const { computeWeeklyPayout } = require("./payouts");
+const {
+  rateLimitGlobal,
+  rateLimitSearch,
+  rateLimitAuth
+} = require("./middleware");
 
 const app = express();
 
@@ -101,6 +114,7 @@ const KYC_STATUSES = new Set(["NOT_STARTED", "PENDING", "APPROVED", "REJECTED"])
 
 app.post(
   "/auth/request-otp",
+  rateLimitAuth,
   asyncHandler(async (req, res) => {
     const phone = normalizePhone(req.body?.phone);
     if (!phone) {
@@ -131,6 +145,7 @@ app.post(
 
 app.post(
   "/auth/verify-otp",
+  rateLimitAuth,
   asyncHandler(async (req, res) => {
     const phone = normalizePhone(req.body?.phone);
     const submitted = String(req.body?.code || "").trim();
@@ -254,6 +269,69 @@ app.put(
   })
 );
 
+const KYC_DOC_KINDS = new Set([
+  "NRIC_FRONT", "NRIC_BACK", "SELFIE",
+  "DRIVING_LICENSE", "VEHICLE_REGISTRATION", "INSURANCE", "VEHICLE_PHOTO"
+]);
+
+app.get(
+  "/users/me/kyc-documents",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `SELECT id, kind, storage_url, uploaded_at, verified_at, rejection_reason
+         FROM kyc_documents
+        WHERE user_id = $1
+        ORDER BY uploaded_at ASC`,
+      [req.user.id]
+    );
+    res.json(result.rows.map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      storageUrl: row.storage_url,
+      uploadedAt: row.uploaded_at,
+      verifiedAt: row.verified_at,
+      rejectionReason: row.rejection_reason
+    })));
+  })
+);
+
+app.post(
+  "/users/me/kyc-documents",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const kind = String(bodyValue(body, "kind") || "").toUpperCase().trim();
+    if (!KYC_DOC_KINDS.has(kind)) {
+      res.status(400).json({ detail: "invalid document kind" });
+      return;
+    }
+    const storageUrl = bodyValue(body, "storageUrl", "storage_url") || null;
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO kyc_documents (id, user_id, kind, storage_url)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id, kind) DO UPDATE
+           SET storage_url = EXCLUDED.storage_url,
+               uploaded_at = NOW(),
+               verified_at = NULL,
+               rejection_reason = NULL
+         RETURNING id, uploaded_at`,
+      [id, req.user.id, kind, storageUrl]
+    );
+    // Also flip the coarse KYC status to PENDING so the rest of the app
+    // shows "under review" without requiring a separate call.
+    await pool.query(
+      `UPDATE users
+          SET kyc_status = 'PENDING', updated_at = NOW()
+        WHERE id = $1
+          AND kyc_status NOT IN ('APPROVED')`,
+      [req.user.id]
+    );
+    res.status(201).json({ id, kind, storageUrl, kycStatus: "PENDING" });
+  })
+);
+
 app.post(
   "/ai/support",
   requireAuth,
@@ -271,6 +349,7 @@ app.post(
 app.get(
   "/places/autocomplete",
   requireAuth,
+  rateLimitSearch,
   asyncHandler(async (req, res) => {
     const query = String(req.query.q || "");
     const limit = toInt(req.query.limit, 8, 1, 8);
@@ -694,6 +773,72 @@ app.post(
   })
 );
 
+// ───────────────────────── Payments + payouts ─────────────────────────────
+//
+// Auth-gated charge endpoint. In mock mode (no Billplz creds) the call
+// resolves immediately to PAID; in prod it returns a Billplz redirect URL
+// the rider must visit.
+app.post(
+  "/payments/charge",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const subscriptionId = bodyValue(body, "subscriptionId", "subscription_id");
+    const routeId = bodyValue(body, "routeId", "route_id");
+    const amountMyr = Number(bodyValue(body, "amountMyr", "amount_myr"));
+    if (!Number.isFinite(amountMyr) || amountMyr < 1) {
+      res.status(400).json({ detail: "amountMyr is required (>= RM 1)" });
+      return;
+    }
+    const tier = String(bodyValue(body, "tier") || "MONTHLY").toUpperCase();
+    const result = await chargeSubscription(pool, {
+      userId: req.user.id,
+      subscriptionId,
+      routeId,
+      amountMyr,
+      tier,
+      contact: bodyValue(body, "contact") || {}
+    });
+    res.json(result);
+  })
+);
+
+app.get(
+  "/payments/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const limit = toInt(req.query.limit, 20, 1, 100);
+    const items = await listUserPayments(pool, req.user.id, limit);
+    res.json(items);
+  })
+);
+
+// Billplz webhook — public, signature-verified.
+app.post(
+  "/payments/billplz/callback",
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const providedSignature = body.x_signature || req.get("x-signature") || "";
+    if (!verifyBillplzSignature(body, providedSignature)) {
+      res.status(401).json({ detail: "invalid signature" });
+      return;
+    }
+    if (String(body.paid) === "true" && body.id) {
+      await markPaymentPaid(pool, { billId: String(body.id) });
+    }
+    res.status(204).send();
+  })
+);
+
+app.get(
+  "/payouts/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const payout = await computeWeeklyPayout(pool, req.user.id);
+    res.json(payout);
+  })
+);
+
 app.use((error, _req, res, _next) => {
   console.error(error);
   const status = Number(error.status || 500);
@@ -704,11 +849,57 @@ app.use((error, _req, res, _next) => {
 
 async function start() {
   await initSchema(pool);
+  await ensurePaymentsSchema(pool);
+  await ensureCancellationSchema(pool);
+  await ensureKycDocsSchema(pool);
   await seedIfEmpty(pool);
 
   app.listen(config.port, "0.0.0.0", () => {
-    console.log(`Voygo Node API listening on 0.0.0.0:${config.port}`);
+    const billplzMode = config.billplz.isMockMode ? "MOCK" : "LIVE";
+    console.log(`Voygo Node API listening on 0.0.0.0:${config.port} · billplz=${billplzMode}`);
   });
+}
+
+// Cancellation_records is referenced by payouts.js but lives outside the
+// existing schema.js bundle. Defining it here keeps the migration in one
+// place rather than splitting it across files.
+async function ensureCancellationSchema(pool) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS cancellation_records (
+      id UUID PRIMARY KEY,
+      ride_instance_id TEXT,
+      subscription_id TEXT,
+      route_id TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      reported_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      resolved_at TIMESTAMPTZ NULL,
+      penalty_amount INTEGER NOT NULL DEFAULT 0,
+      notes TEXT NULL
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_cancel_route ON cancellation_records(route_id, reported_at)"
+  );
+}
+
+// KYC documents table. Referenced by /users/me/kyc-documents endpoints.
+async function ensureKycDocsSchema(pool) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS kyc_documents (
+      id UUID PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      storage_url TEXT NULL,
+      uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      verified_at TIMESTAMPTZ NULL,
+      rejection_reason TEXT NULL,
+      CONSTRAINT uq_kyc_user_kind UNIQUE (user_id, kind)
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_kyc_docs_user ON kyc_documents(user_id)"
+  );
 }
 
 start().catch((error) => {

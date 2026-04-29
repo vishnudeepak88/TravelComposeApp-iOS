@@ -8,6 +8,8 @@ enum ProfileRoute: Hashable {
     case notifications
     case receipt(id: String)
     case driverDashboard
+    case driverPayouts
+    case kyc
 }
 
 struct ProfileView: View {
@@ -63,9 +65,16 @@ struct ProfileView: View {
                 case .driverDashboard:
                     DriverDashboardView(
                         onBack: { path.removeLast() },
-                        onOpenCalendar: { _ in }
+                        onOpenCalendar: { _ in },
+                        onOpenPayouts: { path.append(.driverPayouts) }
                     )
                     .navigationBarHidden(true)
+                case .driverPayouts:
+                    DriverPayoutsView(onBack: { path.removeLast() })
+                        .navigationBarHidden(true)
+                case .kyc:
+                    KycVerificationView(onBack: { path.removeLast() })
+                        .navigationBarHidden(true)
                 }
             }
             .sheet(isPresented: $showVerification) { VerificationView(onBack: { showVerification = false }) }
@@ -101,7 +110,7 @@ struct ProfileView: View {
     }
 
     private var kycCard: some View {
-        Button { showVerification = true } label: {
+        Button { path.append(.kyc) } label: {
             HStack(spacing: 12) {
                 VIconBubble(systemName: kycIcon, color: kycColor, size: 44, iconSize: 18)
                 VStack(alignment: .leading, spacing: 2) {

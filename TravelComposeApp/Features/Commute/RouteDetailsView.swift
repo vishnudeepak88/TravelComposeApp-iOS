@@ -12,8 +12,14 @@ final class RouteDetailsViewModel: ObservableObject {
     @Published var selectedPickupId: String? = nil
     @Published var selectedDropId: String? = nil
     @Published var numberOfDays = "30"
+    /// Tier picker — defaults to monthly, the most common choice. Daily and
+    /// quarterly are exposed in the UI so the rider can opt in.
+    @Published var selectedTier: SubscriptionTier = .monthly
+    /// When the backend returns a Billplz hosted-checkout URL we hand it to
+    /// the view, which presents `BillplzCheckoutSheet`. nil otherwise.
+    @Published var pendingPaymentURL: URL? = nil
 
-    enum SubscribeState { case idle, loading, success(String), error(String) }
+    enum SubscribeState { case idle, loading, charging, success(String), error(String) }
 
     var store: AppStore?
     var onSubscribed: ((String) -> Void)?
@@ -31,20 +37,90 @@ final class RouteDetailsViewModel: ObservableObject {
         upcomingRides.first?.seatAvailability ?? (route?.seatCount ?? 0)
     }
 
+    /// Total in MYR for the rider, applying the tier discount. Single source
+    /// of truth — the same formula the receipt + Billplz bill will use.
+    var subscriptionTotalMyr: Int {
+        guard let route else { return 0 }
+        let days = Int(numberOfDays) ?? 30
+        return SubscriptionPricing.totalForTier(
+            pricePerSeatMyr: route.pricePerSeat,
+            tier: selectedTier,
+            days: days
+        )
+    }
+
     func subscribe() {
         guard let store, let route, let pickupId = selectedPickupId, let dropId = selectedDropId else { return }
         let days = Int(numberOfDays) ?? 30
+        let amount = SubscriptionPricing.totalForTier(
+            pricePerSeatMyr: route.pricePerSeat,
+            tier: selectedTier,
+            days: days
+        )
         subscribeState = .loading
         Task {
             let result = await store.subscribe(routeId: route.id, pickupId: pickupId, dropId: dropId, days: days)
             switch result {
-            case .success(let id):
-                subscribeState = .success(id)
-                load(routeId: route.id)
-                onSubscribed?(id)
+            case .success(let subscriptionId):
+                subscribeState = .charging
+                let chargeResult = await store.startCharge(
+                    subscriptionId: subscriptionId,
+                    routeId: route.id,
+                    amountMyr: amount,
+                    tier: selectedTier
+                )
+                switch chargeResult {
+                case .success(let charge):
+                    if let urlString = charge.paymentUrl, let url = URL(string: urlString), charge.status == .pending {
+                        // Live Billplz: present the hosted checkout sheet.
+                        // The view's onDismiss handler will fire `onSubscribed`
+                        // once the rider returns from the redirect.
+                        pendingPaymentURL = url
+                        subscribeState = .success(subscriptionId)
+                    } else {
+                        // Mock mode (or already paid): jump straight to the
+                        // celebratory confirmed screen.
+                        subscribeState = .success(subscriptionId)
+                        load(routeId: route.id)
+                        onSubscribed?(subscriptionId)
+                    }
+                case .failure(let err):
+                    // Subscription was created but the charge failed; surface
+                    // the error so the user can retry instead of silently
+                    // believing they're subscribed unpaid.
+                    subscribeState = .error(err.localizedDescription)
+                    load(routeId: route.id)
+                }
             case .failure(let err):
                 subscribeState = .error(err.localizedDescription)
             }
+        }
+    }
+
+    /// Called when the Billplz checkout sheet is dismissed — the user has
+    /// (presumably) completed payment in Safari. We don't yet observe the
+    /// webhook directly; firing `onSubscribed` here lets the celebration
+    /// screen show, and the next sync will reconcile the real status.
+    func paymentCheckoutDismissed() {
+        guard let id = pendingPaymentSubscriptionId else { return }
+        pendingPaymentURL = nil
+        onSubscribed?(id)
+    }
+
+    /// Convenience accessor — if the success state holds an id, return it.
+    var pendingPaymentSubscriptionId: String? {
+        if case .success(let id) = subscribeState { return id }
+        return nil
+    }
+}
+
+extension RouteDetailsViewModel.SubscribeState {
+    /// True while the subscribe button should show a spinner — covers both
+    /// the subscription-create RPC and the follow-up payment charge.
+    var isInFlight: Bool {
+        switch self {
+        case .loading, .charging: return true
+        default:                  return false
         }
     }
 }
@@ -179,12 +255,54 @@ struct RouteDetailsView: View {
                                 .padding(16)
                             }
 
+                            // Subscription tier picker — daily / monthly / quarterly.
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Tier").font(.caption.weight(.bold)).foregroundColor(VoygoTheme.textSecondary)
+                                HStack(spacing: 6) {
+                                    ForEach(SubscriptionTier.allCases) { tier in
+                                        let on = tier == vm.selectedTier
+                                        Button {
+                                            withAnimation(.easeInOut(duration: 0.15)) {
+                                                vm.selectedTier = tier
+                                            }
+                                        } label: {
+                                            VStack(spacing: 1) {
+                                                Text(tier.label)
+                                                    .font(.system(size: 13, weight: .heavy))
+                                                Text(tier == .daily ? "Try it" : tier == .monthly ? "10% off" : "15% off")
+                                                    .font(.system(size: 10, weight: .semibold))
+                                                    .opacity(0.85)
+                                            }
+                                            .frame(maxWidth: .infinity, minHeight: 50)
+                                            .foregroundColor(on ? .white : VoygoTheme.textPrimary)
+                                            .background(on ? AnyShapeStyle(VoygoTheme.primaryGradient) : AnyShapeStyle(VoygoTheme.surface))
+                                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(on ? Color.clear : VoygoTheme.cardBorder, lineWidth: 1))
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                HStack {
+                                    Text("Total")
+                                        .font(.caption.weight(.bold))
+                                        .foregroundColor(VoygoTheme.textSecondary)
+                                    Spacer()
+                                    Text("RM \(vm.subscriptionTotalMyr)")
+                                        .font(.title3.weight(.heavy))
+                                        .foregroundColor(VoygoTheme.primary)
+                                        .monospacedDigit()
+                                }
+                                .padding(.top, 6)
+                            }
+
                             // Subscribe button + state
                             VStack(spacing: 10) {
-                                PrimaryButton("Subscribe To Route",
-                                              isLoading: { if case .loading = vm.subscribeState { return true }; return false }(),
-                                              isEnabled: vm.selectedPickupId != nil && vm.selectedDropId != nil,
-                                              action: vm.subscribe)
+                                PrimaryButton(
+                                    subscribeButtonTitle,
+                                    isLoading: vm.subscribeState.isInFlight,
+                                    isEnabled: vm.selectedPickupId != nil && vm.selectedDropId != nil,
+                                    action: vm.subscribe
+                                )
 
                                 Group {
                                     switch vm.subscribeState {
@@ -192,6 +310,11 @@ struct RouteDetailsView: View {
                                         HStack {
                                             Image(systemName: "checkmark.circle.fill").foregroundColor(VoygoTheme.success)
                                             Text("Subscription active!").font(.subheadline).foregroundColor(VoygoTheme.success)
+                                        }
+                                    case .charging:
+                                        HStack {
+                                            ProgressView().tint(VoygoTheme.primary)
+                                            Text("Charging payment…").font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
                                         }
                                     case .error(let msg):
                                         HStack {
@@ -222,7 +345,26 @@ struct RouteDetailsView: View {
             vm.load(routeId: routeId)
             vm.isLoading = false
         }
+        .sheet(item: Binding(
+            get: { vm.pendingPaymentURL.map { URLBox(url: $0) } },
+            set: { _ in vm.paymentCheckoutDismissed() }
+        )) { box in
+            BillplzCheckoutSheet(url: box.url, onDismiss: vm.paymentCheckoutDismissed)
+        }
     }
+
+    private var subscribeButtonTitle: String {
+        switch vm.subscribeState {
+        case .loading:   return "Creating subscription…"
+        case .charging:  return "Charging payment…"
+        default:         return "Subscribe & pay RM \(vm.subscriptionTotalMyr)"
+        }
+    }
+}
+
+private struct URLBox: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
 }
 
 private struct RouteInfoRow: View {

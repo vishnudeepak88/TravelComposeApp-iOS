@@ -6,6 +6,7 @@ struct DriverDashboardView: View {
     @EnvironmentObject var store: AppStore
     var onBack: () -> Void
     var onOpenCalendar: (String) -> Void
+    var onOpenPayouts: (() -> Void)? = nil
 
     @State private var actionResult: String? = nil
     @State private var actionError: String? = nil
@@ -16,8 +17,22 @@ struct DriverDashboardView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(title: "Driver Dashboard", showBack: true, onBack: onBack)
-                    .background(VoygoTheme.background)
+                VoygoNavBar(
+                    title: "Driver Dashboard",
+                    showBack: true,
+                    onBack: onBack,
+                    trailingContent: onOpenPayouts.map { handler in
+                        AnyView(
+                            Button(action: handler) {
+                                Image(systemName: "banknote.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(VoygoTheme.primary)
+                                    .frame(width: 44, height: 44)
+                            }
+                        )
+                    }
+                )
+                .background(VoygoTheme.background)
 
                 if dashboards.isEmpty {
                     EmptyStateView(icon: "car.badge.plus", title: "No routes yet",

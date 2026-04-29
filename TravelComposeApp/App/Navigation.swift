@@ -152,6 +152,7 @@ struct CommuteTab: View {
         case createRoute
         case driverDashboard
         case driverCalendar(routeId: String)
+        case driverPayouts
         case liveTrip(tripId: String, isDriver: Bool)
         case bookingConfirmed(bookingId: String, pickup: String, driverName: String)
         case rateRide(driverInitial: String, driverName: String, summary: String)
@@ -206,12 +207,17 @@ struct CommuteTab: View {
                 case .driverDashboard:
                     DriverDashboardView(
                         onBack:         { path.removeLast() },
-                        onOpenCalendar: { path.append(.driverCalendar(routeId: $0)) }
+                        onOpenCalendar: { path.append(.driverCalendar(routeId: $0)) },
+                        onOpenPayouts:  { path.append(.driverPayouts) }
                     )
                     .navigationBarHidden(true)
 
                 case .driverCalendar(let routeId):
                     UpcomingCalendarView(routeId: routeId, onBack: { path.removeLast() })
+                        .navigationBarHidden(true)
+
+                case .driverPayouts:
+                    DriverPayoutsView(onBack: { path.removeLast() })
                         .navigationBarHidden(true)
 
                 case .liveTrip(let id, let isDriver):
