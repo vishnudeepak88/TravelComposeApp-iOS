@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import MapKit
 
 struct ResolvedCoordinate {
     let lat: Double
@@ -99,18 +100,89 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
         return uniqueParts.isEmpty ? nil : uniqueParts.joined(separator: ", ")
     }
 
-    /// Compatibility shim used by PlaceLookupField — delegates to the API
-    /// autocomplete instead of MapKit local search. Mirrors the signature
-    /// the parallel onboarding work expects, but without bringing in the
-    /// full MapKit + KnownLocationFallback rewrite from that branch.
+    /// Searches places by free-text query. Tries the backend autocomplete
+    /// first (Nominatim under the hood — has good street-address coverage
+    /// once auth is real), and falls back to MKLocalSearch when the backend
+    /// returns empty or fails. The fallback is what makes search work in the
+    /// dev shortcut (no auth) and on a fresh install before the rider has
+    /// signed in.
     func searchPlaces(query: String, near coordinate: CLLocationCoordinate2D? = nil, limit: Int = 8) async throws -> [PlaceSuggestion] {
         let cleaned = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard cleaned.count >= 2 else { return [] }
-        return try await VoygoAPIClient.autocompletePlaces(
+
+        // 1) API first
+        if let api = try? await VoygoAPIClient.autocompletePlaces(
             query: cleaned,
             lat: coordinate?.latitude,
             lon: coordinate?.longitude
+        ), !api.isEmpty {
+            return Array(api.prefix(limit))
+        }
+
+        // 2) MKLocalSearch fallback. Bias the search region to the caller's
+        // anchor coordinate when present; otherwise default to a Klang Valley
+        // box so the demo and Malaysian users get reasonable results.
+        return try await mapKitSearch(query: cleaned, near: coordinate, limit: limit)
+    }
+
+    /// Suggests transit hubs and major waypoints close to a coordinate.
+    /// Drives the "Suggested pickups" / "Suggested drops" pill rows on
+    /// Create Route — once a driver has picked Start/Destination, this
+    /// returns the obvious LRT/MRT/bus stops within ~5km so they don't
+    /// have to type each one out.
+    func searchNearbyHubs(near coordinate: CLLocationCoordinate2D, radiusMeters: Double = 5_000, limit: Int = 5) async throws -> [PlaceSuggestion] {
+        // MKLocalSearch's "natural language" query handles synonyms surprisingly
+        // well: "LRT" returns Klang Valley LRT stations, "MRT" returns MRT
+        // ones, "transit" widens to bus + rail. Combining a few queries gives
+        // a richer pool than any single phrasing.
+        let queries = ["LRT station", "MRT station", "bus station"]
+        var seen: Set<String> = []
+        var results: [PlaceSuggestion] = []
+        for q in queries {
+            let chunk = (try? await mapKitSearch(query: q, near: coordinate, limit: limit, radiusMeters: radiusMeters)) ?? []
+            for item in chunk {
+                let key = item.displayName.lowercased()
+                if seen.insert(key).inserted {
+                    results.append(item)
+                }
+                if results.count >= limit { return results }
+            }
+        }
+        return results
+    }
+
+    private func mapKitSearch(
+        query: String,
+        near coordinate: CLLocationCoordinate2D?,
+        limit: Int,
+        radiusMeters: Double = 12_000
+    ) async throws -> [PlaceSuggestion] {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        request.resultTypes = [.address, .pointOfInterest]
+        let anchor = coordinate ?? CLLocationCoordinate2D(latitude: 3.139, longitude: 101.6869)
+        request.region = MKCoordinateRegion(
+            center: anchor,
+            latitudinalMeters: radiusMeters,
+            longitudinalMeters: radiusMeters
         )
+        let response = try await MKLocalSearch(request: request).start()
+        return response.mapItems.prefix(limit).compactMap { item -> PlaceSuggestion? in
+            let coord = item.placemark.coordinate
+            guard CLLocationCoordinate2DIsValid(coord) else { return nil }
+            // The mapItem name is what the user expects to see ("USJ 9 LRT")
+            // but for plain addresses it's nil — fall back to the placemark's
+            // formatted street address.
+            let label = item.name ?? formatPlacemark(item.placemark)
+            return PlaceSuggestion(displayName: label, lat: coord.latitude, lon: coord.longitude)
+        }
+    }
+
+    private func formatPlacemark(_ placemark: MKPlacemark) -> String {
+        let parts = [placemark.thoroughfare, placemark.locality, placemark.administrativeArea]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? "Unnamed place" : parts.joined(separator: ", ")
     }
 
     func resolveCoordinate(label: String) async throws -> ResolvedCoordinate {

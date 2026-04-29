@@ -236,10 +236,22 @@ final class CreateRouteViewModel: ObservableObject {
     @Published var newDrop   = ""
 
     /// Coordinates captured when the user picks a Start/Destination from the
-    /// map picker. Cleared on text edit so we don't ship stale lat/lng for
+    /// place picker. Cleared on text edit so we don't ship stale lat/lng for
     /// a different label.
     @Published var startCoordinate: PlaceSuggestion? = nil
     @Published var endCoordinate: PlaceSuggestion? = nil
+
+    /// Suggested pickup/drop hubs near Start/Destination — once the driver
+    /// has picked the route's endpoints, MKLocalSearch finds nearby
+    /// LRT/MRT/bus stops so the rider stops can be added with one tap
+    /// instead of being typed out.
+    @Published var pickupSuggestions: [PlaceSuggestion] = []
+    @Published var dropSuggestions: [PlaceSuggestion] = []
+    @Published var isLoadingPickupSuggestions = false
+    @Published var isLoadingDropSuggestions = false
+
+    private var pickupSuggestionTask: Task<Void, Never>? = nil
+    private var dropSuggestionTask: Task<Void, Never>? = nil
 
     enum CreateState { case idle, loading, success(String), error(String) }
 
@@ -251,6 +263,57 @@ final class CreateRouteViewModel: ObservableObject {
 
     func addPickup() { let t = newPickup.trimmingCharacters(in: .whitespaces); if !t.isEmpty { pickupPoints.append(t); newPickup = "" } }
     func addDrop()   { let t = newDrop.trimmingCharacters(in: .whitespaces);   if !t.isEmpty { dropPoints.append(t);   newDrop = "" } }
+
+    /// Adds a suggestion to the active list, dedupes against what's already
+    /// there (case-insensitive), and removes it from the suggestion pool so
+    /// the chip disappears from the rail.
+    func acceptPickupSuggestion(_ s: PlaceSuggestion) {
+        if !pickupPoints.contains(where: { $0.caseInsensitiveCompare(s.displayName) == .orderedSame }) {
+            pickupPoints.append(s.displayName)
+        }
+        pickupSuggestions.removeAll { $0.id == s.id }
+    }
+    func acceptDropSuggestion(_ s: PlaceSuggestion) {
+        if !dropPoints.contains(where: { $0.caseInsensitiveCompare(s.displayName) == .orderedSame }) {
+            dropPoints.append(s.displayName)
+        }
+        dropSuggestions.removeAll { $0.id == s.id }
+    }
+
+    /// Called by the view when Start coordinates change. Kicks off a debounced
+    /// MKLocalSearch for nearby transit hubs.
+    func refreshPickupSuggestions() {
+        pickupSuggestionTask?.cancel()
+        guard let coord = startCoordinate else { pickupSuggestions = []; return }
+        let target = CLLocationCoordinate2D(latitude: coord.lat, longitude: coord.lon)
+        pickupSuggestionTask = Task { [weak self] in
+            await MainActor.run { self?.isLoadingPickupSuggestions = true }
+            let hubs = (try? await VoygoLocationService.shared.searchNearbyHubs(near: target)) ?? []
+            await MainActor.run {
+                guard let self else { return }
+                self.isLoadingPickupSuggestions = false
+                // Hide ones the user has already added so the rail doesn't
+                // suggest a duplicate.
+                let existing = Set(self.pickupPoints.map { $0.lowercased() })
+                self.pickupSuggestions = hubs.filter { !existing.contains($0.displayName.lowercased()) }
+            }
+        }
+    }
+    func refreshDropSuggestions() {
+        dropSuggestionTask?.cancel()
+        guard let coord = endCoordinate else { dropSuggestions = []; return }
+        let target = CLLocationCoordinate2D(latitude: coord.lat, longitude: coord.lon)
+        dropSuggestionTask = Task { [weak self] in
+            await MainActor.run { self?.isLoadingDropSuggestions = true }
+            let hubs = (try? await VoygoLocationService.shared.searchNearbyHubs(near: target)) ?? []
+            await MainActor.run {
+                guard let self else { return }
+                self.isLoadingDropSuggestions = false
+                let existing = Set(self.dropPoints.map { $0.lowercased() })
+                self.dropSuggestions = hubs.filter { !existing.contains($0.displayName.lowercased()) }
+            }
+        }
+    }
 
     func createRoute() {
         guard let store else { return }
@@ -369,12 +432,32 @@ struct CreateRouteView: View {
                         }
 
                         // Pickup points
-                        StopsCard(title: "Pickup Points", stops: $vm.pickupPoints, newStop: $vm.newPickup,
-                                  icon: "mappin.circle.fill", color: VoygoTheme.accent, onAdd: vm.addPickup)
+                        StopsCard(
+                            title: "Pickup Points",
+                            stops: $vm.pickupPoints,
+                            newStop: $vm.newPickup,
+                            icon: "mappin.circle.fill",
+                            color: VoygoTheme.accent,
+                            suggestions: vm.pickupSuggestions,
+                            isLoadingSuggestions: vm.isLoadingPickupSuggestions,
+                            suggestionsAnchor: vm.startCoordinate?.displayName,
+                            onAdd: vm.addPickup,
+                            onAcceptSuggestion: vm.acceptPickupSuggestion
+                        )
 
                         // Drop points
-                        StopsCard(title: "Drop Points", stops: $vm.dropPoints, newStop: $vm.newDrop,
-                                  icon: "flag.checkered.circle.fill", color: VoygoTheme.warning, onAdd: vm.addDrop)
+                        StopsCard(
+                            title: "Drop Points",
+                            stops: $vm.dropPoints,
+                            newStop: $vm.newDrop,
+                            icon: "flag.checkered.circle.fill",
+                            color: VoygoTheme.warning,
+                            suggestions: vm.dropSuggestions,
+                            isLoadingSuggestions: vm.isLoadingDropSuggestions,
+                            suggestionsAnchor: vm.endCoordinate?.displayName,
+                            onAdd: vm.addDrop,
+                            onAcceptSuggestion: vm.acceptDropSuggestion
+                        )
 
                         // Submit
                         VStack(spacing: 10) {
@@ -396,6 +479,8 @@ struct CreateRouteView: View {
         .onChange(of: { if case .success(let id) = vm.createState { return id }; return "" }()) { _, id in
             if !id.isEmpty { onCreated(id) }
         }
+        .onChange(of: vm.startCoordinate) { _, _ in vm.refreshPickupSuggestions() }
+        .onChange(of: vm.endCoordinate) { _, _ in vm.refreshDropSuggestions() }
         .sheet(item: $picker) { target in
             mapPicker(for: target)
         }
@@ -481,12 +566,26 @@ private struct StopsCard: View {
     @Binding var stops: [String]
     @Binding var newStop: String
     let icon: String; let color: Color
+    /// MKLocalSearch-derived nearby hubs the driver can add with one tap.
+    /// Empty = no Start/Destination picked yet (or none found nearby).
+    var suggestions: [PlaceSuggestion] = []
+    var isLoadingSuggestions: Bool = false
+    /// Display name of the anchor (Start address for pickups, Destination
+    /// for drops) — used in the section subtitle so the user knows where
+    /// the suggestions came from.
+    var suggestionsAnchor: String? = nil
     let onAdd: () -> Void
+    var onAcceptSuggestion: ((PlaceSuggestion) -> Void)? = nil
 
     var body: some View {
         VoygoCard {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(title: title)
+
+                if isLoadingSuggestions || !suggestions.isEmpty {
+                    suggestionsRail
+                }
+
                 HStack(spacing: 8) {
                     VoygoTextField(label: "Add stop", text: $newStop, placeholder: "e.g. Masjid Jamek")
                     Button(action: onAdd) {
@@ -510,5 +609,72 @@ private struct StopsCard: View {
             }
             .padding(16)
         }
+    }
+
+    @ViewBuilder
+    private var suggestionsRail: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(color)
+                if let anchor = suggestionsAnchor, !anchor.isEmpty {
+                    Text("Suggested near \(shortAnchor(anchor))")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(VoygoTheme.textSecondary)
+                        .lineLimit(1)
+                } else {
+                    Text("Suggested nearby")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(VoygoTheme.textSecondary)
+                }
+                Spacer()
+                if isLoadingSuggestions {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+
+            if isLoadingSuggestions && suggestions.isEmpty {
+                Text("Looking up transit hubs…")
+                    .font(.caption)
+                    .foregroundColor(VoygoTheme.textHint)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(suggestions) { s in
+                            Button {
+                                onAcceptSuggestion?(s)
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.caption.weight(.bold))
+                                    Text(s.displayName)
+                                        .font(.caption.weight(.semibold))
+                                        .lineLimit(1)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .foregroundColor(color)
+                                .background(color.opacity(0.12))
+                                .overlay(Capsule().stroke(color.opacity(0.35), lineWidth: 1))
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
+        }
+    }
+
+    /// Trim long reverse-geocoded addresses ("Lot 1, Persiaran XYZ, …, Subang
+    /// Jaya, Selangor") down to the first comma-separated chunk so the
+    /// "Suggested near …" header stays one line.
+    private func shortAnchor(_ s: String) -> String {
+        if let comma = s.firstIndex(of: ",") {
+            return String(s[..<comma])
+        }
+        return String(s.prefix(28))
     }
 }
