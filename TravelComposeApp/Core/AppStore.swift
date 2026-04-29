@@ -645,7 +645,7 @@ final class AppStore: ObservableObject {
         )
     }
 
-    func subscribe(routeId: String, pickupId: String, dropId: String, days: Int) async -> Result<String, AppError> {
+    func subscribe(routeId: String, pickupId: String, dropId: String, days: Int, tier: SubscriptionTier = .monthly) async -> Result<String, AppError> {
         guard isAuthenticated else { return .failure(.message("Sign in first")) }
         guard let route = routes.first(where: { $0.id == routeId }) else { return .failure(.message("Route not found")) }
         guard let pickup = route.pickupPoints.first(where: { $0.id == pickupId }) else { return .failure(.message("Pickup not found")) }
@@ -669,9 +669,16 @@ final class AppStore: ObservableObject {
         do {
             let response = try await VoygoAPIClient.subscribeToRoute(request: request)
             let id = response.subscriptionId ?? response.id ?? "sub-\(UUID().uuidString)"
-            subscriptions.append(RouteSubscription(id: id, routeId: routeId, riderId: riderId, riderName: currentUser.name,
-                                                   startDate: start, endDate: end, selectedPickupPoint: pickup,
-                                                   selectedDropPoint: drop, status: .active))
+            subscriptions.append(RouteSubscription(
+                id: id, routeId: routeId, riderId: riderId, riderName: currentUser.name,
+                startDate: start, endDate: end,
+                selectedPickupPoint: pickup, selectedDropPoint: drop,
+                status: .active,
+                // Persist the chosen tier + days so retry-payment can
+                // re-charge with the same discount band the rider
+                // originally accepted.
+                tier: tier.rawValue, totalDays: days
+            ))
             regenerateRides()
             return .success(id)
         } catch APIError.unauthorized {

@@ -141,26 +141,27 @@ struct MySubscriptionsView: View {
         }
     }
 
-    /// Retry payment for a paused subscription. Re-runs `startCharge`
-    /// against the original route's pricing — if the user wants a
-    /// different tier they should cancel and resubscribe.
+    /// Retry payment for a paused subscription. Reads the tier + days
+    /// the rider originally chose at subscribe-time (now persisted on
+    /// the subscription model) so the retry charges the same amount the
+    /// user accepted, not a default monthly band.
     private func retryPayment(_ item: RouteSubscriptionWithRoute) {
         guard retryingId == nil else { return }
         retryingId = item.subscription.id
         Task {
-            // Use the route's existing pricePerSeat × 22 working days
-            // monthly default. A future revision can persist the original
-            // tier on the subscription model and reuse it here.
+            let tier = item.subscription.tier
+                .flatMap { SubscriptionTier(rawValue: $0) } ?? .monthly
+            let days = item.subscription.totalDays ?? 30
             let amount = SubscriptionPricing.totalForTier(
                 pricePerSeatMyr: item.route.pricePerSeat,
-                tier: .monthly,
-                days: 30
+                tier: tier,
+                days: days
             )
             let charge = await store.startCharge(
                 subscriptionId: item.subscription.id,
                 routeId: item.route.id,
                 amountMyr: amount,
-                tier: .monthly
+                tier: tier
             )
             retryingId = nil
             switch charge {

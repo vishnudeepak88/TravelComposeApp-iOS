@@ -214,10 +214,14 @@ struct PlacePickerView: View {
             searchTask?.cancel()
             locationErrorTask?.cancel()
         }
-        .onChange(of: userId) { _, newId in
-            // The signed-in user changed mid-session (logout + login).
-            // Reload recents and saved slots from the new id's keys
-            // immediately so the user doesn't see another rider's data.
+        .onChange(of: userId) { oldId, newId in
+            // Only reload when the *signed-in user actually changed* —
+            // not when an internal store update reseats `riderId` to the
+            // same value (dev-mode sample reseed, refresh churn). The
+            // previous version reloaded on any oldId→newId edge, which
+            // included no-op transitions when riderId churned within the
+            // same session.
+            guard oldId != newId, !newId.isEmpty else { return }
             recents = PlacesStorage.loadRecents(for: newId)
             savedHome = PlacesStorage.loadSaved(.home, for: newId)
             savedWork = PlacesStorage.loadSaved(.work, for: newId)

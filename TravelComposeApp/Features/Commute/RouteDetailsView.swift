@@ -59,7 +59,7 @@ final class RouteDetailsViewModel: ObservableObject {
         )
         subscribeState = .loading
         Task {
-            let result = await store.subscribe(routeId: route.id, pickupId: pickupId, dropId: dropId, days: days)
+            let result = await store.subscribe(routeId: route.id, pickupId: pickupId, dropId: dropId, days: days, tier: selectedTier)
             switch result {
             case .success(let subscriptionId):
                 subscribeState = .charging

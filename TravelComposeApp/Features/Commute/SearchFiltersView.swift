@@ -131,16 +131,20 @@ struct SearchFiltersView: View {
     }
 
     /// Wrap the "HH:mm" string bindings as Doubles in minutes so SwiftUI
-    /// `Slider` can drive them. Two-way: drag updates the string binding,
-    /// and a new string from outside re-formats correctly.
+    /// `Slider` can drive them. Both setters clamp against an atomic
+    /// snapshot of the *current parsed bounds* rather than re-reading the
+    /// other binding mid-update — without this, dragging earliest past
+    /// latest causes a jitter where SwiftUI re-renders and the next setter
+    /// reads a stale upper bound.
     private var earliestMinutesBinding: Binding<Double> {
         Binding(
             get: { Double(parseMinutes(earliest) ?? (7 * 60)) },
             set: { newValue in
-                // Clamp the lower bound to never exceed the upper.
                 let upper = parseMinutes(latest) ?? (9 * 60)
-                let clamped = min(Int(newValue), upper)
-                earliest = formatMinutes(clamped)
+                let proposed = Int(newValue)
+                let clamped = min(proposed, upper)
+                let asString = formatMinutes(clamped)
+                if asString != earliest { earliest = asString }
             }
         )
     }
@@ -150,8 +154,10 @@ struct SearchFiltersView: View {
             get: { Double(parseMinutes(latest) ?? (9 * 60)) },
             set: { newValue in
                 let lower = parseMinutes(earliest) ?? (7 * 60)
-                let clamped = max(Int(newValue), lower)
-                latest = formatMinutes(clamped)
+                let proposed = Int(newValue)
+                let clamped = max(proposed, lower)
+                let asString = formatMinutes(clamped)
+                if asString != latest { latest = asString }
             }
         )
     }

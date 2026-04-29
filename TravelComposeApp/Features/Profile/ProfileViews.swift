@@ -316,11 +316,17 @@ struct ProfileView: View {
         }
     }
 
-    /// Subtitle on the wallet shortcut. Reflects real state instead of the
-    /// previously-hardcoded "RM 42.50 credit · DuitNow default".
+    /// Subtitle on the wallet shortcut. Reflects real state instead of
+    /// the previously-hardcoded "RM 42.50 credit · DuitNow default". For
+    /// the dev shortcut we keep `useOnline = false` so payments never
+    /// sync — show a dev-aware label rather than "Add a payment method
+    /// to start", which is misleading.
     private var walletSubtitle: String {
         if store.voygoCreditMyr > 0 {
-            return "RM \(store.voygoCreditMyr).00 credit · view payments"
+            return Formatters.ringgit(store.voygoCreditMyr) + " credit · view payments"
+        }
+        if !store.useOnline {
+            return "Wallet syncs after sign-in"
         }
         return store.payments.isEmpty ? "Add a payment method to start" : "View payments & receipts"
     }

@@ -14,6 +14,10 @@ struct DriverDashboardView: View {
     /// Tracks an in-flight pause/resume so the button disables during the
     /// async call and a double-tap can't fire two requests.
     @State private var inFlightRouteId: String? = nil
+    /// Same idea for the Mon–Fri / All-Days schedule chips — rapid taps
+    /// were previously firing two updateRouteSchedule requests at the
+    /// same route in parallel.
+    @State private var inFlightScheduleRouteId: String? = nil
     /// Pending pause/resume awaiting user confirmation. Pausing an active
     /// route cancels every scheduled pickup, which a colleague riding
     /// tomorrow morning shouldn't have happen on a fat-finger tap.
@@ -72,26 +76,10 @@ struct DriverDashboardView: View {
                                         }
                                     },
                                     onSetWeekdays: { routeId, time in
-                                        guard isValidHHmm(time) else {
-                                            actionError = "Departure time must be HH:mm (e.g. 07:42)."
-                                            return
-                                        }
-                                        Task {
-                                            let r = await store.updateRouteSchedule(routeId: routeId, departureTime: time, daysOfWeek: .weekdays)
-                                            if case .failure(let e) = r { actionError = e.localizedDescription }
-                                            else { actionResult = "Schedule updated to weekdays." }
-                                        }
+                                        scheduleUpdate(routeId: routeId, time: time, days: .weekdays, label: "weekdays")
                                     },
                                     onSetAllDays: { routeId, time in
-                                        guard isValidHHmm(time) else {
-                                            actionError = "Departure time must be HH:mm (e.g. 07:42)."
-                                            return
-                                        }
-                                        Task {
-                                            let r = await store.updateRouteSchedule(routeId: routeId, departureTime: time, daysOfWeek: .allDays)
-                                            if case .failure(let e) = r { actionError = e.localizedDescription }
-                                            else { actionResult = "Schedule updated to all days." }
-                                        }
+                                        scheduleUpdate(routeId: routeId, time: time, days: .allDays, label: "all days")
                                     },
                                     onCalendar: { onOpenCalendar($0) }
                                 )
@@ -124,6 +112,27 @@ struct DriverDashboardView: View {
             Button("Cancel", role: .cancel) { pendingToggle = nil }
         } message: { _ in
             Text("Pausing cancels every scheduled pickup on this route. Riders will be notified.")
+        }
+    }
+
+    /// Throttled schedule update — gates on `inFlightScheduleRouteId` so
+    /// rapid taps on Mon–Fri or All-Days don't fire parallel requests
+    /// against the same route.
+    private func scheduleUpdate(routeId: String, time: String, days: DaysOfWeekFlags, label: String) {
+        guard isValidHHmm(time) else {
+            actionError = "Departure time must be HH:mm (e.g. 07:42)."
+            return
+        }
+        guard inFlightScheduleRouteId != routeId else { return }
+        inFlightScheduleRouteId = routeId
+        Task {
+            let r = await store.updateRouteSchedule(routeId: routeId, departureTime: time, daysOfWeek: days)
+            inFlightScheduleRouteId = nil
+            if case .failure(let e) = r {
+                actionError = e.localizedDescription
+            } else {
+                actionResult = "Schedule updated to \(label)."
+            }
         }
     }
 
