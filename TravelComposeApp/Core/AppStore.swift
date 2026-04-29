@@ -51,7 +51,53 @@ final class AppStore {
     var threads: [ChatThread] = []
     var messages: [ChatMessage] = []
 
+    /// Driver weekly payout statement. Populated by `refreshPayout()` from
+    /// `/payouts/me`. Stays nil until the first sync (or if the call fails),
+    /// in which case DriverPayoutsView falls back to its empty state.
+    var payout: PayoutStatement? = nil
+
+    /// Recent payment history; populated by `refreshPayments()`.
+    var payments: [PaymentRecord] = []
+
+    /// Voygo Credit balance in MYR. Until a real `/wallet/credit` endpoint
+    /// lands this is computed from the sum of refund-status payments minus
+    /// nothing (all refunds add to credit). Drivers will get a separate
+    /// breakdown via payouts.
+    var voygoCreditMyr: Int {
+        payments
+            .filter { $0.status == .refunded }
+            .map(\.amountMyr)
+            .reduce(0, +)
+    }
+
+    /// KYC document submissions for the signed-in user.
+    var kycDocuments: [KycDocument] = []
+
+    /// Local mirror of cancellation events. The server is the source of truth
+    /// (penalty math runs there too), but we cache reported ones so the
+    /// rider's calendar can mark them and the driver's reliability bar can
+    /// show pending penalties in the same session.
+    private(set) var cancellationRecords: [CancellationRecord] = []
+
+    /// Last `PaymentChargeResult` returned from `startCharge`, kept so any
+    /// downstream view can show a hosted-checkout URL or "PAID in mock
+    /// mode" banner without the AppStore having to broadcast a new state.
+    private(set) var lastChargeResult: PaymentChargeResult? = nil
+
+    /// Monotonic counter that views observe to know when to dismiss the
+    /// in-app Billplz checkout. Bumped from `handlePaymentReturn(url:)`.
+    /// A counter (vs a Bool) avoids a race where two checkouts in quick
+    /// succession both observe the same true→true transition.
+    private(set) var checkoutDismissalSignal: Int = 0
+
     var useOnline = true
+
+    /// True when the user entered via the DEBUG-only dev shortcut. Two
+    /// effects: refresh methods skip server calls (`useOnline` is false),
+    /// and `clearSession()` is a no-op so a stray 401 from any
+    /// not-yet-gated method can't bounce the dev user back to the login
+    /// screen. Cleared by the explicit `logout()` flow.
+    private var isDevSession = false
 
     private enum SessionKeys {
         // Non-sensitive identifiers stay in UserDefaults so the UI can render
@@ -60,6 +106,10 @@ final class AppStore {
         static let displayName = "voygo.session.displayName"
         static let userId = "voygo.session.userId"
         static let kycStatus = "voygo.session.kycStatus"
+        // Dev shortcut state persisted so a force-quit + relaunch lands the
+        // user back on the home screen instead of bouncing them out via a
+        // stray 401. Cleared by the explicit logout() flow.
+        static let isDevSession = "voygo.session.isDevSession"
     }
 
     init() {
@@ -105,7 +155,271 @@ final class AppStore {
     }
 
     func logout() {
+        // Explicit user action — bypass the dev-session guard so the user
+        // can leave the dev shortcut state cleanly.
+        isDevSession = false
+        useOnline = true
+        UserDefaults.standard.removeObject(forKey: SessionKeys.isDevSession)
         clearSession()
+    }
+
+#if DEBUG
+    /// Development shortcut — bypasses the OTP round-trip and drops the app
+    /// straight into the authenticated home screen. Only compiled into
+    /// debug builds; the release binary cannot reach this code.
+    ///
+    /// The session is offline-only by design: `useOnline` is set to false so
+    /// no refresh hits the backend, and `isDevSession` makes `clearSession()`
+    /// a no-op so any stray 401 from a method that doesn't yet check
+    /// `useOnline` can't bounce the user back to the login screen.
+    func signInForDevelopment() {
+        let id = "dev-\(Int.random(in: 1000...9999))"
+        isDevSession = true
+        useOnline = false
+        UserDefaults.standard.set(true, forKey: SessionKeys.isDevSession)
+        riderId = id
+        driverId = id
+        phoneNumber = "+60 12-3456789"
+        currentUser = User(id: id, name: "Dev User", rating: 4.9)
+        kycStatus = .pending
+        SessionStorage.authToken = "DEV"
+        UserDefaults.standard.set(id, forKey: SessionKeys.userId)
+        UserDefaults.standard.set(currentUser.name, forKey: SessionKeys.displayName)
+        UserDefaults.standard.set(phoneNumber, forKey: SessionKeys.phone)
+        UserDefaults.standard.set(kycStatus.rawValue, forKey: SessionKeys.kycStatus)
+        isAuthenticated = true
+        connectionState = .idle
+        devOtpCode = nil
+        // Seed enough in-memory data so the polished screens have something
+        // to show. Keeps demo nav useful even though no backend is reachable.
+        seedDevSampleData()
+    }
+
+    private func seedDevSampleData() {
+        let pickup = RoutePoint(id: "pk-dev-1", label: "USJ 9 LRT", clusterId: "cluster-usj", lat: 3.0444, lng: 101.5860)
+        let drop   = RoutePoint(id: "dp-dev-1", label: "KLCC Tower B", clusterId: "cluster-klcc", lat: 3.1571, lng: 101.7123)
+        let route = RecurringRoute(
+            id: "rr-dev-1",
+            driverId: driverId,
+            driverName: currentUser.name,
+            startLocation: "Subang Jaya",
+            endLocation: "KLCC, Kuala Lumpur",
+            pickupPoints: [pickup],
+            dropPoints: [drop],
+            departureTime: "07:42",
+            daysOfWeek: .weekdays,
+            seatCount: 3,
+            pricePerSeat: 14,
+            carType: .ev,
+            activeStatus: .active,
+            reliability: DriverReliability(onTimeRate: 0.97, cancellationRate: 0.02, repeatRiders: 28, averageRating: 4.9)
+        )
+        routes = [route]
+        let today = Calendar.current.startOfDay(for: Date())
+        let end = Calendar.current.date(byAdding: .day, value: 30, to: today) ?? today
+        subscriptions = [
+            RouteSubscription(
+                id: "sub-dev-1", routeId: route.id, riderId: riderId, riderName: currentUser.name,
+                startDate: today, endDate: end,
+                selectedPickupPoint: pickup, selectedDropPoint: drop, status: .active
+            )
+        ]
+        threads = [
+            ChatThread(id: "thr-dev-1", tripId: route.id, title: "\(currentUser.name) · Subang → KLCC",
+                       lastMessage: "See you at USJ 9 in 4 min", unreadCount: 0)
+        ]
+        regenerateRides()
+    }
+#endif
+
+    /// Pulls the driver's current-week payout snapshot. Leaves `payout`
+    /// untouched on error (DriverPayoutsView shows the cached value or its
+    /// empty state).
+    func refreshPayout() async {
+        guard isAuthenticated else { return }
+        do {
+            payout = try await VoygoAPIClient.getMyPayout()
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal — keep last known payout if any.
+        }
+    }
+
+    func refreshPayments() async {
+        guard isAuthenticated else { return }
+        do {
+            payments = try await VoygoAPIClient.listMyPayments(limit: 30)
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal.
+        }
+    }
+
+    /// Charges the rider for a subscription tier and returns the result so
+    /// callers can either show a hosted-checkout sheet (Billplz live) or
+    /// proceed straight to confirmation (mock mode). Result is also cached
+    /// in `lastChargeResult` so peripheral views (Wallet hero, BookingConfirmed
+    /// banner) can react without re-binding the in-flight task.
+    func startCharge(
+        subscriptionId: String?,
+        routeId: String?,
+        amountMyr: Int,
+        tier: SubscriptionTier
+    ) async -> Result<PaymentChargeResult, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            let result = try await VoygoAPIClient.chargeSubscription(
+                subscriptionId: subscriptionId,
+                routeId: routeId,
+                amountMyr: amountMyr,
+                tier: tier
+            )
+            lastChargeResult = result
+            await refreshPayments()
+            return .success(result)
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.message("Your session has expired. Please sign in again."))
+        } catch let error as APIError {
+            return .failure(.message(error.localizedDescription))
+        } catch {
+            return .failure(.message(error.localizedDescription))
+        }
+    }
+
+    // MARK: - Cancellations
+
+    /// Reports a cancellation to the backend and mirrors the resulting
+    /// record locally. Penalty math runs server-side using the same policy
+    /// engine; we just store what the server returns so views don't need a
+    /// second round-trip to read it.
+    @discardableResult
+    func reportCancellation(
+        rideInstanceId: String?,
+        routeId: String,
+        subscriptionId: String?,
+        actor: CancellationActor,
+        kind: CancellationKind,
+        notes: String? = nil
+    ) async -> Result<CancellationRecord, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            let payload = CancellationReportPayload(
+                rideInstanceId: rideInstanceId,
+                subscriptionId: subscriptionId,
+                routeId: routeId,
+                actor: actor.rawValue,
+                kind: kind.rawValue,
+                notes: notes
+            )
+            let response = try await VoygoAPIClient.reportCancellation(payload: payload)
+            let record = CancellationRecord(
+                id: response.id,
+                rideInstanceId: rideInstanceId ?? "",
+                subscriptionId: subscriptionId,
+                routeId: routeId,
+                actor: actor,
+                kind: kind,
+                reportedAt: Date(),
+                resolvedAt: nil,
+                penaltyAmount: response.penaltyMyr,
+                notes: notes
+            )
+            cancellationRecords.append(record)
+            // The penalty + status implications affect both the rider's
+            // calendar and the driver's payout — kick off a sync so callers
+            // see fresh data without orchestrating it themselves.
+            Task {
+                await refreshAll()
+                await refreshPayout()
+            }
+            return .success(record)
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.message("Your session has expired. Please sign in again."))
+        } catch let error as APIError {
+            return .failure(.message(error.localizedDescription))
+        } catch {
+            return .failure(.message(error.localizedDescription))
+        }
+    }
+
+    // MARK: - Payment return deep link
+
+    /// Called by the app's `onOpenURL` handler when the rider returns from
+    /// the Billplz hosted checkout via `voygo://payments/return?...`. Closes
+    /// the loop opened in `startCharge`: dismisses any in-app checkout sheet,
+    /// refreshes payments, and surfaces a success/failure banner. The actual
+    /// PAID flip happens server-side via the Billplz webhook; this routine
+    /// just brings the iOS state up to date eagerly.
+    func handlePaymentReturn(url: URL) {
+        guard url.scheme?.lowercased() == "voygo" else { return }
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let items = components?.queryItems ?? []
+        let paid = (items.first { $0.name == "paid" }?.value ?? "").lowercased() == "true"
+
+        // Bump the dismissal counter so any presented checkout sheet observes
+        // a transition and tears itself down.
+        checkoutDismissalSignal &+= 1
+
+        if paid {
+            lastSyncError = nil
+            connectionState = .online
+        } else {
+            // Don't classify "incomplete" as offline — the rider is online,
+            // they just haven't paid. Keep the existing connection state and
+            // surface the message via lastSyncError so the wallet/banner can
+            // show it.
+            lastSyncError = "Payment not completed. You can retry from the wallet."
+        }
+
+        Task { await refreshPayments() }
+    }
+
+    // MARK: - KYC
+
+    func refreshKycDocuments() async {
+        guard isAuthenticated else { return }
+        do {
+            kycDocuments = try await VoygoAPIClient.listKycDocuments()
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal.
+        }
+    }
+
+    /// Uploads (or replaces) a single KYC document. The backend flips
+    /// `kycStatus` to `.pending` on first submission so the rest of the UI
+    /// reflects "under review" without a separate call.
+    func submitKycDocument(kind: KycDocumentKind, storageUrl: String? = nil) async -> Result<Void, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            let response = try await VoygoAPIClient.uploadKycDocument(kind: kind, storageUrl: storageUrl)
+            if let status = KycStatus(rawValue: response.kycStatus) {
+                kycStatus = status
+            }
+            await refreshKycDocuments()
+            return .success(())
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.message("Your session has expired. Please sign in again."))
+        } catch let error as APIError {
+            return .failure(.message(error.localizedDescription))
+        } catch {
+            return .failure(.message(error.localizedDescription))
+        }
+    }
+
+    /// Convenience: rider-required vs driver-required completeness for a UI
+    /// progress bar. Returns the ratio uploaded / required for the role.
+    func kycCompletion(role: KycSubmission.Role) -> (uploaded: Int, required: Int) {
+        let required = role == .driver ? KycDocumentKind.driverRequired : KycDocumentKind.riderRequired
+        let uploadedKinds = Set(kycDocuments.map(\.kind))
+        let uploaded = required.filter { uploadedKinds.contains($0) }.count
+        return (uploaded, required.count)
     }
 
     func refreshMe() async {
@@ -171,6 +485,10 @@ final class AppStore {
             threads = remoteThreads
 
             await refreshCalendar()
+            // Pull side data — these are best-effort and don't block the
+            // primary refresh result.
+            await refreshPayout()
+            await refreshKycDocuments()
             lastSyncError = nil
             connectionState = .online
         } catch APIError.unauthorized {
@@ -235,7 +553,7 @@ final class AppStore {
 
     func mySubscriptions() -> [RouteSubscriptionWithRoute] {
         subscriptions
-            .filter { $0.riderId == riderId }
+            .filter { $0.riderId == riderId && $0.status != .cancelled }
             .compactMap { sub -> RouteSubscriptionWithRoute? in
                 guard let route = routes.first(where: { $0.id == sub.routeId }) else { return nil }
                 let next = rideInstances
@@ -328,7 +646,7 @@ final class AppStore {
         )
     }
 
-    func subscribe(routeId: String, pickupId: String, dropId: String, days: Int) async -> Result<String, AppError> {
+    func subscribe(routeId: String, pickupId: String, dropId: String, days: Int, tier: SubscriptionTier = .monthly) async -> Result<String, AppError> {
         guard isAuthenticated else { return .failure(.message("Sign in first")) }
         guard let route = routes.first(where: { $0.id == routeId }) else { return .failure(.message("Route not found")) }
         guard let pickup = route.pickupPoints.first(where: { $0.id == pickupId }) else { return .failure(.message("Pickup not found")) }
@@ -352,9 +670,16 @@ final class AppStore {
         do {
             let response = try await VoygoAPIClient.subscribeToRoute(request: request)
             let id = response.subscriptionId ?? response.id ?? "sub-\(UUID().uuidString)"
-            subscriptions.append(RouteSubscription(id: id, routeId: routeId, riderId: riderId, riderName: currentUser.name,
-                                                   startDate: start, endDate: end, selectedPickupPoint: pickup,
-                                                   selectedDropPoint: drop, status: .active))
+            subscriptions.append(RouteSubscription(
+                id: id, routeId: routeId, riderId: riderId, riderName: currentUser.name,
+                startDate: start, endDate: end,
+                selectedPickupPoint: pickup, selectedDropPoint: drop,
+                status: .active,
+                // Persist the chosen tier + days so retry-payment can
+                // re-charge with the same discount band the rider
+                // originally accepted.
+                tier: tier.rawValue, totalDays: days
+            ))
             regenerateRides()
             return .success(id)
         } catch APIError.unauthorized {
@@ -540,6 +865,12 @@ final class AppStore {
     }
 
     private func clearSession() {
+        // Stray 401s from the dev shortcut must not bounce the user back to
+        // the login screen. The explicit `logout()` flow flips
+        // `isDevSession` to false before calling clearSession, so this
+        // guard only protects the auto-clear-on-401 paths.
+        if isDevSession { return }
+
         SessionStorage.authToken = nil
         UserDefaults.standard.removeObject(forKey: SessionKeys.userId)
         UserDefaults.standard.removeObject(forKey: SessionKeys.displayName)
@@ -556,6 +887,12 @@ final class AppStore {
         rideInstances = []
         threads = []
         messages = []
+        payments = []
+        kycDocuments = []
+        cancellationRecords = []
+        payout = nil
+        lastChargeResult = nil
+        checkoutDismissalSignal = 0
         devOtpCode = nil
         connectionState = .idle
         lastSyncError = nil
@@ -575,6 +912,12 @@ final class AppStore {
         if let raw = defaults.string(forKey: SessionKeys.kycStatus),
            let status = KycStatus(rawValue: raw) {
             kycStatus = status
+        }
+        // Restore dev-session flag. If true, also flip useOnline off so the
+        // first refresh attempt doesn't 401 and bounce the user out.
+        if defaults.bool(forKey: SessionKeys.isDevSession) {
+            isDevSession = true
+            useOnline = false
         }
         isAuthenticated = true
     }
@@ -659,10 +1002,19 @@ final class AppStore {
     }
 
     private func normalizePhone(_ raw: String) -> String {
-        let digits = raw.trimmingCharacters(in: .whitespacesAndNewlines).filter { $0.isNumber || $0 == "+" }
-        guard !digits.isEmpty else { return "" }
-        if digits.hasPrefix("+") { return digits }
-        let local = digits.drop(while: { $0 == "0" })
+        // Accept any combination of digits / "+" / spaces / dashes from a
+        // pasted contact and reduce to a clean E.164-style "+60XXXXXXXXX".
+        let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .filter { $0.isNumber || $0 == "+" }
+        guard !cleaned.isEmpty else { return "" }
+        // Already an international number — trust it.
+        if cleaned.hasPrefix("+") { return cleaned }
+        // Common Malaysian paste forms: "60123456789", "0123456789",
+        // "123456789". Strip a leading 60 (country code without +) and
+        // any leading zero before prepending +60.
+        var local = cleaned
+        if local.hasPrefix("60") { local = String(local.dropFirst(2)) }
+        local = String(local.drop(while: { $0 == "0" }))
         return "+60\(local)"
     }
 }

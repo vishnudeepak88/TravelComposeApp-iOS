@@ -28,7 +28,9 @@ struct TripHistoryView: View {
         .init(dow: "MON", day: "10", mo: "JUN", route: "Subang → MV",   driver: "Priya S.", price: "RM 11", dur: "36 min", rating: 5, cancelled: false, receiptId: "VG-204-0610")
     ]
 
-    private let filters = ["All", "Completed", "Cancelled", "Receipts"]
+    // "Receipts" was identical to "Completed" because every completed
+    // row has a receipt — dropped to remove the redundant chip.
+    private let filters = ["All", "Completed", "Cancelled"]
     @State private var filter = "All"
 
     var body: some View {
@@ -45,11 +47,32 @@ struct TripHistoryView: View {
 
                 ScrollView {
                     LazyVStack(spacing: 8) {
-                        ForEach(trips) { t in
-                            tripRow(t)
-                                .onTapGesture {
-                                    if let r = t.receiptId { onOpenReceipt(r) }
-                                }
+                        ForEach(filteredTrips) { t in
+                            // Only completed rows are interactive — cancelled
+                            // rows have no receipt to open, so we don't add
+                            // the tap handler at all (avoids the false
+                            // affordance the QA report flagged).
+                            if t.cancelled {
+                                tripRow(t)
+                                    .opacity(0.7)
+                                    .accessibilityLabel("Cancelled trip on \(t.dow) \(t.day) \(t.mo)")
+                            } else if let r = t.receiptId {
+                                tripRow(t)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { onOpenReceipt(r) }
+                            } else {
+                                tripRow(t)
+                            }
+                        }
+                        if filteredTrips.isEmpty {
+                            VStack(spacing: 8) {
+                                Image(systemName: "tray").font(.system(size: 32)).foregroundColor(VPalette.textHint)
+                                Text("No trips match this filter")
+                                    .font(.system(size: 13, weight: .heavy))
+                                    .foregroundColor(VPalette.textSec)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -58,6 +81,17 @@ struct TripHistoryView: View {
             }
         }
         .navigationBarHidden(true)
+    }
+
+    /// Filter chip → predicate. "Receipts" used to live here but was
+    /// identical to "Completed" — every completed trip has a receipt —
+    /// so the chip was dropped to remove the redundancy.
+    private var filteredTrips: [Trip] {
+        switch filter {
+        case "Completed": return trips.filter { !$0.cancelled }
+        case "Cancelled": return trips.filter {  $0.cancelled }
+        default:          return trips
+        }
     }
 
     private var summary: some View {

@@ -141,6 +141,12 @@ struct RouteSubscription: Codable, Equatable, Identifiable {
     var selectedPickupPoint: RoutePoint
     var selectedDropPoint: RoutePoint
     var status: RouteSubscriptionStatus
+    /// Tier the rider chose at subscribe-time. Persisted so that retry-
+    /// payment reuses the same discount band instead of defaulting to
+    /// monthly. Optional for backwards compatibility with existing rows
+    /// that predate this field.
+    var tier: String? = nil
+    var totalDays: Int? = nil
 }
 
 struct CommuteRideInstance: Codable, Equatable, Identifiable {
@@ -213,7 +219,7 @@ struct User: Equatable {
     var initial: String { String(name.prefix(1)).uppercased() }
 }
 
-struct PlaceSuggestion: Decodable, Identifiable, Equatable {
+struct PlaceSuggestion: Codable, Identifiable, Equatable {
     var id: String { displayName + String(lat) }
     var displayName: String
     var lat: Double

@@ -144,6 +144,14 @@ struct VoygoTabBar: View {
 
 struct CommuteTab: View {
     @State private var path: [CommuteRoute] = []
+    /// Persistent filter state owned by the tab so SearchFilters can
+    /// actually write back. Previously each presentation created throw-
+    /// away `Binding(get: { … }, set: { _ in })` placeholders that
+    /// silently discarded edits.
+    @State private var filtersQuery: String = "Subang Jaya → KLCC"
+    @State private var filtersEarliest: String = "06:30"
+    @State private var filtersLatest: String = "09:00"
+    @State private var filtersDays: DaysOfWeekFlags = .weekdays
 
     enum CommuteRoute: Hashable {
         case routeDetails(routeId: String)
@@ -152,6 +160,7 @@ struct CommuteTab: View {
         case createRoute
         case driverDashboard
         case driverCalendar(routeId: String)
+        case driverPayouts
         case liveTrip(tripId: String, isDriver: Bool)
         case bookingConfirmed(bookingId: String, pickup: String, driverName: String)
         case rateRide(driverInitial: String, driverName: String, summary: String)
@@ -206,12 +215,17 @@ struct CommuteTab: View {
                 case .driverDashboard:
                     DriverDashboardView(
                         onBack:         { path.removeLast() },
-                        onOpenCalendar: { path.append(.driverCalendar(routeId: $0)) }
+                        onOpenCalendar: { path.append(.driverCalendar(routeId: $0)) },
+                        onOpenPayouts:  { path.append(.driverPayouts) }
                     )
                     .navigationBarHidden(true)
 
                 case .driverCalendar(let routeId):
                     UpcomingCalendarView(routeId: routeId, onBack: { path.removeLast() })
+                        .navigationBarHidden(true)
+
+                case .driverPayouts:
+                    DriverPayoutsView(onBack: { path.removeLast() })
                         .navigationBarHidden(true)
 
                 case .liveTrip(let id, let isDriver):
@@ -254,17 +268,13 @@ struct CommuteTab: View {
                     .navigationBarHidden(true)
 
                 case .searchFilters:
-                    let bindingDays = Binding<DaysOfWeekFlags>(get: { .weekdays }, set: { _ in })
-                    let bindingQuery = Binding<String>(get: { "Subang Jaya → KLCC" }, set: { _ in })
-                    let bindingEarliest = Binding<String>(get: { "06:30" }, set: { _ in })
-                    let bindingLatest = Binding<String>(get: { "09:00" }, set: { _ in })
                     SearchFiltersView(
-                        routeQuery: bindingQuery,
-                        earliest: bindingEarliest,
-                        latest: bindingLatest,
-                        days: bindingDays,
+                        routeQuery: $filtersQuery,
+                        earliest:   $filtersEarliest,
+                        latest:     $filtersLatest,
+                        days:       $filtersDays,
                         onApply: { path.removeLast() },
-                        onBack: { path.removeLast() }
+                        onBack:  { path.removeLast() }
                     )
                     .navigationBarHidden(true)
                 }

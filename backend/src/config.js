@@ -22,6 +22,9 @@ if (
   );
 }
 
+const billplzApiKey = process.env.BILLPLZ_API_KEY || "";
+const billplzCollectionId = process.env.BILLPLZ_COLLECTION_ID || "";
+
 const config = {
   port: Number(process.env.PORT || 8000),
   databaseUrl: normalizeDatabaseUrl(process.env.DATABASE_URL),
@@ -35,7 +38,23 @@ const config = {
   otpMaxAttempts: Number(process.env.AUTH_OTP_MAX_ATTEMPTS || 5),
   authDevMode:
     String(process.env.AUTH_DEV_MODE || "").toLowerCase() === "true" ||
-    process.env.NODE_ENV !== "production"
+    process.env.NODE_ENV !== "production",
+
+  // Driver economics — playbook §3.2.
+  voygoTakeRate: Number(process.env.VOYGO_TAKE_RATE || 0.15),
+  voygoTakeCapMyrPerSeat: Number(process.env.VOYGO_TAKE_CAP_MYR || 2),
+
+  // Billplz hosted-checkout integration. When apiKey/collectionId are unset
+  // we fall back to mock mode (PAID immediately) so dev flows keep working.
+  billplz: {
+    apiKey: billplzApiKey,
+    collectionId: billplzCollectionId,
+    xSignatureKey: process.env.BILLPLZ_X_SIGNATURE_KEY || "",
+    baseUrl: process.env.BILLPLZ_BASE_URL || "https://www.billplz-sandbox.com/api/v3",
+    callbackUrl: process.env.BILLPLZ_CALLBACK_URL || "https://voygo-ios-api.onrender.com/payments/billplz/callback",
+    redirectUrl: process.env.BILLPLZ_REDIRECT_URL || "voygo://payments/return",
+    isMockMode: !(billplzApiKey && billplzCollectionId)
+  }
 };
 
 module.exports = { config };

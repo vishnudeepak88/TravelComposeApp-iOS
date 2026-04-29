@@ -3,7 +3,14 @@ import SwiftUI
 // MARK: - Wallet (mirrors WalletScreen.jsx in the prototype)
 
 struct WalletView: View {
+    @Environment(AppStore.self) private var store
     var onBack: () -> Void
+
+    /// Distinguishes "we haven't synced yet" from "you genuinely have RM 0
+    /// in credit". Without it the empty state and the API-down state
+    /// looked identical.
+    @State private var isPaymentsLoading: Bool = false
+    @State private var showComingSoonFor: String? = nil
 
     private struct Method: Identifiable {
         let id = UUID()
@@ -30,13 +37,61 @@ struct WalletView: View {
         .init(brand: "Visa",        info: "··· 8412 · expires 09/27", color: Color(hex: 0x1A1F71), chip: "V",   isDefault: false)
     ]
 
-    private let txs: [Tx] = [
+    /// Real payment history from `store.payments` if any, otherwise the
+    /// sample reel — preserves the polished demo when the device hasn't
+    /// charged anything yet, and switches to live data the moment one row
+    /// arrives.
+    private var txs: [Tx] {
+        if store.payments.isEmpty { return sampleTxs }
+        return store.payments.map { p in
+            let isCharge = p.status == .paid || p.status == .pending
+            let sign = p.status == .refunded ? "+" : (isCharge ? "−" : "")
+            let label: String = {
+                switch p.status {
+                case .paid:     return "Charged"
+                case .pending:  return "Pending"
+                case .failed:   return "Failed"
+                case .refunded: return "Refunded"
+                }
+            }()
+            return Tx(
+                title: p.routeId.map { "Route \($0.prefix(6))" } ?? "Voygo subscription",
+                subtitle: "\(formatDate(p.createdAt)) · \(p.tier ?? "Monthly")",
+                amount: "\(sign)RM \(p.amountMyr)",
+                kind: p.status == .refunded ? .credit : .debit,
+                label: label
+            )
+        }
+    }
+
+    private let sampleTxs: [Tx] = [
         .init(title: "Subang → KLCC", subtitle: "Jun 14 · Aiman Z.",        amount: "−RM 14", kind: .debit,  label: "Charged"),
         .init(title: "Voygo Credit",  subtitle: "Jun 13 · Cancellation refund", amount: "+RM 7", kind: .credit, label: "Credited"),
         .init(title: "Subang → KLCC", subtitle: "Jun 13 · Aiman Z.",         amount: "−RM 14", kind: .debit,  label: "Charged"),
         .init(title: "DuitNow top-up", subtitle: "Jun 10 · Maybank",          amount: "+RM 50", kind: .credit, label: "Topped up"),
         .init(title: "Subang → MV",    subtitle: "Jun 10 · Priya S.",         amount: "−RM 11", kind: .debit,  label: "Charged")
     ]
+
+    private func formatDate(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f.string(from: date)
+    }
+
+    /// Always renders with two decimal places so "RM 42" doesn't look
+    /// uneven next to "RM 42.50" in the same column.
+    private var formattedCredit: String {
+        String(format: "%.2f", Double(store.voygoCreditMyr))
+    }
+
+    private var creditSubtitle: String {
+        if isPaymentsLoading && store.payments.isEmpty {
+            return "Syncing your wallet…"
+        }
+        return store.voygoCreditMyr > 0
+            ? "Auto-applied to next ride"
+            : "Earn credit from referrals & cancellations"
+    }
 
     var body: some View {
         ZStack {
@@ -64,9 +119,31 @@ struct WalletView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 40)
                 }
+                .refreshable {
+                    isPaymentsLoading = true
+                    await store.refreshPayments()
+                    isPaymentsLoading = false
+                }
             }
         }
         .navigationBarHidden(true)
+        .task {
+            isPaymentsLoading = true
+            await store.refreshPayments()
+            isPaymentsLoading = false
+        }
+        .alert(
+            "Coming soon",
+            isPresented: Binding(
+                get: { showComingSoonFor != nil },
+                set: { if !$0 { showComingSoonFor = nil } }
+            ),
+            presenting: showComingSoonFor
+        ) { _ in
+            Button("OK", role: .cancel) { showComingSoonFor = nil }
+        } message: { feature in
+            Text("\(feature) is on the roadmap. We'll let you know when it lands.")
+        }
     }
 
     private var creditHero: some View {
@@ -84,9 +161,27 @@ struct WalletView: View {
                         VKicker(text: "Voygo Credit", color: .white.opacity(0.8))
                         HStack(alignment: .lastTextBaseline, spacing: 6) {
                             Text("RM").font(.system(size: 18, weight: .bold)).foregroundColor(.white.opacity(0.85))
-                            Text("42.50").font(.system(size: 40, weight: .black)).tracking(-1.4).foregroundColor(.white)
+                            // Bind to the live credit derived from payment
+                            // history. While the first sync is in flight
+                            // we show a skeleton instead of "0.00" — the
+                            // empty state and the loading state used to
+                            // look identical, which led the user to think
+                            // their balance was zero when really we just
+                            // hadn't fetched yet.
+                            if isPaymentsLoading && store.payments.isEmpty {
+                                Text("—")
+                                    .font(.system(size: 40, weight: .black))
+                                    .tracking(-1.4)
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .accessibilityLabel("Loading wallet balance")
+                            } else {
+                                Text(formattedCredit)
+                                    .font(.system(size: 40, weight: .black))
+                                    .tracking(-1.4)
+                                    .foregroundColor(.white)
+                            }
                         }
-                        Text("Auto-applied to next ride")
+                        Text(creditSubtitle)
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(.white.opacity(0.85))
                     }
@@ -101,7 +196,7 @@ struct WalletView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Button {} label: {
+                    Button { showComingSoonFor = "Top-up" } label: {
                         Text("+ Top up")
                             .font(.system(size: 12, weight: .heavy))
                             .frame(maxWidth: .infinity, minHeight: 38)
@@ -111,7 +206,7 @@ struct WalletView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                     }.buttonStyle(.plain)
 
-                    Button {} label: {
+                    Button { showComingSoonFor = "Withdraw to bank" } label: {
                         Text("Withdraw")
                             .font(.system(size: 12, weight: .heavy))
                             .frame(maxWidth: .infinity, minHeight: 38)
@@ -131,7 +226,9 @@ struct WalletView: View {
             HStack {
                 VKicker(text: "Payment methods")
                 Spacer()
-                Text("+ Add").font(.system(size: 12, weight: .semibold)).foregroundColor(VPalette.primary)
+                Button { showComingSoonFor = "Add payment method" } label: {
+                    Text("+ Add").font(.system(size: 12, weight: .semibold)).foregroundColor(VPalette.primary)
+                }.buttonStyle(.plain)
             }
             .padding(.horizontal, 4)
 

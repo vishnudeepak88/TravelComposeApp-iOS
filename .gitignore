@@ -18,3 +18,9 @@ Package.resolved
 # CocoaPods / Carthage
 Pods/
 Carthage/Build/
+
+# Node
+node_modules/
+
+# Claude worktrees
+.claude/
