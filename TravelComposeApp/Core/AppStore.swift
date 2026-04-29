@@ -61,6 +61,23 @@ final class AppStore: ObservableObject {
     /// KYC document submissions for the signed-in user.
     @Published var kycDocuments: [KycDocument] = []
 
+    /// Local mirror of cancellation events. The server is the source of truth
+    /// (penalty math runs there too), but we cache reported ones so the
+    /// rider's calendar can mark them and the driver's reliability bar can
+    /// show pending penalties in the same session.
+    @Published private(set) var cancellationRecords: [CancellationRecord] = []
+
+    /// Last `PaymentChargeResult` returned from `startCharge`, kept so any
+    /// downstream view can show a hosted-checkout URL or "PAID in mock
+    /// mode" banner without the AppStore having to broadcast a new state.
+    @Published private(set) var lastChargeResult: PaymentChargeResult? = nil
+
+    /// Monotonic counter that views observe to know when to dismiss the
+    /// in-app Billplz checkout. Bumped from `handlePaymentReturn(url:)`.
+    /// A counter (vs a Bool) avoids a race where two checkouts in quick
+    /// succession both observe the same true→true transition.
+    @Published private(set) var checkoutDismissalSignal: Int = 0
+
     var useOnline = true
 
     private enum SessionKeys {
@@ -145,7 +162,9 @@ final class AppStore: ObservableObject {
 
     /// Charges the rider for a subscription tier and returns the result so
     /// callers can either show a hosted-checkout sheet (Billplz live) or
-    /// proceed straight to confirmation (mock mode).
+    /// proceed straight to confirmation (mock mode). Result is also cached
+    /// in `lastChargeResult` so peripheral views (Wallet hero, BookingConfirmed
+    /// banner) can react without re-binding the in-flight task.
     func startCharge(
         subscriptionId: String?,
         routeId: String?,
@@ -160,6 +179,7 @@ final class AppStore: ObservableObject {
                 amountMyr: amountMyr,
                 tier: tier
             )
+            lastChargeResult = result
             await refreshPayments()
             return .success(result)
         } catch APIError.unauthorized {
@@ -170,6 +190,95 @@ final class AppStore: ObservableObject {
         } catch {
             return .failure(.message(error.localizedDescription))
         }
+    }
+
+    // MARK: - Cancellations
+
+    /// Reports a cancellation to the backend and mirrors the resulting
+    /// record locally. Penalty math runs server-side using the same policy
+    /// engine; we just store what the server returns so views don't need a
+    /// second round-trip to read it.
+    @discardableResult
+    func reportCancellation(
+        rideInstanceId: String?,
+        routeId: String,
+        subscriptionId: String?,
+        actor: CancellationActor,
+        kind: CancellationKind,
+        notes: String? = nil
+    ) async -> Result<CancellationRecord, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            let payload = CancellationReportPayload(
+                rideInstanceId: rideInstanceId,
+                subscriptionId: subscriptionId,
+                routeId: routeId,
+                actor: actor.rawValue,
+                kind: kind.rawValue,
+                notes: notes
+            )
+            let response = try await VoygoAPIClient.reportCancellation(payload: payload)
+            let record = CancellationRecord(
+                id: response.id,
+                rideInstanceId: rideInstanceId ?? "",
+                subscriptionId: subscriptionId,
+                routeId: routeId,
+                actor: actor,
+                kind: kind,
+                reportedAt: Date(),
+                resolvedAt: nil,
+                penaltyAmount: response.penaltyMyr,
+                notes: notes
+            )
+            cancellationRecords.append(record)
+            // The penalty + status implications affect both the rider's
+            // calendar and the driver's payout — kick off a sync so callers
+            // see fresh data without orchestrating it themselves.
+            Task {
+                await refreshAll()
+                await refreshPayout()
+            }
+            return .success(record)
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.message("Your session has expired. Please sign in again."))
+        } catch let error as APIError {
+            return .failure(.message(error.localizedDescription))
+        } catch {
+            return .failure(.message(error.localizedDescription))
+        }
+    }
+
+    // MARK: - Payment return deep link
+
+    /// Called by the app's `onOpenURL` handler when the rider returns from
+    /// the Billplz hosted checkout via `voygo://payments/return?...`. Closes
+    /// the loop opened in `startCharge`: dismisses any in-app checkout sheet,
+    /// refreshes payments, and surfaces a success/failure banner. The actual
+    /// PAID flip happens server-side via the Billplz webhook; this routine
+    /// just brings the iOS state up to date eagerly.
+    func handlePaymentReturn(url: URL) {
+        guard url.scheme?.lowercased() == "voygo" else { return }
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let items = components?.queryItems ?? []
+        let paid = (items.first { $0.name == "paid" }?.value ?? "").lowercased() == "true"
+
+        // Bump the dismissal counter so any presented checkout sheet observes
+        // a transition and tears itself down.
+        checkoutDismissalSignal &+= 1
+
+        if paid {
+            lastSyncError = nil
+            connectionState = .online
+        } else {
+            // Don't classify "incomplete" as offline — the rider is online,
+            // they just haven't paid. Keep the existing connection state and
+            // surface the message via lastSyncError so the wallet/banner can
+            // show it.
+            lastSyncError = "Payment not completed. You can retry from the wallet."
+        }
+
+        Task { await refreshPayments() }
     }
 
     // MARK: - KYC
@@ -668,6 +777,12 @@ final class AppStore: ObservableObject {
         rideInstances = []
         threads = []
         messages = []
+        payments = []
+        kycDocuments = []
+        cancellationRecords = []
+        payout = nil
+        lastChargeResult = nil
+        checkoutDismissalSignal = 0
         devOtpCode = nil
         connectionState = .idle
         lastSyncError = nil

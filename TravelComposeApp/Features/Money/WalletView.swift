@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Wallet (mirrors WalletScreen.jsx in the prototype)
 
 struct WalletView: View {
+    @EnvironmentObject var store: AppStore
     var onBack: () -> Void
 
     private struct Method: Identifiable {
@@ -30,13 +31,46 @@ struct WalletView: View {
         .init(brand: "Visa",        info: "··· 8412 · expires 09/27", color: Color(hex: 0x1A1F71), chip: "V",   isDefault: false)
     ]
 
-    private let txs: [Tx] = [
+    /// Real payment history from `store.payments` if any, otherwise the
+    /// sample reel — preserves the polished demo when the device hasn't
+    /// charged anything yet, and switches to live data the moment one row
+    /// arrives.
+    private var txs: [Tx] {
+        if store.payments.isEmpty { return sampleTxs }
+        return store.payments.map { p in
+            let isCharge = p.status == .paid || p.status == .pending
+            let sign = p.status == .refunded ? "+" : (isCharge ? "−" : "")
+            let label: String = {
+                switch p.status {
+                case .paid:     return "Charged"
+                case .pending:  return "Pending"
+                case .failed:   return "Failed"
+                case .refunded: return "Refunded"
+                }
+            }()
+            return Tx(
+                title: p.routeId.map { "Route \($0.prefix(6))" } ?? "Voygo subscription",
+                subtitle: "\(formatDate(p.createdAt)) · \(p.tier ?? "Monthly")",
+                amount: "\(sign)RM \(p.amountMyr)",
+                kind: p.status == .refunded ? .credit : .debit,
+                label: label
+            )
+        }
+    }
+
+    private let sampleTxs: [Tx] = [
         .init(title: "Subang → KLCC", subtitle: "Jun 14 · Aiman Z.",        amount: "−RM 14", kind: .debit,  label: "Charged"),
         .init(title: "Voygo Credit",  subtitle: "Jun 13 · Cancellation refund", amount: "+RM 7", kind: .credit, label: "Credited"),
         .init(title: "Subang → KLCC", subtitle: "Jun 13 · Aiman Z.",         amount: "−RM 14", kind: .debit,  label: "Charged"),
         .init(title: "DuitNow top-up", subtitle: "Jun 10 · Maybank",          amount: "+RM 50", kind: .credit, label: "Topped up"),
         .init(title: "Subang → MV",    subtitle: "Jun 10 · Priya S.",         amount: "−RM 11", kind: .debit,  label: "Charged")
     ]
+
+    private func formatDate(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f.string(from: date)
+    }
 
     var body: some View {
         ZStack {
@@ -64,9 +98,11 @@ struct WalletView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 40)
                 }
+                .refreshable { await store.refreshPayments() }
             }
         }
         .navigationBarHidden(true)
+        .task { await store.refreshPayments() }
     }
 
     private var creditHero: some View {

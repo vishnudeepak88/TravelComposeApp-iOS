@@ -839,6 +839,89 @@ app.get(
   })
 );
 
+const CANCEL_ACTORS = new Set(["DRIVER", "RIDER", "SYSTEM"]);
+const CANCEL_KINDS = new Set([
+  "DRIVER_CANCEL_LATE", "DRIVER_NO_SHOW",
+  "RIDER_CANCEL_MID_MONTH", "RIDER_NO_SHOW", "FORCE_MAJEURE"
+]);
+
+// Records a cancellation, computes the policy-engine penalty server-side
+// using `cancellation_records` history, and returns the new row's id.
+app.post(
+  "/cancellations",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const rideInstanceId = bodyValue(body, "rideInstanceId", "ride_instance_id");
+    const routeId        = bodyValue(body, "routeId", "route_id");
+    const subscriptionId = bodyValue(body, "subscriptionId", "subscription_id");
+    const actor          = String(bodyValue(body, "actor") || "").toUpperCase();
+    const kind           = String(bodyValue(body, "kind") || "").toUpperCase();
+    const notes          = bodyValue(body, "notes") || null;
+
+    if (!routeId || !CANCEL_ACTORS.has(actor) || !CANCEL_KINDS.has(kind)) {
+      res.status(400).json({ detail: "routeId, actor, and kind are required" });
+      return;
+    }
+
+    // Look up per-seat price + driver's recent late-cancel count to feed
+    // the policy engine, mirroring the Swift CancellationPolicyEngine.
+    const routeRow = (await pool.query(
+      "SELECT driver_id, price_per_seat FROM recurring_routes WHERE id = $1 LIMIT 1",
+      [routeId]
+    )).rows[0];
+    const pricePerSeat = Number(routeRow?.price_per_seat || 0);
+    const driverId = routeRow?.driver_id || null;
+
+    const lateCancelsRes = await pool.query(
+      `SELECT COUNT(*)::int AS count
+         FROM cancellation_records
+        WHERE route_id = $1
+          AND actor = 'DRIVER'
+          AND kind = 'DRIVER_CANCEL_LATE'
+          AND reported_at > NOW() - INTERVAL '30 days'`,
+      [routeId]
+    );
+    const driverLateCancels = Number(lateCancelsRes.rows[0]?.count || 0);
+
+    // Same policy table as the iOS CancellationPolicyEngine.decide() —
+    // keep these two in sync until they share a code path.
+    const penalty = computePenalty({
+      kind,
+      pricePerSeat,
+      driverLateCancels
+    });
+
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO cancellation_records
+         (id, ride_instance_id, subscription_id, route_id, actor, kind, penalty_amount, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, rideInstanceId || null, subscriptionId || null, routeId, actor, kind, penalty, notes]
+    );
+
+    res.status(201).json({ id, penaltyMyr: penalty, driverId });
+  })
+);
+
+function computePenalty({ kind, pricePerSeat, driverLateCancels }) {
+  switch (kind) {
+    case "DRIVER_CANCEL_LATE":
+      return driverLateCancels >= 2 ? pricePerSeat : 0;
+    case "DRIVER_NO_SHOW":
+      return Math.floor(pricePerSeat / 2);
+    case "RIDER_CANCEL_MID_MONTH":
+      // 10% admin fee, capped at MYR 20, expressed as a refund (negative).
+      return -Math.min(20, Math.floor(pricePerSeat / 10) * 22);
+    case "RIDER_NO_SHOW":
+      return 0;
+    case "FORCE_MAJEURE":
+      return 0;
+    default:
+      return 0;
+  }
+}
+
 app.use((error, _req, res, _next) => {
   console.error(error);
   const status = Number(error.status || 500);

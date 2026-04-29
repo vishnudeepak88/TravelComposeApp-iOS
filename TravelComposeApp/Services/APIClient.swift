@@ -79,6 +79,16 @@ struct VoygoAPIClient {
         try await get(baseURL.appendingPathComponent("payouts/me"), as: PayoutStatement.self)
     }
 
+    // MARK: - Cancellations
+
+    /// Reports a ride cancellation. The backend re-runs the policy engine
+    /// server-side (driver late-cancel count from cancellation_records) and
+    /// returns the authoritative penalty so a malicious client can't downplay
+    /// its own driver's no-show fee.
+    static func reportCancellation(payload: CancellationReportPayload) async throws -> CancellationReportResponse {
+        try await post(payload, to: baseURL.appendingPathComponent("cancellations"), as: CancellationReportResponse.self)
+    }
+
     // GET /places/autocomplete
     static func autocompletePlaces(query: String, lat: Double?, lon: Double?) async throws -> [PlaceSuggestion] {
         var components = URLComponents(url: baseURL.appendingPathComponent("places/autocomplete"), resolvingAgainstBaseURL: false)!
@@ -531,4 +541,19 @@ struct UploadKycDocumentResponse: Decodable {
     var kind: String
     var storageUrl: String?
     var kycStatus: String
+}
+
+struct CancellationReportPayload: Encodable {
+    var rideInstanceId: String?
+    var subscriptionId: String?
+    var routeId: String
+    var actor: String        // CancellationActor raw value
+    var kind: String         // CancellationKind raw value
+    var notes: String?
+}
+
+struct CancellationReportResponse: Decodable {
+    var id: String
+    var penaltyMyr: Int
+    var driverId: String?
 }

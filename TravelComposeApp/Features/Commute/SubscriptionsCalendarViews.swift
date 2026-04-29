@@ -58,7 +58,7 @@ struct MySubscriptionsView: View {
                                     onOpen:   { onOpenRoute(item.route.id) },
                                     onPause:  { updateSubscription(item.subscription.id, status: .paused) },
                                     onResume: { updateSubscription(item.subscription.id, status: .active) },
-                                    onCancel: { updateSubscription(item.subscription.id, status: .cancelled) }
+                                    onCancel: { cancelSubscription(item) }
                                 )
                                 .padding(.horizontal, 16)
                             }
@@ -80,6 +80,31 @@ struct MySubscriptionsView: View {
         Task {
             let result = await store.updateSubscription(id: id, status: status)
             if case .failure(let error) = result {
+                actionError = error.localizedDescription
+            }
+        }
+    }
+
+    /// Cancellation goes through two flows simultaneously:
+    /// 1. Flip the subscription status to .cancelled (existing path).
+    /// 2. Record a CancellationRecord with the policy engine so any
+    ///    mid-month admin fee or driver penalty hits the right balance.
+    private func cancelSubscription(_ item: RouteSubscriptionWithRoute) {
+        Task {
+            let result = await store.updateSubscription(id: item.subscription.id, status: .cancelled)
+            if case .failure(let error) = result {
+                actionError = error.localizedDescription
+                return
+            }
+            let cancelResult = await store.reportCancellation(
+                rideInstanceId: nil,
+                routeId: item.route.id,
+                subscriptionId: item.subscription.id,
+                actor: .rider,
+                kind: .riderCancelMidMonth,
+                notes: nil
+            )
+            if case .failure(let error) = cancelResult {
                 actionError = error.localizedDescription
             }
         }
