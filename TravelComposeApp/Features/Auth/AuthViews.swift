@@ -113,6 +113,10 @@ struct AuthPhoneView: View {
                     .font(.system(size: 11))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
+
+                    #if DEBUG
+                    devShortcut
+                    #endif
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 60)
@@ -120,6 +124,51 @@ struct AuthPhoneView: View {
             }
         }
     }
+
+    #if DEBUG
+    /// Dev-only shortcut into the authenticated home screen. Compiled out
+    /// of release builds via the `#if DEBUG` guard, so the App Store binary
+    /// will never see this UI or call `signInForDevelopment`.
+    private var devShortcut: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Rectangle().fill(VPalette.border).frame(height: 1).frame(maxWidth: .infinity)
+                Text("DEV ONLY")
+                    .font(.system(size: 9, weight: .black))
+                    .tracking(1.4)
+                    .foregroundColor(VPalette.textHint)
+                Rectangle().fill(VPalette.border).frame(height: 1).frame(maxWidth: .infinity)
+            }
+            .padding(.top, 4)
+
+            Button {
+                store.signInForDevelopment()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "hammer.fill")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("Skip login → home screen")
+                        .font(.system(size: 13, weight: .heavy))
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .foregroundColor(VPalette.accent)
+                .background(VPalette.accent.opacity(0.12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(VPalette.accent.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            Text("Server-backed actions (subscribe, charge, KYC) won't work without a real session.")
+                .font(.system(size: 10))
+                .foregroundColor(VPalette.textHint)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.top, 4)
+    }
+    #endif
 
     private func featureChip(icon: String, label: String) -> some View {
         VStack(spacing: 4) {

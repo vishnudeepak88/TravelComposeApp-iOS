@@ -135,6 +135,35 @@ final class AppStore: ObservableObject {
         clearSession()
     }
 
+#if DEBUG
+    /// Development shortcut — bypasses the OTP round-trip and drops the app
+    /// straight into the authenticated home screen. Only compiled into
+    /// debug builds; the release binary cannot reach this code.
+    ///
+    /// Useful for iterating on the polished design without spinning up the
+    /// backend. Anything that requires a server (subscribe, charge, payouts,
+    /// KYC upload) will fail with a 401, but read-only navigation through
+    /// the prototype screens works against in-memory state.
+    func signInForDevelopment() {
+        let id = "dev-\(Int.random(in: 1000...9999))"
+        riderId = id
+        driverId = id
+        phoneNumber = "+60 12-3456789"
+        currentUser = User(id: id, name: "Dev User", rating: 4.9)
+        kycStatus = .pending
+        // No real token — APIClient will send Authorization: Bearer "DEV"
+        // and the backend will reject it. That's fine: the dev session is
+        // purely for previewing screens, not for live API exercise.
+        SessionStorage.authToken = "DEV"
+        UserDefaults.standard.set(id, forKey: SessionKeys.userId)
+        UserDefaults.standard.set(currentUser.name, forKey: SessionKeys.displayName)
+        UserDefaults.standard.set(phoneNumber, forKey: SessionKeys.phone)
+        UserDefaults.standard.set(kycStatus.rawValue, forKey: SessionKeys.kycStatus)
+        isAuthenticated = true
+        devOtpCode = nil
+    }
+#endif
+
     /// Pulls the driver's current-week payout snapshot. Leaves `payout`
     /// untouched on error (DriverPayoutsView shows the cached value or its
     /// empty state).
