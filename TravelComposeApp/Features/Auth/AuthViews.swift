@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Auth Screens (mirrors AuthPhoneScreen.jsx + AuthOtpScreen.jsx in Voygo Prototype)
 
 struct AuthPhoneView: View {
-    @EnvironmentObject var store: AppStore
+    @Environment(AppStore.self) private var store
     var onSent: (String) -> Void
 
     @State private var phone = ""
@@ -135,7 +135,7 @@ struct AuthPhoneView: View {
 }
 
 struct AuthOtpView: View {
-    @EnvironmentObject var store: AppStore
+    @Environment(AppStore.self) private var store
     let phoneNumber: String
     var onBack: () -> Void
 

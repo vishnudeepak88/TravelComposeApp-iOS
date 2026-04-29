@@ -162,8 +162,9 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
         Task { @MainActor in
-            switch manager.authorizationStatus {
+            switch status {
             case .restricted, .denied:
                 guard let continuation = locationContinuation else { return }
                 locationContinuation = nil

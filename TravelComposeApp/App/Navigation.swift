@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Root Navigation
 
 struct RootView: View {
-    @EnvironmentObject var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var authStep: AuthStep = .phone
 
     enum AuthStep: Equatable { case phone, otp(phone: String) }
@@ -29,7 +29,7 @@ struct RootView: View {
 // MARK: - Main Tab Bar
 
 struct MainTabView: View {
-    @EnvironmentObject var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var selectedTab = 0
 
     var body: some View {

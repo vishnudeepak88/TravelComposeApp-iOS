@@ -227,13 +227,13 @@ struct VoygoAPIClient {
         return e
     }
 
-    private static let isoDateTimeFormatter: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let isoDateTimeFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
 
-    private static let isoDateTimeNoFractionFormatter: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let isoDateTimeNoFractionFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f

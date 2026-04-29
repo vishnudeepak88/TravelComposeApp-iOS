@@ -1,5 +1,5 @@
 import Foundation
-import Combine
+import Observation
 
 // MARK: - App Store (session + hybrid repository, mirrors Android AppGraph)
 
@@ -29,26 +29,27 @@ enum AppConnectionState: Equatable {
 }
 
 @MainActor
-final class AppStore: ObservableObject {
-    @Published private(set) var isAuthenticated = false
-    @Published private(set) var phoneNumber = ""
-    @Published var kycStatus: KycStatus = .notStarted
-    @Published var currentUser = User(id: "", name: "", rating: 5.0)
-    @Published private(set) var riderId = ""
-    @Published private(set) var driverId = ""
-    @Published private(set) var isSyncing = false
-    @Published private(set) var lastSyncError: String? = nil
-    @Published private(set) var connectionState: AppConnectionState = .idle
+@Observable
+final class AppStore {
+    private(set) var isAuthenticated = false
+    private(set) var phoneNumber = ""
+    var kycStatus: KycStatus = .notStarted
+    var currentUser = User(id: "", name: "", rating: 5.0)
+    private(set) var riderId = ""
+    private(set) var driverId = ""
+    private(set) var isSyncing = false
+    private(set) var lastSyncError: String? = nil
+    private(set) var connectionState: AppConnectionState = .idle
 
     /// When the backend echoes a dev-mode OTP (no SMS provider configured), the
     /// OTP screen reads it from here to pre-fill the field so testing is painless.
-    @Published var devOtpCode: String? = nil
+    var devOtpCode: String? = nil
 
-    @Published var routes: [RecurringRoute] = []
-    @Published var subscriptions: [RouteSubscription] = []
-    @Published var rideInstances: [CommuteRideInstance] = []
-    @Published var threads: [ChatThread] = []
-    @Published var messages: [ChatMessage] = []
+    var routes: [RecurringRoute] = []
+    var subscriptions: [RouteSubscription] = []
+    var rideInstances: [CommuteRideInstance] = []
+    var threads: [ChatThread] = []
+    var messages: [ChatMessage] = []
 
     var useOnline = true
 

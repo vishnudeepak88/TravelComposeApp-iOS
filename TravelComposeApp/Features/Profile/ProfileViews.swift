@@ -11,7 +11,7 @@ enum ProfileRoute: Hashable {
 }
 
 struct ProfileView: View {
-    @EnvironmentObject var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var path: [ProfileRoute] = []
     @State private var notificationsEnabled = true
     @State private var showVerification = false
@@ -319,13 +319,13 @@ private struct SettingsRow<T: View>: View {
 // MARK: - Identity Verification (mirrors VerificationScreen.kt)
 
 @MainActor
-final class VerificationViewModel: ObservableObject {
-    @Published var step = 1
-    @Published var make = ""
-    @Published var model = ""
-    @Published var licensePlate = ""
-    @Published var isSubmitting = false
-    @Published var error: String? = nil
+@Observable final class VerificationViewModel {
+    var step = 1
+    var make = ""
+    var model = ""
+    var licensePlate = ""
+    var isSubmitting = false
+    var error: String? = nil
     var store: AppStore?
 
     func nextStep() { if step < 3 { step += 1 } }
@@ -345,8 +345,8 @@ final class VerificationViewModel: ObservableObject {
 
 struct VerificationView: View {
     var onBack: () -> Void
-    @EnvironmentObject var store: AppStore
-    @StateObject private var vm = VerificationViewModel()
+    @Environment(AppStore.self) private var store
+    @State private var vm = VerificationViewModel()
 
     var body: some View {
         ZStack(alignment: .top) {

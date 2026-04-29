@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - My Subscriptions (mirrors MySubscriptionsScreen.kt)
 
 struct MySubscriptionsView: View {
-    @EnvironmentObject var store: AppStore
+    @Environment(AppStore.self) private var store
     var onOpenRoute: (String) -> Void
     var onOpenCalendar: () -> Void
     var onBack: (() -> Void)? = nil
@@ -188,7 +188,7 @@ private struct SubscriptionInfoCell: View {
 // MARK: - Upcoming Calendar (mirrors UpcomingCommuteCalendarScreen.kt)
 
 struct UpcomingCalendarView: View {
-    @EnvironmentObject var store: AppStore
+    @Environment(AppStore.self) private var store
     var routeId: String? = nil
     var onBack: () -> Void
 

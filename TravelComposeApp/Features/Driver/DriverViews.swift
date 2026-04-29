@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Driver Route Dashboard (mirrors DriverRouteDashboardScreen.kt)
 
 struct DriverDashboardView: View {
-    @EnvironmentObject var store: AppStore
+    @Environment(AppStore.self) private var store
     var onBack: () -> Void
     var onOpenCalendar: (String) -> Void
 
@@ -204,20 +204,20 @@ private struct InfoBanner: View {
 // MARK: - Create Recurring Route (mirrors CreateRecurringRouteScreen.kt)
 
 @MainActor
-final class CreateRouteViewModel: ObservableObject {
-    @Published var startLocation = ""
-    @Published var endLocation   = ""
-    @Published var departureTime = "08:00"
-    @Published var seatCount     = "3"
-    @Published var pricePerSeat  = "8"
-    @Published var carType: CarType = .sedan
-    @Published var monday = true; @Published var tuesday = true; @Published var wednesday = true
-    @Published var thursday = true; @Published var friday = true; @Published var saturday = false; @Published var sunday = false
-    @Published var pickupPoints: [String] = []
-    @Published var dropPoints: [String]   = []
-    @Published var createState: CreateState = .idle
-    @Published var newPickup = ""
-    @Published var newDrop   = ""
+@Observable final class CreateRouteViewModel {
+    var startLocation = ""
+    var endLocation   = ""
+    var departureTime = "08:00"
+    var seatCount     = "3"
+    var pricePerSeat  = "8"
+    var carType: CarType = .sedan
+    var monday = true; var tuesday = true; var wednesday = true
+    var thursday = true; var friday = true; var saturday = false; var sunday = false
+    var pickupPoints: [String] = []
+    var dropPoints: [String]   = []
+    var createState: CreateState = .idle
+    var newPickup = ""
+    var newDrop   = ""
 
     enum CreateState { case idle, loading, success(String), error(String) }
 
@@ -251,8 +251,8 @@ final class CreateRouteViewModel: ObservableObject {
 struct CreateRouteView: View {
     var onBack: () -> Void
     var onCreated: (String) -> Void
-    @EnvironmentObject var store: AppStore
-    @StateObject private var vm = CreateRouteViewModel()
+    @Environment(AppStore.self) private var store
+    @State private var vm = CreateRouteViewModel()
 
     var body: some View {
         ZStack(alignment: .top) {

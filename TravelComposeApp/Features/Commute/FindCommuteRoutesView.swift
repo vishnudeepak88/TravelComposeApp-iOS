@@ -5,19 +5,19 @@ import CoreLocation
 // MARK: - Find Commute Routes (mirrors FindCommuteRoutesScreen.kt)
 
 @MainActor
-final class FindCommuteRoutesViewModel: ObservableObject {
-    @Published var homeQuery = ""
-    @Published var officeQuery = ""
-    @Published var homeSuggestions: [PlaceSuggestion] = []
-    @Published var officeSuggestions: [PlaceSuggestion] = []
-    @Published var homeLoading = false
-    @Published var officeLoading = false
-    @Published var earliestTime = "07:00"
-    @Published var latestTime   = "09:30"
-    @Published var results: [CommuteRouteMatchResult] = []
-    @Published var isSearching = false
-    @Published var isLocatingHome = false
-    @Published var errorMessage: String? = nil
+@Observable final class FindCommuteRoutesViewModel {
+    var homeQuery = ""
+    var officeQuery = ""
+    var homeSuggestions: [PlaceSuggestion] = []
+    var officeSuggestions: [PlaceSuggestion] = []
+    var homeLoading = false
+    var officeLoading = false
+    var earliestTime = "07:00"
+    var latestTime   = "09:30"
+    var results: [CommuteRouteMatchResult] = []
+    var isSearching = false
+    var isLocatingHome = false
+    var errorMessage: String? = nil
 
     private var selectedHomeLat: Double? = nil
     private var selectedHomeLng: Double? = nil
@@ -155,8 +155,8 @@ final class FindCommuteRoutesViewModel: ObservableObject {
 }
 
 struct FindCommuteRoutesView: View {
-    @EnvironmentObject var store: AppStore
-    @StateObject private var vm = FindCommuteRoutesViewModel()
+    @Environment(AppStore.self) private var store
+    @State private var vm = FindCommuteRoutesViewModel()
     var onOpenRoute: (String) -> Void
     var onMySubscriptions: () -> Void
     var onCreateRoute: () -> Void

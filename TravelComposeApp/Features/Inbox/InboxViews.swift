@@ -3,7 +3,7 @@ import SwiftUI
 // MARK: - Inbox (mirrors InboxScreen.kt)
 
 struct InboxView: View {
-    @EnvironmentObject var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var selectedThreadId: String? = nil
 
     var body: some View {
@@ -89,7 +89,7 @@ struct ThreadRow: View {
 struct ChatThreadView: View {
     let threadId: String
     let title: String
-    @EnvironmentObject var store: AppStore
+    @Environment(AppStore.self) private var store
     @State private var newMessage = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
 

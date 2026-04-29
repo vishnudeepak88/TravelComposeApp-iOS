@@ -3,15 +3,15 @@ import SwiftUI
 // MARK: - Route Details (mirrors RouteDetailsScreen.kt)
 
 @MainActor
-final class RouteDetailsViewModel: ObservableObject {
-    @Published var route: RecurringRoute? = nil
-    @Published var subscriptions: [RouteSubscription] = []
-    @Published var upcomingRides: [CommuteRideInstance] = []
-    @Published var isLoading = false
-    @Published var subscribeState: SubscribeState = .idle
-    @Published var selectedPickupId: String? = nil
-    @Published var selectedDropId: String? = nil
-    @Published var numberOfDays = "30"
+@Observable final class RouteDetailsViewModel {
+    var route: RecurringRoute? = nil
+    var subscriptions: [RouteSubscription] = []
+    var upcomingRides: [CommuteRideInstance] = []
+    var isLoading = false
+    var subscribeState: SubscribeState = .idle
+    var selectedPickupId: String? = nil
+    var selectedDropId: String? = nil
+    var numberOfDays = "30"
 
     enum SubscribeState { case idle, loading, success(String), error(String) }
 
@@ -53,8 +53,8 @@ struct RouteDetailsView: View {
     let routeId: String
     var onBack: () -> Void
     var onSubscribed: ((String) -> Void)? = nil
-    @EnvironmentObject var store: AppStore
-    @StateObject private var vm = RouteDetailsViewModel()
+    @Environment(AppStore.self) private var store
+    @State private var vm = RouteDetailsViewModel()
 
     var body: some View {
         ZStack(alignment: .top) {
