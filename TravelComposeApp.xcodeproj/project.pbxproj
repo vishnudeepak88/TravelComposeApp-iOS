@@ -21,6 +21,13 @@
 		D1A2B3D4E5F607182939A006 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A106 /* NotificationsView.swift */; };
 		D1A2B3D4E5F607182939A007 /* RateRideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A107 /* RateRideView.swift */; };
 		D1A2B3D4E5F607182939A008 /* SearchFiltersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A108 /* SearchFiltersView.swift */; };
+		E1A2B3D4E5F607182939A001 /* PlaceAutocompleteField.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A101 /* PlaceAutocompleteField.swift */; };
+		E1A2B3D4E5F607182939A002 /* TimeUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A102 /* TimeUtils.swift */; };
+		E1A2B3D4E5F607182939A003 /* Payments.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A103 /* Payments.swift */; };
+		E1A2B3D4E5F607182939A004 /* Trust.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A104 /* Trust.swift */; };
+		E1A2B3D4E5F607182939A005 /* Telemetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A105 /* Telemetry.swift */; };
+		E1A2B3D4E5F607182939A006 /* DriverPayoutsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A106 /* DriverPayoutsView.swift */; };
+		E1A2B3D4E5F607182939A007 /* PaymentCheckout.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A2B3D4E5F607182939A107 /* PaymentCheckout.swift */; };
 		8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DA9910E6D4CA595C6D018 /* AppStore.swift */; };
 		7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */; };
 		87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */; };
@@ -49,6 +56,13 @@
 		D1A2B3D4E5F607182939A106 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		D1A2B3D4E5F607182939A107 /* RateRideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RateRideView.swift; sourceTree = "<group>"; };
 		D1A2B3D4E5F607182939A108 /* SearchFiltersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFiltersView.swift; sourceTree = "<group>"; };
+		E1A2B3D4E5F607182939A101 /* PlaceAutocompleteField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceAutocompleteField.swift; sourceTree = "<group>"; };
+		E1A2B3D4E5F607182939A102 /* TimeUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeUtils.swift; sourceTree = "<group>"; };
+		E1A2B3D4E5F607182939A103 /* Payments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Payments.swift; sourceTree = "<group>"; };
+		E1A2B3D4E5F607182939A104 /* Trust.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Trust.swift; sourceTree = "<group>"; };
+		E1A2B3D4E5F607182939A105 /* Telemetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Telemetry.swift; sourceTree = "<group>"; };
+		E1A2B3D4E5F607182939A106 /* DriverPayoutsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverPayoutsView.swift; sourceTree = "<group>"; };
+		E1A2B3D4E5F607182939A107 /* PaymentCheckout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentCheckout.swift; sourceTree = "<group>"; };
 		AC7DA9910E6D4CA595C6D018 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindCommuteRoutesView.swift; sourceTree = "<group>"; };
@@ -111,6 +125,8 @@
 				AC7DA9910E6D4CA595C6D018 /* AppStore.swift */,
 				17E574B7331F4475B16CC22C /* DesignSystem.swift */,
 				D1A2B3D4E5F607182939A101 /* Polished.swift */,
+				E1A2B3D4E5F607182939A101 /* PlaceAutocompleteField.swift */,
+				E1A2B3D4E5F607182939A102 /* TimeUtils.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -119,6 +135,8 @@
 			isa = PBXGroup;
 			children = (
 				8326BF042D76456AB9676156 /* Models.swift */,
+				E1A2B3D4E5F607182939A103 /* Payments.swift */,
+				E1A2B3D4E5F607182939A104 /* Trust.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -129,6 +147,7 @@
 				A809BB9D7E8F4080B8F68A57 /* APIClient.swift */,
 				0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */,
 				C1A2B3D4E5F607182939A4B4 /* KeychainStore.swift */,
+				E1A2B3D4E5F607182939A105 /* Telemetry.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -153,6 +172,8 @@
 				D1A2B3D4E5F607182939A102 /* WalletView.swift */,
 				D1A2B3D4E5F607182939A103 /* TripHistoryView.swift */,
 				D1A2B3D4E5F607182939A104 /* ReceiptView.swift */,
+				E1A2B3D4E5F607182939A106 /* DriverPayoutsView.swift */,
+				E1A2B3D4E5F607182939A107 /* PaymentCheckout.swift */,
 			);
 			path = Money;
 			sourceTree = "<group>";
@@ -302,6 +323,13 @@
 				D1A2B3D4E5F607182939A006 /* NotificationsView.swift in Sources */,
 				D1A2B3D4E5F607182939A007 /* RateRideView.swift in Sources */,
 				D1A2B3D4E5F607182939A008 /* SearchFiltersView.swift in Sources */,
+				E1A2B3D4E5F607182939A001 /* PlaceAutocompleteField.swift in Sources */,
+				E1A2B3D4E5F607182939A002 /* TimeUtils.swift in Sources */,
+				E1A2B3D4E5F607182939A003 /* Payments.swift in Sources */,
+				E1A2B3D4E5F607182939A004 /* Trust.swift in Sources */,
+				E1A2B3D4E5F607182939A005 /* Telemetry.swift in Sources */,
+				E1A2B3D4E5F607182939A006 /* DriverPayoutsView.swift in Sources */,
+				E1A2B3D4E5F607182939A007 /* PaymentCheckout.swift in Sources */,
 				8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */,
 				7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */,
 				87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */,

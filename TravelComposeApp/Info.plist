@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Wave 5 — registers the `voygo://` URL scheme so the iOS app receives the
+  deep-link callback when a rider returns from Billplz hosted checkout.
+
+  This file is OPTIONAL when GENERATE_INFOPLIST_FILE = YES; Xcode will merge
+  these keys into the generated Info.plist if you point INFOPLIST_FILE at it.
+
+  Quickest way to wire it (no project file editing needed):
+    1. Open TravelComposeApp.xcodeproj in Xcode
+    2. Select the TravelComposeApp target → Info tab → URL Types
+    3. Click + and add:
+         Identifier = com.voygo.deeplink
+         URL Schemes = voygo
+         Role = Editor
+    4. Build & run — the rider's voygo://payments/return URL now opens the app.
+-->
+<plist version="1.0">
+<dict>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.voygo.deeplink</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>voygo</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>

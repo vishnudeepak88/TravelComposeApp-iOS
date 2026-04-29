@@ -50,6 +50,11 @@ final class AppStore: ObservableObject {
     @Published var threads: [ChatThread] = []
     @Published var messages: [ChatMessage] = []
 
+    /// Driver weekly payout statement. Populated by `refreshPayout()` once the
+    /// `/payouts/me` endpoint is wired in server.js. Until then this stays nil
+    /// and DriverPayoutsView shows its empty state.
+    @Published var payout: PayoutStatement? = nil
+
     var useOnline = true
 
     private enum SessionKeys {
@@ -105,6 +110,14 @@ final class AppStore: ObservableObject {
 
     func logout() {
         clearSession()
+    }
+
+    /// Stub for the driver payout fetch. Once the backend `/payouts/me`
+    /// endpoint (see backend/src/payouts.js) is wired into server.js and
+    /// APIClient gains a `getMyPayout()` method, this becomes a real call.
+    func refreshPayout() async {
+        // Intentionally a no-op for now; DriverPayoutsView gracefully handles
+        // `payout == nil` by rendering its empty state.
     }
 
     func refreshMe() async {

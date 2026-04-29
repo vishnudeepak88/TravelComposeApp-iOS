@@ -99,6 +99,20 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
         return uniqueParts.isEmpty ? nil : uniqueParts.joined(separator: ", ")
     }
 
+    /// Compatibility shim used by PlaceLookupField — delegates to the API
+    /// autocomplete instead of MapKit local search. Mirrors the signature
+    /// the parallel onboarding work expects, but without bringing in the
+    /// full MapKit + KnownLocationFallback rewrite from that branch.
+    func searchPlaces(query: String, near coordinate: CLLocationCoordinate2D? = nil, limit: Int = 8) async throws -> [PlaceSuggestion] {
+        let cleaned = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.count >= 2 else { return [] }
+        return try await VoygoAPIClient.autocompletePlaces(
+            query: cleaned,
+            lat: coordinate?.latitude,
+            lon: coordinate?.longitude
+        )
+    }
+
     func resolveCoordinate(label: String) async throws -> ResolvedCoordinate {
         let query = label.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { throw CLError(.geocodeFoundNoResult) }
