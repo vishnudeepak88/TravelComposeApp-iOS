@@ -15,7 +15,10 @@ enum ProfileRoute: Hashable {
 struct ProfileView: View {
     @EnvironmentObject var store: AppStore
     @State private var path: [ProfileRoute] = []
-    @State private var notificationsEnabled = true
+    /// Notifications toggle is now persisted via @AppStorage so it survives
+    /// app restarts — previously a pure @State, it reset to true every
+    /// launch regardless of the user's preference.
+    @AppStorage("voygo.settings.notificationsEnabled") private var notificationsEnabled: Bool = true
     @State private var showVerification = false
     @State private var showPrivacy = false
     @State private var showHelp = false
@@ -35,7 +38,14 @@ struct ProfileView: View {
                             quickStats
                             walletStatsRow
                             settingsCard
-                            driverModeCard
+                            // Driver mode card only when the user has at
+                            // least one published route. Riders who've
+                            // never offered seats don't need this CTA
+                            // taking up space; it'll appear automatically
+                            // after their first Create Route flow.
+                            if !store.driverDashboards().isEmpty {
+                                driverModeCard
+                            }
                             logoutPill
                         }
                         .padding(.horizontal, 16)
@@ -136,7 +146,7 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Wallet & payment methods")
                         .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
-                    Text("RM 42.50 credit · DuitNow default")
+                    Text(walletSubtitle)
                         .font(.system(size: 11)).foregroundColor(VPalette.textSec)
                 }
                 Spacer()
@@ -296,6 +306,15 @@ struct ProfileView: View {
         case .rejected: return "Rejected"
         default:        return "Not Started"
         }
+    }
+
+    /// Subtitle on the wallet shortcut. Reflects real state instead of the
+    /// previously-hardcoded "RM 42.50 credit · DuitNow default".
+    private var walletSubtitle: String {
+        if store.voygoCreditMyr > 0 {
+            return "RM \(store.voygoCreditMyr).00 credit · view payments"
+        }
+        return store.payments.isEmpty ? "Add a payment method to start" : "View payments & receipts"
     }
 }
 

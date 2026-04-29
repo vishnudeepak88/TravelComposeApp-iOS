@@ -58,6 +58,17 @@ final class AppStore: ObservableObject {
     /// Recent payment history; populated by `refreshPayments()`.
     @Published var payments: [PaymentRecord] = []
 
+    /// Voygo Credit balance in MYR. Until a real `/wallet/credit` endpoint
+    /// lands this is computed from the sum of refund-status payments minus
+    /// nothing (all refunds add to credit). Drivers will get a separate
+    /// breakdown via payouts.
+    var voygoCreditMyr: Int {
+        payments
+            .filter { $0.status == .refunded }
+            .map(\.amountMyr)
+            .reduce(0, +)
+    }
+
     /// KYC document submissions for the signed-in user.
     @Published var kycDocuments: [KycDocument] = []
 
@@ -94,6 +105,10 @@ final class AppStore: ObservableObject {
         static let displayName = "voygo.session.displayName"
         static let userId = "voygo.session.userId"
         static let kycStatus = "voygo.session.kycStatus"
+        // Dev shortcut state persisted so a force-quit + relaunch lands the
+        // user back on the home screen instead of bouncing them out via a
+        // stray 401. Cleared by the explicit logout() flow.
+        static let isDevSession = "voygo.session.isDevSession"
     }
 
     init() {
@@ -143,6 +158,7 @@ final class AppStore: ObservableObject {
         // can leave the dev shortcut state cleanly.
         isDevSession = false
         useOnline = true
+        UserDefaults.standard.removeObject(forKey: SessionKeys.isDevSession)
         clearSession()
     }
 
@@ -159,6 +175,7 @@ final class AppStore: ObservableObject {
         let id = "dev-\(Int.random(in: 1000...9999))"
         isDevSession = true
         useOnline = false
+        UserDefaults.standard.set(true, forKey: SessionKeys.isDevSession)
         riderId = id
         driverId = id
         phoneNumber = "+60 12-3456789"
@@ -535,7 +552,7 @@ final class AppStore: ObservableObject {
 
     func mySubscriptions() -> [RouteSubscriptionWithRoute] {
         subscriptions
-            .filter { $0.riderId == riderId }
+            .filter { $0.riderId == riderId && $0.status != .cancelled }
             .compactMap { sub -> RouteSubscriptionWithRoute? in
                 guard let route = routes.first(where: { $0.id == sub.routeId }) else { return nil }
                 let next = rideInstances
@@ -887,6 +904,12 @@ final class AppStore: ObservableObject {
         if let raw = defaults.string(forKey: SessionKeys.kycStatus),
            let status = KycStatus(rawValue: raw) {
             kycStatus = status
+        }
+        // Restore dev-session flag. If true, also flip useOnline off so the
+        // first refresh attempt doesn't 401 and bounce the user out.
+        if defaults.bool(forKey: SessionKeys.isDevSession) {
+            isDevSession = true
+            useOnline = false
         }
         isAuthenticated = true
     }

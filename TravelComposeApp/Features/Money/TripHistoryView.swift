@@ -45,11 +45,25 @@ struct TripHistoryView: View {
 
                 ScrollView {
                     LazyVStack(spacing: 8) {
-                        ForEach(trips) { t in
+                        ForEach(filteredTrips) { t in
                             tripRow(t)
+                                .contentShape(Rectangle())
                                 .onTapGesture {
+                                    // Cancelled rows have no receipt — don't
+                                    // make them look interactive.
                                     if let r = t.receiptId { onOpenReceipt(r) }
                                 }
+                                .opacity(t.cancelled ? 0.85 : 1)
+                        }
+                        if filteredTrips.isEmpty {
+                            VStack(spacing: 8) {
+                                Image(systemName: "tray").font(.system(size: 32)).foregroundColor(VPalette.textHint)
+                                Text("No trips match this filter")
+                                    .font(.system(size: 13, weight: .heavy))
+                                    .foregroundColor(VPalette.textSec)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -58,6 +72,17 @@ struct TripHistoryView: View {
             }
         }
         .navigationBarHidden(true)
+    }
+
+    /// Filter chip → predicate. "Receipts" hides cancelled trips since they
+    /// have no receipt to open; the other filters do exactly what they say.
+    private var filteredTrips: [Trip] {
+        switch filter {
+        case "Completed": return trips.filter { !$0.cancelled }
+        case "Cancelled": return trips.filter {  $0.cancelled }
+        case "Receipts":  return trips.filter { $0.receiptId != nil }
+        default:          return trips
+        }
     }
 
     private var summary: some View {

@@ -5,6 +5,15 @@ import SwiftUI
 struct ReceiptView: View {
     let bookingId: String
     var onBack: () -> Void
+    @EnvironmentObject private var store: AppStore
+
+    /// Look up the payment record by id (the bookingId we're handed is the
+    /// payment id when navigating from Trip History or Wallet). Falls
+    /// through to nil if the user navigated here from a stale deep link
+    /// or before payments have synced; the view degrades gracefully.
+    private var payment: PaymentRecord? {
+        store.payments.first { $0.id == bookingId }
+    }
 
     var body: some View {
         ZStack {
@@ -41,7 +50,7 @@ struct ReceiptView: View {
                     .font(.system(size: 22, weight: .black))
                     .tracking(-0.4)
                     .foregroundColor(VPalette.primary)
-                Text("Booking #\(bookingId) · Completed")
+                Text("Booking #\(displayBookingId) · \(receiptStatusText)")
                     .font(.system(size: 11, weight: .bold)).tracking(0.4)
                     .foregroundColor(VPalette.primary)
             }
@@ -51,7 +60,7 @@ struct ReceiptView: View {
 
             DashedLine()
 
-            VMapPlaceholder(tone: .teal, label: "14 Jun · 52 min · 18.4 km", height: 140)
+            VMapPlaceholder(tone: .teal, label: mapLabel, height: 140)
 
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top, spacing: 12) {
@@ -90,8 +99,10 @@ struct ReceiptView: View {
                 VKicker(text: "Fare breakdown")
                     .padding(.bottom, 4)
 
-                lineItem("Base fare (subscription)", value: "RM 14.00")
-                lineItem("Voygo credit", value: "−RM 2.50", color: VPalette.success)
+                lineItem("Base fare (\(payment?.tier?.lowercased() ?? "subscription"))", value: baseFareString)
+                if creditApplied > 0 {
+                    lineItem("Voygo credit", value: "−RM \(creditApplied).00", color: VPalette.success)
+                }
                 lineItem("Tolls covered", value: "Included")
 
                 Rectangle().fill(VPalette.border).frame(height: 1).padding(.vertical, 10)
@@ -99,12 +110,12 @@ struct ReceiptView: View {
                 HStack {
                     Text("Total charged").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
                     Spacer()
-                    Text("RM 11.50")
+                    Text(totalChargedString)
                         .font(.system(size: 22, weight: .black, design: .monospaced))
                         .tracking(-0.5)
                         .foregroundColor(VPalette.primary)
                 }
-                Text("DuitNow · Maybank ··4221")
+                Text(paymentMethodString)
                     .font(.system(size: 11)).foregroundColor(VPalette.textSec)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
@@ -138,6 +149,61 @@ struct ReceiptView: View {
             Text(value).font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundColor(color)
         }
         .padding(.vertical, 4)
+    }
+
+    // MARK: - Data-driven copy
+    //
+    // The body of the receipt was previously hardcoded ("USJ 9 LRT", "Tesla
+    // Model 3 · VEC 4123", "RM 11.50", etc.) regardless of which booking
+    // the user tapped. These computed values bind to the looked-up payment
+    // record and degrade gracefully to placeholders when the record isn't
+    // in `store.payments` yet (e.g. opened from a stale notification).
+
+    private var displayBookingId: String {
+        guard !bookingId.isEmpty else { return "—" }
+        // Backend ids are UUIDs; show the first 8 chars so it stays readable.
+        return String(bookingId.prefix(8)).uppercased()
+    }
+
+    private var receiptStatusText: String {
+        guard let p = payment else { return "Receipt" }
+        switch p.status {
+        case .paid:     return "Completed"
+        case .pending:  return "Pending payment"
+        case .failed:   return "Failed"
+        case .refunded: return "Refunded"
+        }
+    }
+
+    private var mapLabel: String {
+        guard let p = payment else { return "Receipt" }
+        let f = DateFormatter(); f.dateFormat = "d MMM"
+        return "\(f.string(from: p.createdAt)) · Booking \(displayBookingId)"
+    }
+
+    private var baseFareString: String {
+        guard let p = payment else { return "—" }
+        return "RM \(p.amountMyr).00"
+    }
+
+    /// Cancellation refunds reduce the rider's bill via Voygo Credit. Until
+    /// the backend tracks per-payment credit application separately we show
+    /// a credit line only when the payment row is itself a refund (negative
+    /// signal).
+    private var creditApplied: Int {
+        guard let p = payment, p.status == .refunded else { return 0 }
+        return p.amountMyr
+    }
+
+    private var totalChargedString: String {
+        guard let p = payment else { return "—" }
+        return "RM \(p.amountMyr).00"
+    }
+
+    private var paymentMethodString: String {
+        // Backend doesn't yet thread the payment-method label through to the
+        // payment row. Show "Voygo Pay" as a generic until it does.
+        return payment == nil ? "Method on file" : "Voygo Pay · DuitNow / TNG / card"
     }
 
     private var actions: some View {

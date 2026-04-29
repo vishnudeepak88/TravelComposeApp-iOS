@@ -11,6 +11,13 @@ struct DriverDashboardView: View {
 
     @State private var actionResult: String? = nil
     @State private var actionError: String? = nil
+    /// Tracks an in-flight pause/resume so the button disables during the
+    /// async call and a double-tap can't fire two requests.
+    @State private var inFlightRouteId: String? = nil
+    /// Pending pause/resume awaiting user confirmation. Pausing an active
+    /// route cancels every scheduled pickup, which a colleague riding
+    /// tomorrow morning shouldn't have happen on a fat-finger tap.
+    @State private var pendingToggle: (routeId: String, currentlyActive: Bool)? = nil
 
     var dashboards: [DriverRouteDashboard] { store.driverDashboards() }
 
@@ -54,17 +61,21 @@ struct DriverDashboardView: View {
                             ForEach(dashboards) { dashboard in
                                 DriverRouteCard(
                                     dashboard: dashboard,
+                                    isToggling: inFlightRouteId == dashboard.route.id,
                                     onTogglePause: { routeId, isActive in
-                                        Task {
-                                            let result = await store.setRouteActive(routeId: routeId, active: !isActive)
-                                            if case .failure(let error) = result {
-                                                actionError = error.localizedDescription
-                                            } else {
-                                                actionResult = isActive ? "Route paused." : "Route resumed."
-                                            }
+                                        // Pausing a running route is destructive
+                                        // (cancels every scheduled pickup) — confirm first.
+                                        if isActive {
+                                            pendingToggle = (routeId, true)
+                                        } else {
+                                            performToggle(routeId: routeId, currentlyActive: false)
                                         }
                                     },
                                     onSetWeekdays: { routeId, time in
+                                        guard isValidHHmm(time) else {
+                                            actionError = "Departure time must be HH:mm (e.g. 07:42)."
+                                            return
+                                        }
                                         Task {
                                             let r = await store.updateRouteSchedule(routeId: routeId, departureTime: time, daysOfWeek: .weekdays)
                                             if case .failure(let e) = r { actionError = e.localizedDescription }
@@ -72,6 +83,10 @@ struct DriverDashboardView: View {
                                         }
                                     },
                                     onSetAllDays: { routeId, time in
+                                        guard isValidHHmm(time) else {
+                                            actionError = "Departure time must be HH:mm (e.g. 07:42)."
+                                            return
+                                        }
                                         Task {
                                             let r = await store.updateRouteSchedule(routeId: routeId, departureTime: time, daysOfWeek: .allDays)
                                             if case .failure(let e) = r { actionError = e.localizedDescription }
@@ -94,11 +109,52 @@ struct DriverDashboardView: View {
         .task {
             await store.refreshAll()
         }
+        .alert(
+            "Pause this route?",
+            isPresented: Binding(
+                get: { pendingToggle != nil },
+                set: { if !$0 { pendingToggle = nil } }
+            ),
+            presenting: pendingToggle
+        ) { p in
+            Button("Pause", role: .destructive) {
+                performToggle(routeId: p.routeId, currentlyActive: p.currentlyActive)
+                pendingToggle = nil
+            }
+            Button("Cancel", role: .cancel) { pendingToggle = nil }
+        } message: { _ in
+            Text("Pausing cancels every scheduled pickup on this route. Riders will be notified.")
+        }
+    }
+
+    private func performToggle(routeId: String, currentlyActive: Bool) {
+        guard inFlightRouteId == nil else { return }
+        inFlightRouteId = routeId
+        Task {
+            let result = await store.setRouteActive(routeId: routeId, active: !currentlyActive)
+            inFlightRouteId = nil
+            if case .failure(let error) = result {
+                actionError = error.localizedDescription
+            } else {
+                actionResult = currentlyActive ? "Route paused." : "Route resumed."
+            }
+        }
+    }
+
+    /// HH:mm validator shared by the schedule editor buttons. Anything else
+    /// would silently send garbage to the backend and quietly fail.
+    private func isValidHHmm(_ s: String) -> Bool {
+        let parts = s.split(separator: ":")
+        guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) else { return false }
+        return (0...23).contains(h) && (0...59).contains(m)
     }
 }
 
 struct DriverRouteCard: View {
     let dashboard: DriverRouteDashboard
+    /// True while the parent's pause/resume request is in flight — disables
+    /// the toggle so a double-tap can't fire a second request.
+    var isToggling: Bool = false
     var onTogglePause: (String, Bool) -> Void
     var onSetWeekdays: (String, String) -> Void
     var onSetAllDays:  (String, String) -> Void
@@ -163,8 +219,14 @@ struct DriverRouteCard: View {
                 HStack(spacing: 10) {
                     Button(action: { onTogglePause(route.id, route.activeStatus == .active) }) {
                         HStack(spacing: 6) {
-                            Image(systemName: route.activeStatus == .active ? "pause.circle.fill" : "play.circle.fill")
-                            Text(route.activeStatus == .active ? "Pause Route" : "Resume Route")
+                            if isToggling {
+                                ProgressView()
+                                    .controlSize(.small)
+                                    .tint(route.activeStatus == .active ? VoygoTheme.warning : VoygoTheme.success)
+                            } else {
+                                Image(systemName: route.activeStatus == .active ? "pause.circle.fill" : "play.circle.fill")
+                                Text(route.activeStatus == .active ? "Pause Route" : "Resume Route")
+                            }
                         }
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity).padding(.vertical, 12)
@@ -172,6 +234,7 @@ struct DriverRouteCard: View {
                         .foregroundColor(route.activeStatus == .active ? VoygoTheme.warning : VoygoTheme.success)
                         .cornerRadius(12)
                     }
+                    .disabled(isToggling)
                     Button(action: { onCalendar(route.id) }) {
                         HStack(spacing: 6) {
                             Image(systemName: "calendar")
@@ -461,9 +524,12 @@ struct CreateRouteView: View {
 
                         // Submit
                         VStack(spacing: 10) {
-                            PrimaryButton("Save Recurring Route",
-                                          isLoading: { if case .loading = vm.createState { return true }; return false }(),
-                                          action: vm.createRoute)
+                            PrimaryButton(
+                                "Save Recurring Route",
+                                isLoading: { if case .loading = vm.createState { return true }; return false }(),
+                                isEnabled: canSaveRoute,
+                                action: vm.createRoute
+                            )
                             if case .error(let msg) = vm.createState {
                                 HStack { Image(systemName: "exclamationmark.circle.fill").foregroundColor(VoygoTheme.danger)
                                     Text(msg).font(.caption).foregroundColor(VoygoTheme.danger) }
@@ -481,6 +547,22 @@ struct CreateRouteView: View {
         }
         .onChange(of: vm.startCoordinate) { _, _ in vm.refreshPickupSuggestions() }
         .onChange(of: vm.endCoordinate) { _, _ in vm.refreshDropSuggestions() }
+        // If the user clears the Start/Destination text fields manually
+        // (e.g. by retyping a different address), wipe the captured
+        // coordinate too — otherwise the suggestion rail keeps proposing
+        // hubs near a city the route no longer starts/ends in.
+        .onChange(of: vm.startLocation) { _, value in
+            if value.trimmingCharacters(in: .whitespaces).isEmpty && vm.startCoordinate != nil {
+                vm.startCoordinate = nil
+                vm.pickupSuggestions = []
+            }
+        }
+        .onChange(of: vm.endLocation) { _, value in
+            if value.trimmingCharacters(in: .whitespaces).isEmpty && vm.endCoordinate != nil {
+                vm.endCoordinate = nil
+                vm.dropSuggestions = []
+            }
+        }
         .sheet(item: $picker) { target in
             mapPicker(for: target)
         }
@@ -504,6 +586,21 @@ struct CreateRouteView: View {
             },
             onCancel: { picker = nil }
         )
+    }
+
+    /// Save button is only enabled once the route makes minimum sense:
+    /// both endpoints filled, departure time parses as HH:mm, seats and
+    /// price > 0. Anything weaker would let the AppStore validation fail
+    /// with a vague "required" toast instead of a localized button hint.
+    private var canSaveRoute: Bool {
+        let s = vm.startLocation.trimmingCharacters(in: .whitespaces)
+        let e = vm.endLocation.trimmingCharacters(in: .whitespaces)
+        guard !s.isEmpty, !e.isEmpty else { return false }
+        let parts = vm.departureTime.split(separator: ":")
+        guard parts.count == 2,
+              let h = Int(parts[0]), let m = Int(parts[1]),
+              (0...23).contains(h), (0...59).contains(m) else { return false }
+        return (Int(vm.seatCount) ?? 0) > 0 && (Int(vm.pricePerSeat) ?? 0) > 0
     }
 }
 

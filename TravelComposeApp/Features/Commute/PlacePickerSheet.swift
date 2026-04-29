@@ -17,13 +17,24 @@ import CoreLocation
 // MARK: - Persistent storage for recents + saved slots
 
 enum PlacesStorage {
-    private static let recentsKey = "voygo.places.recents"
-    private static let homeKey    = "voygo.places.home"
-    private static let workKey    = "voygo.places.work"
     private static let recentsLimit = 8
 
-    static func loadRecents() -> [PlaceSuggestion] {
-        guard let data = UserDefaults.standard.data(forKey: recentsKey),
+    /// Scope every key by `userId` so two riders sharing a device don't see
+    /// each other's recents or saved Home/Work. Empty userId falls back to
+    /// the legacy unscoped key so existing dev-shortcut data still loads.
+    private static func recentsKey(for userId: String) -> String {
+        userId.isEmpty ? "voygo.places.recents" : "voygo.places.recents.\(userId)"
+    }
+    private static func savedKey(_ slot: SavedSlot, for userId: String) -> String {
+        let suffix = userId.isEmpty ? "" : ".\(userId)"
+        switch slot {
+        case .home: return "voygo.places.home\(suffix)"
+        case .work: return "voygo.places.work\(suffix)"
+        }
+    }
+
+    static func loadRecents(for userId: String) -> [PlaceSuggestion] {
+        guard let data = UserDefaults.standard.data(forKey: recentsKey(for: userId)),
               let items = try? JSONDecoder().decode([PlaceSuggestion].self, from: data)
         else { return [] }
         return items
@@ -31,8 +42,8 @@ enum PlacesStorage {
 
     /// Records a pick. Dedupes by display name (case-insensitive) and caps
     /// the list at `recentsLimit`. Newest first.
-    static func recordRecent(_ place: PlaceSuggestion) {
-        var items = loadRecents()
+    static func recordRecent(_ place: PlaceSuggestion, for userId: String) {
+        var items = loadRecents(for: userId)
         items.removeAll {
             $0.displayName.caseInsensitiveCompare(place.displayName) == .orderedSame
         }
@@ -41,37 +52,32 @@ enum PlacesStorage {
             items = Array(items.prefix(recentsLimit))
         }
         if let data = try? JSONEncoder().encode(items) {
-            UserDefaults.standard.set(data, forKey: recentsKey)
+            UserDefaults.standard.set(data, forKey: recentsKey(for: userId))
         }
     }
 
-    static func clearRecents() {
-        UserDefaults.standard.removeObject(forKey: recentsKey)
+    static func clearRecents(for userId: String) {
+        UserDefaults.standard.removeObject(forKey: recentsKey(for: userId))
     }
 
-    static func loadSaved(_ slot: SavedSlot) -> PlaceSuggestion? {
-        guard let data = UserDefaults.standard.data(forKey: slot.key),
+    static func loadSaved(_ slot: SavedSlot, for userId: String) -> PlaceSuggestion? {
+        guard let data = UserDefaults.standard.data(forKey: savedKey(slot, for: userId)),
               let item = try? JSONDecoder().decode(PlaceSuggestion.self, from: data)
         else { return nil }
         return item
     }
 
-    static func setSaved(_ slot: SavedSlot, to place: PlaceSuggestion?) {
+    static func setSaved(_ slot: SavedSlot, to place: PlaceSuggestion?, for userId: String) {
+        let key = savedKey(slot, for: userId)
         if let place, let data = try? JSONEncoder().encode(place) {
-            UserDefaults.standard.set(data, forKey: slot.key)
+            UserDefaults.standard.set(data, forKey: key)
         } else {
-            UserDefaults.standard.removeObject(forKey: slot.key)
+            UserDefaults.standard.removeObject(forKey: key)
         }
     }
 
     enum SavedSlot {
         case home, work
-        fileprivate var key: String {
-            switch self {
-            case .home: return PlacesStorage.homeKey
-            case .work: return PlacesStorage.workKey
-            }
-        }
         var label: String {
             switch self {
             case .home: return "Home"
@@ -127,6 +133,9 @@ struct PlacePickerView: View {
     var onCancel: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var store: AppStore
+
+    private var userId: String { store.riderId }
 
     @State private var query = ""
     @State private var suggestions: [PlaceSuggestion] = []
@@ -179,9 +188,9 @@ struct PlacePickerView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
-            recents = PlacesStorage.loadRecents()
-            savedHome = PlacesStorage.loadSaved(.home)
-            savedWork = PlacesStorage.loadSaved(.work)
+            recents = PlacesStorage.loadRecents(for: userId)
+            savedHome = PlacesStorage.loadSaved(.home, for: userId)
+            savedWork = PlacesStorage.loadSaved(.work, for: userId)
             // Auto-focus the search bar — fastest path for known destinations.
             searchFocused = true
         }
@@ -357,7 +366,7 @@ struct PlacePickerView: View {
             .buttonStyle(.plain)
             .contextMenu {
                 Button(role: .destructive) {
-                    PlacesStorage.setSaved(slot, to: nil)
+                    PlacesStorage.setSaved(slot, to: nil, for: userId)
                     if slot == .home { savedHome = nil } else { savedWork = nil }
                 } label: {
                     Label("Clear \(slot.label)", systemImage: "trash")
@@ -430,7 +439,7 @@ struct PlacePickerView: View {
                         VKicker(text: "Recent")
                         Spacer()
                         Button {
-                            PlacesStorage.clearRecents()
+                            PlacesStorage.clearRecents(for: userId)
                             recents = []
                         } label: {
                             Text("Clear")
@@ -449,13 +458,13 @@ struct PlacePickerView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button {
-                                    PlacesStorage.setSaved(.home, to: place)
+                                    PlacesStorage.setSaved(.home, to: place, for: userId)
                                     savedHome = place
                                 } label: {
                                     Label("Save as Home", systemImage: "house.fill")
                                 }
                                 Button {
-                                    PlacesStorage.setSaved(.work, to: place)
+                                    PlacesStorage.setSaved(.work, to: place, for: userId)
                                     savedWork = place
                                 } label: {
                                     Label("Save as Work", systemImage: "briefcase.fill")
@@ -584,19 +593,19 @@ struct PlacePickerView: View {
     /// Single accept path — handles both .pick and .setSaved modes plus
     /// auto-recording the choice into recents.
     private func accept(_ place: PlaceSuggestion) {
-        PlacesStorage.recordRecent(place)
+        PlacesStorage.recordRecent(place, for: userId)
         switch mode {
         case .pick:
             onPick(place)
         case .setSaved(let slot):
-            PlacesStorage.setSaved(slot, to: place)
+            PlacesStorage.setSaved(slot, to: place, for: userId)
             dismiss()  // pop back to the parent picker
         }
     }
 
     private func reloadSaved() {
-        savedHome = PlacesStorage.loadSaved(.home)
-        savedWork = PlacesStorage.loadSaved(.work)
+        savedHome = PlacesStorage.loadSaved(.home, for: userId)
+        savedWork = PlacesStorage.loadSaved(.work, for: userId)
     }
 
     private func coordinatesString(for place: PlaceSuggestion) -> String {

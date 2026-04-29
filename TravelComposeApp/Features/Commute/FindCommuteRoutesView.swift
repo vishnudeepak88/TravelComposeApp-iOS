@@ -253,7 +253,7 @@ struct FindCommuteRoutesView: View {
                             .font(.system(size: 32, weight: .black))
                             .tracking(-0.8)
                             .foregroundColor(.white)
-                        Text("Good morning, \(greetingName)")
+                        Text("\(timeAwareGreeting()), \(greetingName)")
                             .font(.system(size: 11, weight: .heavy))
                             .tracking(0.3)
                             .foregroundColor(.white.opacity(0.85))
@@ -287,6 +287,19 @@ struct FindCommuteRoutesView: View {
                 }
             }
             .padding(20)
+        }
+    }
+
+    /// Time-of-day greeting in MYT (the device's current time zone). A
+    /// rider opening the app at 9pm previously got "Good morning" which
+    /// felt wrong.
+    private func timeAwareGreeting() -> String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12:  return "Good morning"
+        case 12..<17: return "Good afternoon"
+        case 17..<22: return "Good evening"
+        default:      return "Hi"
         }
     }
 

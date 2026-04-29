@@ -5,17 +5,51 @@ import SafariServices
 //
 // Billplz uses a redirect-based payment flow (FPX is server-mediated), so we
 // open the URL in an SFSafariViewController. Once the rider completes payment
-// the page redirects to `BILLPLZ_REDIRECT_URL` (a `voygo://` deep link in
-// production); for now we just dismiss when the user closes the sheet.
+// the page redirects to `BILLPLZ_REDIRECT_URL` (a `voygo://payments/return?
+// paid=…` deep link). The deep link bumps `AppStore.checkoutDismissalSignal`,
+// and this view watches that signal to distinguish "rider returned via
+// successful redirect" from "rider hit Done in Safari without paying".
 
 struct BillplzCheckoutSheet: View {
     let url: URL
-    var onDismiss: () -> Void
+    /// Called when the rider completed payment and was redirected back via
+    /// the `voygo://` deep link. Caller should advance the flow (e.g. push
+    /// BookingConfirmed).
+    var onPaid: () -> Void = {}
+    /// Called when the rider closed the sheet without completing payment.
+    /// Caller should NOT advance the flow — surface a "Retry payment" CTA
+    /// or land them back on the previous screen.
+    var onAbandoned: () -> Void = {}
+
+    @EnvironmentObject private var store: AppStore
+    @State private var initialDismissalSignal: Int = 0
+    @State private var resolved = false
 
     var body: some View {
         SafariView(url: url)
             .ignoresSafeArea()
-            .onDisappear { onDismiss() }
+            .onAppear {
+                // Snapshot the dismissal signal at present time. If it
+                // increments while we're on this view, the deep link fired
+                // and we know the user paid.
+                initialDismissalSignal = store.checkoutDismissalSignal
+                resolved = false
+            }
+            .onChange(of: store.checkoutDismissalSignal) { _, newValue in
+                if newValue > initialDismissalSignal && !resolved {
+                    resolved = true
+                    onPaid()
+                }
+            }
+            .onDisappear {
+                // SFSafariViewController dismissed. If the deep link
+                // already resolved this checkout as paid, do nothing —
+                // onPaid already fired. Otherwise treat as abandoned.
+                if !resolved {
+                    resolved = true
+                    onAbandoned()
+                }
+            }
     }
 }
 

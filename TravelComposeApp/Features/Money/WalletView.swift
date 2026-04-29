@@ -72,6 +72,12 @@ struct WalletView: View {
         return f.string(from: date)
     }
 
+    /// Always renders with two decimal places so "RM 42" doesn't look
+    /// uneven next to "RM 42.50" in the same column.
+    private var formattedCredit: String {
+        String(format: "%.2f", Double(store.voygoCreditMyr))
+    }
+
     var body: some View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
@@ -120,9 +126,17 @@ struct WalletView: View {
                         VKicker(text: "Voygo Credit", color: .white.opacity(0.8))
                         HStack(alignment: .lastTextBaseline, spacing: 6) {
                             Text("RM").font(.system(size: 18, weight: .bold)).foregroundColor(.white.opacity(0.85))
-                            Text("42.50").font(.system(size: 40, weight: .black)).tracking(-1.4).foregroundColor(.white)
+                            // Bind to the live credit derived from payment
+                            // history. Empty state shows "0.00" rather than
+                            // a misleading hardcoded "RM 42.50".
+                            Text(formattedCredit)
+                                .font(.system(size: 40, weight: .black))
+                                .tracking(-1.4)
+                                .foregroundColor(.white)
                         }
-                        Text("Auto-applied to next ride")
+                        Text(store.voygoCreditMyr > 0
+                             ? "Auto-applied to next ride"
+                             : "Earn credit from referrals & cancellations")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(.white.opacity(0.85))
                     }

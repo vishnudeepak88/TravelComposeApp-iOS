@@ -285,6 +285,14 @@ struct AuthOtpView: View {
         .onAppear {
             if let dev = store.devOtpCode, otp.isEmpty { otp = dev }
         }
+        // When the user taps Resend, AppStore.requestOtp updates devOtpCode
+        // with the new code. Watch the published value so the field
+        // auto-fills with the *new* OTP, not the stale one from first load.
+        .onChange(of: store.devOtpCode) { _, newValue in
+            guard let newCode = newValue, otp != newCode else { return }
+            otp = newCode
+            error = nil
+        }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
             if timeLeft > 0 { timeLeft -= 1 }
         }

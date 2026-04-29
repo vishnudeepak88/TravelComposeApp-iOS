@@ -85,10 +85,14 @@ final class RouteDetailsViewModel: ObservableObject {
                         onSubscribed?(subscriptionId)
                     }
                 case .failure(let err):
-                    // Subscription was created but the charge failed; surface
-                    // the error so the user can retry instead of silently
-                    // believing they're subscribed unpaid.
-                    subscribeState = .error(err.localizedDescription)
+                    // Subscription was created but the charge failed. Auto-
+                    // pause it so the rider doesn't believe they're booked
+                    // for tomorrow's commute when no money has moved. The
+                    // pause is silent (we already have the user's
+                    // attention via the error banner). They can reactivate
+                    // and retry payment from My Subscriptions.
+                    Task { _ = await store.updateSubscription(id: subscriptionId, status: .paused) }
+                    subscribeState = .error("Subscription paused — payment failed: \(err.localizedDescription). Retry from My Subscriptions.")
                     load(routeId: route.id)
                 }
             case .failure(let err):
@@ -97,14 +101,27 @@ final class RouteDetailsViewModel: ObservableObject {
         }
     }
 
-    /// Called when the Billplz checkout sheet is dismissed — the user has
-    /// (presumably) completed payment in Safari. We don't yet observe the
-    /// webhook directly; firing `onSubscribed` here lets the celebration
-    /// screen show, and the next sync will reconcile the real status.
-    func paymentCheckoutDismissed() {
-        guard let id = pendingPaymentSubscriptionId else { return }
+    /// Called when the Billplz checkout sheet closes. `paid: true` means the
+    /// `voygo://payments/return?paid=true` deep link fired before
+    /// SFSafariViewController dismissed (user actually completed payment).
+    /// `paid: false` means they hit Done without paying — pause the
+    /// subscription and surface a retry hint instead of celebrating.
+    func paymentCheckoutDismissed(paid: Bool) {
+        guard let id = pendingPaymentSubscriptionId else {
+            pendingPaymentURL = nil
+            return
+        }
         pendingPaymentURL = nil
-        onSubscribed?(id)
+
+        if paid {
+            onSubscribed?(id)
+            return
+        }
+
+        // Abandoned — pause the subscription and tell the user how to retry.
+        Task { _ = await store?.updateSubscription(id: id, status: .paused) }
+        subscribeState = .error("Payment not completed. Subscription paused — retry from My Subscriptions.")
+        if let routeId = route?.id { load(routeId: routeId) }
     }
 
     /// Convenience accessor — if the success state holds an id, return it.
@@ -347,9 +364,21 @@ struct RouteDetailsView: View {
         }
         .sheet(item: Binding(
             get: { vm.pendingPaymentURL.map { URLBox(url: $0) } },
-            set: { _ in vm.paymentCheckoutDismissed() }
+            set: { _ in /* dismissal handled by the sheet's onPaid/onAbandoned */ }
         )) { box in
-            BillplzCheckoutSheet(url: box.url, onDismiss: vm.paymentCheckoutDismissed)
+            BillplzCheckoutSheet(
+                url: box.url,
+                onPaid: {
+                    // Real success — close the sheet, advance to BookingConfirmed.
+                    vm.paymentCheckoutDismissed(paid: true)
+                },
+                onAbandoned: {
+                    // User hit Done in Safari without paying — keep the
+                    // subscription paused via the same path that handles
+                    // a charge failure, surface the retry hint.
+                    vm.paymentCheckoutDismissed(paid: false)
+                }
+            )
         }
     }
 
