@@ -403,20 +403,9 @@ struct CreateRouteView: View {
 
     @ViewBuilder
     private func mapPicker(for target: PickerTarget) -> some View {
-        let initial: CLLocationCoordinate2D? = {
-            switch target {
-            case .start:
-                guard let c = vm.startCoordinate else { return nil }
-                return CLLocationCoordinate2D(latitude: c.lat, longitude: c.lon)
-            case .end:
-                guard let c = vm.endCoordinate else { return nil }
-                return CLLocationCoordinate2D(latitude: c.lat, longitude: c.lon)
-            }
-        }()
-        let title = target == .start ? "Pick start location" : "Pick destination"
-        MapLocationPickerView(
+        let title = target == .start ? "Where from?" : "Where to?"
+        PlacePickerSheet(
             title: title,
-            initialCoordinate: initial,
             onPick: { suggestion in
                 switch target {
                 case .start:

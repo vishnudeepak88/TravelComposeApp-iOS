@@ -213,7 +213,7 @@ struct User: Equatable {
     var initial: String { String(name.prefix(1)).uppercased() }
 }
 
-struct PlaceSuggestion: Decodable, Identifiable, Equatable {
+struct PlaceSuggestion: Codable, Identifiable, Equatable {
     var id: String { displayName + String(lat) }
     var displayName: String
     var lat: Double
