@@ -80,6 +80,13 @@ final class AppStore: ObservableObject {
 
     var useOnline = true
 
+    /// True when the user entered via the DEBUG-only dev shortcut. Two
+    /// effects: refresh methods skip server calls (`useOnline` is false),
+    /// and `clearSession()` is a no-op so a stray 401 from any
+    /// not-yet-gated method can't bounce the dev user back to the login
+    /// screen. Cleared by the explicit `logout()` flow.
+    private var isDevSession = false
+
     private enum SessionKeys {
         // Non-sensitive identifiers stay in UserDefaults so the UI can render
         // immediately on launch. The auth token itself lives in the Keychain.
@@ -132,6 +139,10 @@ final class AppStore: ObservableObject {
     }
 
     func logout() {
+        // Explicit user action — bypass the dev-session guard so the user
+        // can leave the dev shortcut state cleanly.
+        isDevSession = false
+        useOnline = true
         clearSession()
     }
 
@@ -140,27 +151,66 @@ final class AppStore: ObservableObject {
     /// straight into the authenticated home screen. Only compiled into
     /// debug builds; the release binary cannot reach this code.
     ///
-    /// Useful for iterating on the polished design without spinning up the
-    /// backend. Anything that requires a server (subscribe, charge, payouts,
-    /// KYC upload) will fail with a 401, but read-only navigation through
-    /// the prototype screens works against in-memory state.
+    /// The session is offline-only by design: `useOnline` is set to false so
+    /// no refresh hits the backend, and `isDevSession` makes `clearSession()`
+    /// a no-op so any stray 401 from a method that doesn't yet check
+    /// `useOnline` can't bounce the user back to the login screen.
     func signInForDevelopment() {
         let id = "dev-\(Int.random(in: 1000...9999))"
+        isDevSession = true
+        useOnline = false
         riderId = id
         driverId = id
         phoneNumber = "+60 12-3456789"
         currentUser = User(id: id, name: "Dev User", rating: 4.9)
         kycStatus = .pending
-        // No real token — APIClient will send Authorization: Bearer "DEV"
-        // and the backend will reject it. That's fine: the dev session is
-        // purely for previewing screens, not for live API exercise.
         SessionStorage.authToken = "DEV"
         UserDefaults.standard.set(id, forKey: SessionKeys.userId)
         UserDefaults.standard.set(currentUser.name, forKey: SessionKeys.displayName)
         UserDefaults.standard.set(phoneNumber, forKey: SessionKeys.phone)
         UserDefaults.standard.set(kycStatus.rawValue, forKey: SessionKeys.kycStatus)
         isAuthenticated = true
+        connectionState = .idle
         devOtpCode = nil
+        // Seed enough in-memory data so the polished screens have something
+        // to show. Keeps demo nav useful even though no backend is reachable.
+        seedDevSampleData()
+    }
+
+    private func seedDevSampleData() {
+        let pickup = RoutePoint(id: "pk-dev-1", label: "USJ 9 LRT", clusterId: "cluster-usj", lat: 3.0444, lng: 101.5860)
+        let drop   = RoutePoint(id: "dp-dev-1", label: "KLCC Tower B", clusterId: "cluster-klcc", lat: 3.1571, lng: 101.7123)
+        let route = RecurringRoute(
+            id: "rr-dev-1",
+            driverId: driverId,
+            driverName: currentUser.name,
+            startLocation: "Subang Jaya",
+            endLocation: "KLCC, Kuala Lumpur",
+            pickupPoints: [pickup],
+            dropPoints: [drop],
+            departureTime: "07:42",
+            daysOfWeek: .weekdays,
+            seatCount: 3,
+            pricePerSeat: 14,
+            carType: .ev,
+            activeStatus: .active,
+            reliability: DriverReliability(onTimeRate: 0.97, cancellationRate: 0.02, repeatRiders: 28, averageRating: 4.9)
+        )
+        routes = [route]
+        let today = Calendar.current.startOfDay(for: Date())
+        let end = Calendar.current.date(byAdding: .day, value: 30, to: today) ?? today
+        subscriptions = [
+            RouteSubscription(
+                id: "sub-dev-1", routeId: route.id, riderId: riderId, riderName: currentUser.name,
+                startDate: today, endDate: end,
+                selectedPickupPoint: pickup, selectedDropPoint: drop, status: .active
+            )
+        ]
+        threads = [
+            ChatThread(id: "thr-dev-1", tripId: route.id, title: "\(currentUser.name) · Subang → KLCC",
+                       lastMessage: "See you at USJ 9 in 4 min", unreadCount: 0)
+        ]
+        regenerateRides()
     }
 #endif
 
@@ -790,6 +840,12 @@ final class AppStore: ObservableObject {
     }
 
     private func clearSession() {
+        // Stray 401s from the dev shortcut must not bounce the user back to
+        // the login screen. The explicit `logout()` flow flips
+        // `isDevSession` to false before calling clearSession, so this
+        // guard only protects the auto-clear-on-401 paths.
+        if isDevSession { return }
+
         SessionStorage.authToken = nil
         UserDefaults.standard.removeObject(forKey: SessionKeys.userId)
         UserDefaults.standard.removeObject(forKey: SessionKeys.displayName)
