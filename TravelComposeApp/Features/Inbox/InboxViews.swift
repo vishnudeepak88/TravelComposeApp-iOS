@@ -167,9 +167,22 @@ struct ChatBubble: View {
             VStack(alignment: isMe ? .trailing : .leading, spacing: 2) {
                 Text(message.text)
                     .font(.subheadline)
-                    .foregroundColor(isMe ? .white : VoygoTheme.textPrimary)
+                    .foregroundColor(isMe ? .white : VPalette.text)
                     .padding(.horizontal, 14).padding(.vertical, 9)
-                    .background(Group { if isMe { VoygoTheme.primaryGradient } else { LinearGradient(colors: [VoygoTheme.surfaceHigh], startPoint: .leading, endPoint: .trailing) } })
+                    .background(
+                        // Outgoing: gradient that matches the rest of the
+                        // polished hero cards. Incoming: a flat surface tone
+                        // (the previous LinearGradient with a single color
+                        // stop rendered indistinguishably from a plain fill,
+                        // so swap to a real Color and drop the fake gradient).
+                        Group {
+                            if isMe {
+                                VPalette.primaryGradient
+                            } else {
+                                VPalette.surfaceHigh
+                            }
+                        }
+                    )
                     .cornerRadius(18, corners: isMe ? [.topLeft, .topRight, .bottomLeft] : [.topLeft, .topRight, .bottomRight])
                 Text(formatTime(message.timestamp)).font(.caption2).foregroundColor(VoygoTheme.textHint)
             }
