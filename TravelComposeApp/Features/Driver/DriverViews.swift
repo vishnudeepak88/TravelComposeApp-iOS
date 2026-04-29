@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 // MARK: - Driver Route Dashboard (mirrors DriverRouteDashboardScreen.kt)
 
@@ -234,6 +235,12 @@ final class CreateRouteViewModel: ObservableObject {
     @Published var newPickup = ""
     @Published var newDrop   = ""
 
+    /// Coordinates captured when the user picks a Start/Destination from the
+    /// map picker. Cleared on text edit so we don't ship stale lat/lng for
+    /// a different label.
+    @Published var startCoordinate: PlaceSuggestion? = nil
+    @Published var endCoordinate: PlaceSuggestion? = nil
+
     enum CreateState { case idle, loading, success(String), error(String) }
 
     var store: AppStore?
@@ -269,6 +276,17 @@ struct CreateRouteView: View {
     @EnvironmentObject var store: AppStore
     @StateObject private var vm = CreateRouteViewModel()
 
+    /// Which field, if any, is currently picking on the map. Driving the
+    /// sheet from an enum + Identifiable wrapper keeps a single sheet
+    /// presenter (vs two `.sheet(isPresented:)` modifiers that can race
+    /// when the user taps one row right after dismissing the other).
+    @State private var picker: PickerTarget? = nil
+
+    private enum PickerTarget: Identifiable, Hashable {
+        case start, end
+        var id: Self { self }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
@@ -282,8 +300,22 @@ struct CreateRouteView: View {
                         VoygoCard {
                             VStack(spacing: 14) {
                                 SectionHeader(title: "Route Info")
-                                VoygoTextField(label: "Start Location", text: $vm.startLocation, placeholder: "e.g. Damansara")
-                                VoygoTextField(label: "Destination",    text: $vm.endLocation,   placeholder: "e.g. KLCC")
+                                LocationPickerRow(
+                                    label: "Start Location",
+                                    placeholder: "Pick on map · e.g. Damansara",
+                                    icon: "mappin.circle.fill",
+                                    iconColor: VoygoTheme.success,
+                                    value: vm.startLocation,
+                                    onTap: { picker = .start }
+                                )
+                                LocationPickerRow(
+                                    label: "Destination",
+                                    placeholder: "Pick on map · e.g. KLCC",
+                                    icon: "flag.checkered.circle.fill",
+                                    iconColor: VoygoTheme.primary,
+                                    value: vm.endLocation,
+                                    onTap: { picker = .end }
+                                )
                                 VoygoTextField(label: "Departure Time (HH:mm)", text: $vm.departureTime,
                                                placeholder: "08:00", keyboardType: .numbersAndPunctuation)
                                 HStack(spacing: 12) {
@@ -363,6 +395,94 @@ struct CreateRouteView: View {
         .onAppear { vm.store = store }
         .onChange(of: { if case .success(let id) = vm.createState { return id }; return "" }()) { _, id in
             if !id.isEmpty { onCreated(id) }
+        }
+        .sheet(item: $picker) { target in
+            mapPicker(for: target)
+        }
+    }
+
+    @ViewBuilder
+    private func mapPicker(for target: PickerTarget) -> some View {
+        let initial: CLLocationCoordinate2D? = {
+            switch target {
+            case .start:
+                guard let c = vm.startCoordinate else { return nil }
+                return CLLocationCoordinate2D(latitude: c.lat, longitude: c.lon)
+            case .end:
+                guard let c = vm.endCoordinate else { return nil }
+                return CLLocationCoordinate2D(latitude: c.lat, longitude: c.lon)
+            }
+        }()
+        let title = target == .start ? "Pick start location" : "Pick destination"
+        MapLocationPickerView(
+            title: title,
+            initialCoordinate: initial,
+            onPick: { suggestion in
+                switch target {
+                case .start:
+                    vm.startLocation = suggestion.displayName
+                    vm.startCoordinate = suggestion
+                case .end:
+                    vm.endLocation = suggestion.displayName
+                    vm.endCoordinate = suggestion
+                }
+                picker = nil
+            },
+            onCancel: { picker = nil }
+        )
+    }
+}
+
+/// Tappable row that looks like a VoygoTextField but, instead of accepting
+/// keyboard input, opens the map picker. Shows the picked label or a hint
+/// placeholder, and a pin icon so the user knows it's a location field.
+private struct LocationPickerRow: View {
+    let label: String
+    let placeholder: String
+    let icon: String
+    let iconColor: Color
+    let value: String
+    let onTap: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(VoygoTheme.textSecondary)
+            Button(action: onTap) {
+                HStack(spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(iconColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if value.isEmpty {
+                            Text(placeholder)
+                                .font(.subheadline)
+                                .foregroundColor(VoygoTheme.textHint)
+                                .lineLimit(1)
+                        } else {
+                            Text(value)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundColor(VoygoTheme.textPrimary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(VoygoTheme.textHint)
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 56)
+                .background(VoygoTheme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(value.isEmpty ? VoygoTheme.outline.opacity(0.7) : VoygoTheme.primary.opacity(0.6), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
         }
     }
 }
