@@ -6,45 +6,63 @@ import SwiftUI
 // new screens compose against this richer set.
 
 enum VPalette {
-    static let primary           = Color(hex: 0x0E6B62)
-    static let primaryDark       = Color(hex: 0x073B36)
-    static let primaryContainer  = Color(hex: 0xD7F2EA)
+    // Vibrant super-app palette — ported from the design handoff
+    // (`car-pool/project/tokens.jsx`). Replaces the previous trust-forward
+    // teal direction with energetic green primary + forest ink. See
+    // `docs/REDESIGN.md` for the full mapping rationale.
+    static let primary           = Color(hex: 0x00B14F)
+    static let primaryDark       = Color(hex: 0x008F3F)
+    static let primaryContainer  = Color(hex: 0xE5F7ED)
     static let onPrimary         = Color.white
-    static let secondary         = Color(hex: 0x2B5C7A)
-    static let secondaryContainer = Color(hex: 0xE2ECF1)
-    static let accent            = Color(hex: 0x6E5AA8)
-    static let accentContainer   = Color(hex: 0xE8E2F2)
-    static let success           = Color(hex: 0x2F855A)
-    static let successContainer  = Color(hex: 0xE6F4ED)
-    static let warning           = Color(hex: 0xB7791F)
-    static let warningContainer  = Color(hex: 0xFBEFD4)
-    static let danger            = Color(hex: 0xC53030)
+    static let secondary         = Color(hex: 0x1F8A5C)
+    static let secondaryContainer = Color(hex: 0xDBF1E5)
+    static let accent            = Color(hex: 0x7B5CD6)
+    static let accentContainer   = Color(hex: 0xEFE9FA)
+    static let success           = Color(hex: 0x3A8F6F)
+    static let successContainer  = Color(hex: 0xE0F0E8)
+    static let warning           = Color(hex: 0xC77A3A)
+    static let warningContainer  = Color(hex: 0xFFF4D1)
+    static let danger            = Color(hex: 0xB84B4B)
     static let dangerContainer   = Color(hex: 0xFBE3E0)
-    static let bg                = Color(hex: 0xF8FAFB)
+    static let bg                = Color(hex: 0xF2F5F4)
     static let surface           = Color.white
-    static let surfaceHigh       = Color(hex: 0xEEF4F5)
-    static let border            = Color(hex: 0xD7E1E4)
-    static let outline           = Color(hex: 0x9DB1B7)
-    static let text              = Color(hex: 0x122B32)
-    static let textSec           = Color(hex: 0x4B6269)
-    // QA flagged the previous #72878E at ~3.6:1 against #F8FAFB — fails
-    // WCAG 2.1 AA for body text. Darkened to #5A6E74 (~5.0:1) so kicker
-    // labels and hints are readable in bright sunlight (the daily
-    // commute use case).
+    static let surfaceHigh       = Color(hex: 0xF7FAF8)
+    // Forest-tinted hairline; `T.divider` from the design at ~7% alpha
+    // over the `#0A2920` ink reads as a faint warm border — better
+    // than the cold gray we had before.
+    static let border            = Color(red: 10/255, green: 41/255, blue: 32/255, opacity: 0.07)
+    static let outline           = Color(hex: 0xAEBDB7)
+    static let text              = Color(hex: 0x0A2920)
+    static let textSec           = Color(hex: 0x37514A)
+    // Held at #5A6E74 instead of the design's lighter #7A8E88 — round-2
+    // QA flagged the lighter value at ~3.6:1 contrast on the new
+    // `#F2F5F4` bg, which fails WCAG 2.1 AA for body text. The redesign
+    // doc covers this trade-off explicitly.
     static let textHint          = Color(hex: 0x5A6E74)
     static let starGold          = Color(hex: 0xFCD24A)
 
+    // New accent tokens for service grids, promo banners, and "NEW" pills.
+    static let accentCoral           = Color(hex: 0xFF6B6B)
+    static let accentCoralContainer  = Color(hex: 0xFFE5E5)
+    static let accentAmber           = Color(hex: 0xFFB800)
+    static let accentAmberContainer  = Color(hex: 0xFFF4D1)
+    // Alias of `accent` — clearer at service-tile callsites.
+    static let accentPurple          = Color(hex: 0x7B5CD6)
+    static let accentPurpleContainer = Color(hex: 0xEFE9FA)
+
     static var primaryGradient: LinearGradient {
         LinearGradient(
-            colors: [primary, secondary],
+            colors: [primary, primaryDark],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
     }
 
     static var creditGradient: LinearGradient {
+        // Deep sage → vibrant primary so the Wallet hero reads as
+        // "money, but on-brand" rather than a separate visual island.
         LinearGradient(
-            colors: [Color(hex: 0x122B32), primary],
+            colors: [Color(hex: 0x0E5C3C), primary],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -148,8 +166,10 @@ struct VPrimaryButton: View {
             .frame(height: 54)
             .background(isEnabled ? AnyShapeStyle(VPalette.primary) : AnyShapeStyle(VPalette.surfaceHigh))
             .foregroundColor(isEnabled ? .white : VPalette.textHint)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .shadow(color: isEnabled ? VPalette.primary.opacity(0.4) : .clear, radius: 16, x: 0, y: 6)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            // Glowing green CTA per the super-app spec
+            // (`0 8px 22px rgba(0,177,79,0.35)`).
+            .shadow(color: isEnabled ? VPalette.primary.opacity(0.35) : .clear, radius: 22, x: 0, y: 8)
         }
         .disabled(!isEnabled || isLoading)
     }

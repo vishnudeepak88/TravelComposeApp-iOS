@@ -126,8 +126,9 @@ struct PrimaryButton: View {
             .frame(height: 54)
             .background(isEnabled ? VPalette.primary : VPalette.surfaceHigh)
             .foregroundColor(isEnabled ? .white : VPalette.textHint)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .shadow(color: isEnabled ? VPalette.primary.opacity(0.4) : .clear, radius: 16, x: 0, y: 6)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            // Match VPrimaryButton — glowing green super-app CTA.
+            .shadow(color: isEnabled ? VPalette.primary.opacity(0.35) : .clear, radius: 22, x: 0, y: 8)
         }
         .disabled(!isEnabled || isLoading)
     }
