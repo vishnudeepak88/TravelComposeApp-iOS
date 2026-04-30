@@ -36,10 +36,11 @@ struct MainTabView: View {
         ZStack(alignment: .bottom) {
             Group {
                 switch selectedTab {
-                case 0: CommuteTab()
-                case 1: TripsTab()
-                case 2: InboxView()
-                case 3: ProfileView()
+                case 0: HomeTab()
+                case 1: CommuteTab()
+                case 2: TripsTab()
+                case 3: InboxView()
+                case 4: ProfileView()
                 default: EmptyView()
                 }
             }
@@ -100,6 +101,7 @@ struct VoygoTabBar: View {
     @Binding var selectedIndex: Int
 
     private let items: [(icon: String, selectedIcon: String, label: String)] = [
+        ("house",        "house.fill",         "Home"),
         ("car",          "car.fill",           "Routes"),
         ("calendar",     "calendar",           "Calendar"),
         ("bubble.left",  "bubble.left.fill",   "Inbox"),
