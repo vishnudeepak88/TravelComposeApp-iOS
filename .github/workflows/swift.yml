@@ -1,7 +1,11 @@
-# This workflow will build a Swift project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-swift
+# Build the Voygo iOS app on every push/PR to main.
+#
+# Uses xcodebuild because this is an Xcode project (no Package.swift).
+# Build-only for now — there's no test target wired into the project yet.
+# When tests land, add a `test` step with `-destination` pointing at a
+# concrete simulator (e.g. iPhone 15) and `-enableCodeCoverage YES`.
 
-name: Swift
+name: iOS Build
 
 on:
   push:
@@ -11,12 +15,21 @@ on:
 
 jobs:
   build:
-
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: swift build -v
-    - name: Run tests
-      run: swift test -v
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project TravelComposeApp.xcodeproj \
+            -scheme TravelComposeApp \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build
