@@ -1,6 +1,9 @@
 import CoreLocation
 import Foundation
-import MapKit
+// `@preconcurrency` because `MKLocalSearch.Response` is only marked
+// `Sendable` in the iOS 26 SDK; on older SDKs (e.g. the Xcode 16 GitHub
+// runner) the strict-concurrency checker rejects `await … .start()`.
+@preconcurrency import MapKit
 
 struct ResolvedCoordinate {
     let lat: Double

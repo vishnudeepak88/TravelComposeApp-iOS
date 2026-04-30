@@ -24,6 +24,11 @@ jobs:
         run: xcodebuild -version
 
       - name: Build
+        # `IPHONEOS_DEPLOYMENT_TARGET=18.0` overrides the project's iOS
+        # 26 setting just for CI — the GitHub macos-15 runner ships
+        # Xcode 16.x (max iOS 18.5 SDK), so 26 is rejected with
+        # "supported deployment target versions is 12.0 to 18.5.99".
+        # Local builds still use 26.0 from the pbxproj.
         run: |
           set -o pipefail
           xcodebuild \
@@ -32,4 +37,5 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
+            IPHONEOS_DEPLOYMENT_TARGET=18.0 \
             build
