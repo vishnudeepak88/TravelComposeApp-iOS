@@ -77,16 +77,20 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     hero
-                    // Search card sits as a sibling of the hero with a
-                    // negative top padding so it visually overlaps the
-                    // bottom of the gradient. Previously this card was
-                    // an `.overlay(.bottom)` of the hero with a 56pt
-                    // offset — SwiftUI overlays clip hit-testing to
-                    // their parent's frame, so the offset pushed the
-                    // visible button outside the hero's tappable area
-                    // and "Find ride" did nothing on tap.
+                    // Search card visually overlaps the hero's bottom
+                    // edge via negative top padding. `zIndex(1)` keeps
+                    // the search card on top of the hero in both the
+                    // render and hit-test passes — without it, the
+                    // hero's bottom 56pt swallows taps and "Find ride"
+                    // does nothing. (Original implementation was an
+                    // `.overlay(.bottom)` + `.offset` which had the
+                    // same root cause: SwiftUI overlays clip
+                    // hit-testing to the parent's frame, so the
+                    // offset pushed the button outside the tappable
+                    // area entirely.)
                     searchCard
                         .padding(.top, -56)
+                        .zIndex(1)
                     serviceGrid
                         .padding(.top, 16)
                     promoBanner
