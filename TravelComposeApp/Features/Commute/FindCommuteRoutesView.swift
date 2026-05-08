@@ -160,6 +160,11 @@ struct FindCommuteRoutesView: View {
     var onMySubscriptions: () -> Void
     var onCreateRoute: () -> Void
     var onDriverDashboard: () -> Void
+    /// Set when this screen is pushed onto a NavigationStack (e.g. from
+    /// Home's "Book a ride"). Nil when used as a tab root (Routes tab),
+    /// where the tab bar is the way out. Drives whether the hero shows
+    /// a back chevron.
+    var onBack: (() -> Void)? = nil
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -246,6 +251,21 @@ struct FindCommuteRoutesView: View {
         let greetingName = store.currentUser.name.isEmpty ? "there" : store.currentUser.name.split(separator: " ").first.map(String.init) ?? "there"
         return VHeroGradient {
             VStack(alignment: .leading, spacing: 16) {
+                // Back chevron — only shown when pushed (e.g. from Home).
+                // When this view is a tab root, the chevron stays hidden.
+                if let onBack {
+                    Button(action: onBack) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 16, weight: .heavy))
+                            .foregroundColor(.white)
+                            .frame(width: 38, height: 38)
+                            .background(Color.white.opacity(0.18))
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color.white.opacity(0.25)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Back")
+                }
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Voygo")

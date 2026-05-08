@@ -53,7 +53,11 @@ struct AppRouteDestinations: ViewModifier {
                     onOpenRoute:       { path.append(.routeDetails(routeId: $0)) },
                     onMySubscriptions: { path.append(.mySubscriptions) },
                     onCreateRoute:     { path.append(.createRoute) },
-                    onDriverDashboard: { path.append(.driverDashboard) }
+                    onDriverDashboard: { path.append(.driverDashboard) },
+                    // Reached via push (Home → Book a ride), so wire a
+                    // real back affordance. Routes-tab root keeps onBack
+                    // nil since the tab bar provides the exit there.
+                    onBack: { if !path.isEmpty { path.removeLast() } }
                 )
                 .navigationBarHidden(true)
 
