@@ -143,9 +143,13 @@ struct VoygoTabBar: View {
 }
 
 // MARK: - Commute Tab Navigator
+//
+// Routes are defined in `App/AppRoute.swift`; this tab only owns the
+// path + filter-state bindings and delegates the destination switch
+// to `appRouteDestinations(...)`.
 
 struct CommuteTab: View {
-    @State private var path: [CommuteRoute] = []
+    @State private var path: [AppRoute] = []
     /// Persistent filter state owned by the tab so SearchFilters can
     /// actually write back. Previously each presentation created throw-
     /// away `Binding(get: { … }, set: { _ in })` placeholders that
@@ -155,20 +159,6 @@ struct CommuteTab: View {
     @State private var filtersLatest: String = "09:00"
     @State private var filtersDays: DaysOfWeekFlags = .weekdays
 
-    enum CommuteRoute: Hashable {
-        case routeDetails(routeId: String)
-        case mySubscriptions
-        case calendar(routeId: String? = nil)
-        case createRoute
-        case driverDashboard
-        case driverCalendar(routeId: String)
-        case driverPayouts
-        case liveTrip(tripId: String, isDriver: Bool)
-        case bookingConfirmed(bookingId: String, pickup: String, driverName: String)
-        case rateRide(driverInitial: String, driverName: String, summary: String)
-        case searchFilters
-    }
-
     var body: some View {
         NavigationStack(path: $path) {
             FindCommuteRoutesView(
@@ -177,130 +167,29 @@ struct CommuteTab: View {
                 onCreateRoute:     { path.append(.createRoute) },
                 onDriverDashboard: { path.append(.driverDashboard) }
             )
-            .navigationDestination(for: CommuteRoute.self) { route in
-                switch route {
-                case .routeDetails(let id):
-                    RouteDetailsView(
-                        routeId: id,
-                        onBack: { path.removeLast() },
-                        onSubscribed: { bookingId in
-                            // Push the celebratory confirmation screen on success.
-                            let routeName = "USJ 9 LRT"
-                            let driverName = "your driver"
-                            path.append(.bookingConfirmed(bookingId: bookingId, pickup: routeName, driverName: driverName))
-                        }
-                    )
-                    .navigationBarHidden(true)
-
-                case .mySubscriptions:
-                    MySubscriptionsView(
-                        onOpenRoute: { path.append(.routeDetails(routeId: $0)) },
-                        onOpenCalendar: { path.append(.calendar()) },
-                        onBack: { path.removeLast() }
-                    )
-                    .navigationBarHidden(true)
-
-                case .calendar(let routeId):
-                    UpcomingCalendarView(routeId: routeId, onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
-
-                case .createRoute:
-                    CreateRouteView(
-                        onBack: { path.removeLast() },
-                        onCreated: { id in
-                            // pop back to root and open created route
-                            path = [.routeDetails(routeId: id)]
-                        }
-                    )
-                    .navigationBarHidden(true)
-
-                case .driverDashboard:
-                    DriverDashboardView(
-                        onBack:         { path.removeLast() },
-                        onOpenCalendar: { path.append(.driverCalendar(routeId: $0)) },
-                        onOpenPayouts:  { path.append(.driverPayouts) }
-                    )
-                    .navigationBarHidden(true)
-
-                case .driverCalendar(let routeId):
-                    UpcomingCalendarView(routeId: routeId, onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
-
-                case .driverPayouts:
-                    DriverPayoutsView(onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
-
-                case .liveTrip(let id, let isDriver):
-                    LiveTripView(
-                        tripId: id,
-                        isDriver: isDriver,
-                        onBack: { path.removeLast() },
-                        onMessageDriver: nil,
-                        onEndTrip: {
-                            path.append(.rateRide(driverInitial: "A", driverName: "Aiman", summary: "Subang Jaya → KLCC"))
-                        }
-                    )
-                    .navigationBarHidden(true)
-
-                case .bookingConfirmed(let bookingId, let pickup, let driverName):
-                    BookingConfirmedView(
-                        bookingId: bookingId,
-                        pickup: pickup,
-                        driverName: driverName,
-                        onViewReceipt: {
-                            // Receipt lives under Profile's nav stack; clear back to root for now.
-                            path = []
-                        },
-                        onSeeSubscription: {
-                            path = [.mySubscriptions]
-                        }
-                    )
-                    .navigationBarHidden(true)
-
-                case .rateRide(let init_, let name, let summary):
-                    RateRideView(
-                        driverInitial: init_,
-                        driverName: name,
-                        routeSummary: summary,
-                        dateLabel: dateLabelToday(),
-                        durationLabel: "52 min",
-                        onSubmit: { _, _, _ in path = [] },
-                        onSkip: { path = [] }
-                    )
-                    .navigationBarHidden(true)
-
-                case .searchFilters:
-                    SearchFiltersView(
-                        routeQuery: $filtersQuery,
-                        earliest:   $filtersEarliest,
-                        latest:     $filtersLatest,
-                        days:       $filtersDays,
-                        onApply: { path.removeLast() },
-                        onBack:  { path.removeLast() }
-                    )
-                    .navigationBarHidden(true)
-                }
-            }
+            .appRouteDestinations(
+                path: $path,
+                filtersQuery: $filtersQuery,
+                filtersEarliest: $filtersEarliest,
+                filtersLatest: $filtersLatest,
+                filtersDays: $filtersDays
+            )
             .navigationBarHidden(true)
         }
     }
 }
 
-private func dateLabelToday() -> String {
-    let f = DateFormatter()
-    f.dateFormat = "d MMM"
-    return f.string(from: Date())
-}
-
-// MARK: - Commutes Tab Navigator
+// MARK: - Trips Tab Navigator
+//
+// Subscriptions root, with `routeDetails` and `calendar` reachable from
+// the same shared destination map the other tabs use.
 
 struct TripsTab: View {
-    @State private var path: [TripsRoute] = []
-
-    enum TripsRoute: Hashable {
-        case routeDetails(routeId: String)
-        case calendar(routeId: String? = nil)
-    }
+    @State private var path: [AppRoute] = []
+    @State private var filtersQuery: String = ""
+    @State private var filtersEarliest: String = "06:30"
+    @State private var filtersLatest: String = "09:00"
+    @State private var filtersDays: DaysOfWeekFlags = .weekdays
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -309,16 +198,13 @@ struct TripsTab: View {
                 onOpenCalendar: { path.append(.calendar()) },
                 onBack: nil
             )
-            .navigationDestination(for: TripsRoute.self) { route in
-                switch route {
-                case .routeDetails(let id):
-                    RouteDetailsView(routeId: id, onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
-                case .calendar(let routeId):
-                    UpcomingCalendarView(routeId: routeId, onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
-                }
-            }
+            .appRouteDestinations(
+                path: $path,
+                filtersQuery: $filtersQuery,
+                filtersEarliest: $filtersEarliest,
+                filtersLatest: $filtersLatest,
+                filtersDays: $filtersDays
+            )
             .navigationBarHidden(true)
         }
     }

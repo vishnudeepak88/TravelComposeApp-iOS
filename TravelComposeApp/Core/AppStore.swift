@@ -128,9 +128,9 @@ final class AppStore {
             devOtpCode = response.devCode
             return .success(())
         } catch let error as APIError {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         } catch {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -148,9 +148,9 @@ final class AppStore {
             await refreshAll()
             return .success(())
         } catch let error as APIError {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         } catch {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -281,11 +281,11 @@ final class AppStore {
             return .success(result)
         } catch APIError.unauthorized {
             clearSession()
-            return .failure(.message("Your session has expired. Please sign in again."))
+            return .failure(.unauthorized)
         } catch let error as APIError {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         } catch {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -338,11 +338,11 @@ final class AppStore {
             return .success(record)
         } catch APIError.unauthorized {
             clearSession()
-            return .failure(.message("Your session has expired. Please sign in again."))
+            return .failure(.unauthorized)
         } catch let error as APIError {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         } catch {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -405,11 +405,11 @@ final class AppStore {
             return .success(())
         } catch APIError.unauthorized {
             clearSession()
-            return .failure(.message("Your session has expired. Please sign in again."))
+            return .failure(.unauthorized)
         } catch let error as APIError {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         } catch {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -444,11 +444,11 @@ final class AppStore {
             return .success(())
         } catch APIError.unauthorized {
             clearSession()
-            return .failure(.message("Your session has expired. Please sign in again."))
+            return .failure(.unauthorized)
         } catch let error as APIError {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         } catch {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -684,9 +684,9 @@ final class AppStore {
             return .success(id)
         } catch APIError.unauthorized {
             clearSession()
-            return .failure(.message("Your session has expired. Please sign in again."))
+            return .failure(.unauthorized)
         } catch {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -704,12 +704,12 @@ final class AppStore {
             subscriptions[i].status = oldStatus
             regenerateRides()
             clearSession()
-            return .failure(.message("Your session has expired. Please sign in again."))
+            return .failure(.unauthorized)
         } catch {
             subscriptions[i].status = oldStatus
             regenerateRides()
             connectionState = .offline("Could not update subscription online.")
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -753,9 +753,9 @@ final class AppStore {
             return .success(id)
         } catch APIError.unauthorized {
             clearSession()
-            return .failure(.message("Your session has expired. Please sign in again."))
+            return .failure(.unauthorized)
         } catch {
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -773,12 +773,12 @@ final class AppStore {
             routes[i].activeStatus = oldStatus
             regenerateRides()
             clearSession()
-            return .failure(.message("Your session has expired. Please sign in again."))
+            return .failure(.unauthorized)
         } catch {
             routes[i].activeStatus = oldStatus
             regenerateRides()
             connectionState = .offline("Could not update route status online.")
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -800,13 +800,13 @@ final class AppStore {
             routes[i].daysOfWeek = oldDays
             regenerateRides()
             clearSession()
-            return .failure(.message("Your session has expired. Please sign in again."))
+            return .failure(.unauthorized)
         } catch {
             routes[i].departureTime = oldTime
             routes[i].daysOfWeek = oldDays
             regenerateRides()
             connectionState = .offline("Could not update schedule online.")
-            return .failure(.message(error.localizedDescription))
+            return .failure(.from(error))
         }
     }
 
@@ -1135,11 +1135,47 @@ extension Int {
 }
 
 // MARK: - App Error
+//
+// Typed wrapper around `APIError` so call sites can pattern-match on
+// the *kind* of failure (and decide whether to retry, sign-out, or
+// show a field error) instead of regexing the localized message.
+//
+// `.message(String)` is retained as the catch-all fallback for legacy
+// callsites and arbitrary client-side validation strings — preferred
+// for new code is to add a typed case here first and reach for
+// `.message` only if the failure genuinely doesn't fit one.
 
-enum AppError: LocalizedError {
+enum AppError: LocalizedError, Equatable {
     case message(String)
+    case unauthorized
+    case network
+    case validation(String)
+    case server(code: Int)
+    case decoding
+
     var errorDescription: String? {
-        if case .message(let m) = self { return m }
-        return nil
+        switch self {
+        case .message(let m):    return m
+        case .unauthorized:      return "Your session has expired. Please sign in again."
+        case .network:           return "You're offline. Reconnect and try again."
+        case .validation(let m): return m
+        case .server(let code):  return "Server error \(code). Try again in a moment."
+        case .decoding:          return "We received an unexpected response. Try again."
+        }
+    }
+
+    /// Fold an `APIError` into the AppError surface so call sites get
+    /// structured cases instead of `.message(error.localizedDescription)`
+    /// strings they have to grep on.
+    static func from(_ error: Error) -> AppError {
+        switch error {
+        case APIError.unauthorized:        return .unauthorized
+        case APIError.networkError:        return .network
+        case APIError.decodingError:       return .decoding
+        case APIError.invalidResponse:     return .server(code: -1)
+        case let APIError.serverError(c):  return .server(code: c)
+        case let appErr as AppError:       return appErr
+        default:                           return .message(error.localizedDescription)
+        }
     }
 }

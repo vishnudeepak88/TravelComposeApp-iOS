@@ -35,6 +35,7 @@
 		F1A2B3D4E5F607182939A001 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A101 /* HomeView.swift */; };
 		F1A2B3D4E5F607182939A002 /* RouteDiagram.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A102 /* RouteDiagram.swift */; };
 		F1A2B3D4E5F607182939A003 /* Strings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A103 /* Strings.swift */; };
+		F1A2B3D4E5F607182939A004 /* AppRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A104 /* AppRoute.swift */; };
 		8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DA9910E6D4CA595C6D018 /* AppStore.swift */; };
 		7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */; };
 		87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */; };
@@ -77,6 +78,7 @@
 		F1A2B3D4E5F607182939A101 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		F1A2B3D4E5F607182939A102 /* RouteDiagram.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteDiagram.swift; sourceTree = "<group>"; };
 		F1A2B3D4E5F607182939A103 /* Strings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Strings.swift; sourceTree = "<group>"; };
+		F1A2B3D4E5F607182939A104 /* AppRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRoute.swift; sourceTree = "<group>"; };
 		AC7DA9910E6D4CA595C6D018 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindCommuteRoutesView.swift; sourceTree = "<group>"; };
@@ -128,6 +130,7 @@
 			children = (
 				1A2B3C4D5E6F708190A0B0C0 /* TravelComposeApp.swift */,
 				01382652F995463C8E4271A4 /* Navigation.swift */,
+				F1A2B3D4E5F607182939A104 /* AppRoute.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -366,6 +369,7 @@
 				F1A2B3D4E5F607182939A001 /* HomeView.swift in Sources */,
 				F1A2B3D4E5F607182939A002 /* RouteDiagram.swift in Sources */,
 				F1A2B3D4E5F607182939A003 /* Strings.swift in Sources */,
+				F1A2B3D4E5F607182939A004 /* AppRoute.swift in Sources */,
 				8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */,
 				7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */,
 				87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */,

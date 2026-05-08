@@ -14,36 +14,30 @@ import SwiftUI
 // uses, so the tile is honest about what's wired up vs. on the roadmap.
 
 struct HomeTab: View {
-    @State private var path: [HomeRoute] = []
-
-    enum HomeRoute: Hashable {
-        case findRides
-    }
+    @State private var path: [AppRoute] = []
+    /// Filter state pinned at the tab level — Home doesn't host
+    /// SearchFilters today, but the shared destination map needs the
+    /// bindings so a future "filter pill" on the hero card can flow
+    /// straight into the same SearchFiltersView the Routes tab owns.
+    @State private var filtersQuery: String = ""
+    @State private var filtersEarliest: String = "06:30"
+    @State private var filtersLatest: String = "09:00"
+    @State private var filtersDays: DaysOfWeekFlags = .weekdays
 
     var body: some View {
         NavigationStack(path: $path) {
             HomeView(
                 onSearchTapped:  { path.append(.findRides) },
-                onCarpoolTapped: { path.append(.findRides) }
+                onCarpoolTapped: { path.append(.findRides) },
+                onOpenRoute:     { id in path.append(.routeDetails(routeId: id)) }
             )
-            .navigationDestination(for: HomeRoute.self) { route in
-                switch route {
-                case .findRides:
-                    // Re-use the search experience from CommuteTab. The
-                    // navigation handlers are no-ops here — Home isn't the
-                    // owner of the deeper flows; tapping a result inside
-                    // FindCommute will rely on the user switching tabs.
-                    // For a richer integration we'd promote those flows
-                    // out of CommuteTab into a shared navigator.
-                    FindCommuteRoutesView(
-                        onOpenRoute:       { _ in path.removeLast() },
-                        onMySubscriptions: { path.removeLast() },
-                        onCreateRoute:     { path.removeLast() },
-                        onDriverDashboard: { path.removeLast() }
-                    )
-                    .navigationBarHidden(true)
-                }
-            }
+            .appRouteDestinations(
+                path: $path,
+                filtersQuery: $filtersQuery,
+                filtersEarliest: $filtersEarliest,
+                filtersLatest: $filtersLatest,
+                filtersDays: $filtersDays
+            )
             .navigationBarHidden(true)
         }
     }
@@ -53,6 +47,11 @@ struct HomeView: View {
     @Environment(AppStore.self) private var store
     var onSearchTapped: () -> Void = {}
     var onCarpoolTapped: () -> Void = {}
+    /// Callback when a "Heading your way" card is tapped. Closures the
+    /// route id rather than the row so HomeTab can drill straight into
+    /// the shared `AppRoute.routeDetails(...)` without HomeView needing
+    /// to know what comes next.
+    var onOpenRoute: (String) -> Void = { _ in }
 
     @State private var showComingSoonFor: String? = nil
 
@@ -328,7 +327,16 @@ struct HomeView: View {
     }
 
     private func suggestedRideCard(_ row: SuggestedRide) -> some View {
-        Button(action: onSearchTapped) {
+        // Tap the row → route details if we have a backing routeId,
+        // otherwise fall through to the find-rides search (the demo
+        // rows don't carry a real id).
+        Button {
+            if let id = row.routeId {
+                onOpenRoute(id)
+            } else {
+                onSearchTapped()
+            }
+        } label: {
             HStack(spacing: 12) {
                 HueAvatar(name: row.name, hue: row.hue, size: 42)
                 VStack(alignment: .leading, spacing: 3) {
@@ -377,7 +385,8 @@ struct HomeView: View {
                 time:     r.departureTime,
                 route:    "\(shortLabel(r.startLocation)) → \(shortLabel(r.endLocation))",
                 priceMyr: r.pricePerSeat,
-                rating:   r.reliability.averageRating > 0 ? r.reliability.averageRating : 4.9
+                rating:   r.reliability.averageRating > 0 ? r.reliability.averageRating : 4.9,
+                routeId:  r.id
             )
         }
         if !live.isEmpty { return Array(live) }
@@ -411,6 +420,10 @@ private struct SuggestedRide: Identifiable {
     let route: String
     let priceMyr: Int
     let rating: Double
+    /// Backing route id when the row originated from `store.routes`.
+    /// `nil` for the polished demo fallback rows so taps fall through
+    /// to the find-rides search instead of pushing a 404 detail screen.
+    var routeId: String? = nil
 }
 
 // MARK: - Atoms (Home-local; promote to Polished.swift if they earn reuse)
