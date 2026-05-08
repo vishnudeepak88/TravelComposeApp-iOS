@@ -27,9 +27,18 @@ struct HomeTab: View {
     var body: some View {
         NavigationStack(path: $path) {
             HomeView(
-                onSearchTapped:  { path.append(.findRides) },
-                onCarpoolTapped: { path.append(.findRides) },
-                onOpenRoute:     { id in path.append(.routeDetails(routeId: id)) }
+                onSearchTapped:  {
+                    print("[Voygo] HomeTab: append .findRides; depth before=\(path.count)")
+                    path.append(.findRides)
+                },
+                onCarpoolTapped: {
+                    print("[Voygo] HomeTab: append .findRides via Carpool tile")
+                    path.append(.findRides)
+                },
+                onOpenRoute:     { id in
+                    print("[Voygo] HomeTab: append .routeDetails(\(id))")
+                    path.append(.routeDetails(routeId: id))
+                }
             )
             .appRouteDestinations(
                 path: $path,
@@ -172,7 +181,13 @@ struct HomeView: View {
     // MARK: Lifted search card
 
     private var searchCard: some View {
-        Button(action: onSearchTapped) {
+        Button {
+            // Diagnostic — leaves a breadcrumb in the Xcode console so
+            // we can tell tap-fired-but-nav-failed from tap-never-fired.
+            // Cheap to keep until UI tests cover this button.
+            print("[Voygo] Home: Book a ride tapped")
+            onSearchTapped()
+        } label: {
             HStack(spacing: 12) {
                 ZStack {
                     Circle().fill(VPalette.primaryContainer)
@@ -192,7 +207,11 @@ struct HomeView: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                Text("Find ride")
+                // Renamed from "Find ride" → "Book a ride" so the
+                // primary CTA matches the user's mental model. The
+                // destination is unchanged: it pushes the route
+                // search screen via `AppRoute.findRides`.
+                Text("Book a ride")
                     .font(.system(size: 13, weight: .heavy))
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
