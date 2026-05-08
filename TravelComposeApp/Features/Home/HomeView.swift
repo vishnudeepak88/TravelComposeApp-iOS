@@ -77,12 +77,18 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     hero
-                        .overlay(alignment: .bottom) {
-                            searchCard
-                                .offset(y: 56)
-                        }
-                    Spacer().frame(height: 72) // accommodates the lifted search card
+                    // Search card sits as a sibling of the hero with a
+                    // negative top padding so it visually overlaps the
+                    // bottom of the gradient. Previously this card was
+                    // an `.overlay(.bottom)` of the hero with a 56pt
+                    // offset — SwiftUI overlays clip hit-testing to
+                    // their parent's frame, so the offset pushed the
+                    // visible button outside the hero's tappable area
+                    // and "Find ride" did nothing on tap.
+                    searchCard
+                        .padding(.top, -56)
                     serviceGrid
+                        .padding(.top, 16)
                     promoBanner
                     suggestedRides
                     Spacer().frame(height: 110) // tab bar clearance
