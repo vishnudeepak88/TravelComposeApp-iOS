@@ -302,3 +302,8 @@ struct WalletView: View {
         }
     }
 }
+
+#Preview("WalletView") {
+    WalletView(onBack: {})
+        .environment(AppStore())
+}

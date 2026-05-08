@@ -602,7 +602,21 @@ struct LiveTripView: View {
 
             VStack(spacing: 0) {
                 ZStack(alignment: .top) {
-                    VMapPlaceholder(tone: .teal, label: "Live · Subang → KLCC", height: 360)
+                    // Stylised abstract route diagram instead of the
+                    // legacy faux-map. The tracking screen wants the
+                    // narrative version (curving polyline + city blocks)
+                    // — the actual GPS dot is overlaid below.
+                    VRouteDiagram(
+                        stops: [
+                            .init(label: "Subang Jaya", kind: .origin),
+                            .init(label: "USJ 9 LRT",   kind: .stop),
+                            .init(label: "Bangsar",     kind: .stop),
+                            .init(label: "KLCC",        kind: .dest)
+                        ],
+                        height: 360,
+                        accent: VPalette.primary,
+                        dark: true
+                    )
 
                     HStack {
                         Button(action: onBack) {

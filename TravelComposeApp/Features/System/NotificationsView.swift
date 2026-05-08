@@ -96,3 +96,8 @@ struct NotificationsView: View {
         .background(n.unread ? VPalette.primaryContainer.opacity(0.35) : VPalette.surface)
     }
 }
+
+#Preview("NotificationsView") {
+    NotificationsView(onBack: {})
+        .environment(AppStore())
+}

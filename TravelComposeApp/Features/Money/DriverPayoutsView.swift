@@ -179,3 +179,8 @@ private struct FootnoteCard: View {
             .padding(.horizontal, 4)
     }
 }
+
+#Preview("DriverPayoutsView") {
+    DriverPayoutsView(onBack: {})
+        .environment(AppStore())
+}

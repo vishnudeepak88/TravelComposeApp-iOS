@@ -187,3 +187,8 @@ struct TripHistoryView: View {
         .opacity(t.cancelled ? 0.7 : 1)
     }
 }
+
+#Preview("TripHistoryView") {
+    TripHistoryView(onBack: {}, onOpenReceipt: { _ in })
+        .environment(AppStore())
+}

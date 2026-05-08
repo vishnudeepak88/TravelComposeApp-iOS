@@ -197,3 +197,16 @@ struct FlowLayout: Layout {
         }
     }
 }
+
+#Preview("RateRideView") {
+    RateRideView(
+        driverInitial: "A",
+        driverName:    "Aiman",
+        routeSummary:  "Subang Jaya → KLCC",
+        dateLabel:     "8 May",
+        durationLabel: "52 min",
+        onSubmit:      { _, _, _ in },
+        onSkip:        {}
+    )
+    .environment(AppStore())
+}

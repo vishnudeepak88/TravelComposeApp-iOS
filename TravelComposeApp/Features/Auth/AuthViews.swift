@@ -400,3 +400,13 @@ struct AuthOtpView: View {
 
     @FocusState private var otpFocused: Bool
 }
+
+#Preview("AuthPhoneView") {
+    AuthPhoneView { _ in }
+        .environment(AppStore())
+}
+
+#Preview("AuthOtpView") {
+    AuthOtpView(phoneNumber: "+60 11 2345 6789", onBack: {})
+        .environment(AppStore())
+}

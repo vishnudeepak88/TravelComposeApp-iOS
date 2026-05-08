@@ -195,3 +195,14 @@ struct BookingConfirmedView: View {
         }
     }
 }
+
+#Preview("BookingConfirmedView") {
+    BookingConfirmedView(
+        bookingId:        "demo-123",
+        pickup:           "USJ 9 LRT",
+        driverName:       "Aiman",
+        onViewReceipt:    {},
+        onSeeSubscription:{}
+    )
+    .environment(AppStore())
+}
