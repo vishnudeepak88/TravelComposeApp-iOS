@@ -1002,6 +1002,19 @@ final class AppStore {
     }
 
     private func normalizePhone(_ raw: String) -> String {
+        Voygo.normalizePhoneNumber(raw)
+    }
+}
+
+// MARK: - Phone normalization (testable)
+//
+// Lifted out of `AppStore` as a free internal function so the policy
+// is exercisable from tests without spinning up a `@MainActor`-bound
+// `AppStore`. Production callers go through `AppStore.normalizePhone`
+// for backwards compatibility; new code can call this directly.
+
+enum Voygo {
+    static func normalizePhoneNumber(_ raw: String) -> String {
         // Accept any combination of digits / "+" / spaces / dashes from a
         // pasted contact and reduce to a clean E.164-style "+60XXXXXXXXX".
         let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)
