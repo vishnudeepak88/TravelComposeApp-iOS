@@ -77,20 +77,15 @@ struct HomeView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     hero
-                    // Search card visually overlaps the hero's bottom
-                    // edge via negative top padding. `zIndex(1)` keeps
-                    // the search card on top of the hero in both the
-                    // render and hit-test passes — without it, the
-                    // hero's bottom 56pt swallows taps and "Find ride"
-                    // does nothing. (Original implementation was an
-                    // `.overlay(.bottom)` + `.offset` which had the
-                    // same root cause: SwiftUI overlays clip
-                    // hit-testing to the parent's frame, so the
-                    // offset pushed the button outside the tappable
-                    // area entirely.)
+                    // No overlap: the search card sits flush below
+                    // the hero. Two earlier fixes (overlay+offset,
+                    // then negative padding+zIndex) chased a "lifted
+                    // card" visual but kept dropping taps in real
+                    // builds — SwiftUI's hit-test kept picking the
+                    // hero's gradient over the search card in the
+                    // overlap region. Reliable taps > pretty overlap.
                     searchCard
-                        .padding(.top, -56)
-                        .zIndex(1)
+                        .padding(.top, 16)
                     serviceGrid
                         .padding(.top, 16)
                     promoBanner
@@ -167,10 +162,10 @@ struct HomeView: View {
                     .tracking(-0.5)
                     .foregroundColor(.white)
                     .lineSpacing(1)
-                    .padding(.bottom, 64) // leave room for the lifted search card
             }
             .padding(.horizontal, 20)
             .padding(.top, 64)
+            .padding(.bottom, 24)
         }
     }
 
@@ -209,9 +204,15 @@ struct HomeView: View {
             .background(VPalette.surface)
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .shadow(color: VPalette.text.opacity(0.12), radius: 20, x: 0, y: 12)
+            // Force the entire rendered shape (including padding) to
+            // be the hit area; without this, SwiftUI sometimes keeps
+            // the implicit shape limited to non-transparent pixels
+            // and parts of the card stop responding to taps.
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
             .padding(.horizontal, 16)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("home.findRide")
     }
 
     // MARK: Service grid
