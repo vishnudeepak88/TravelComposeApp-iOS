@@ -27,18 +27,9 @@ struct HomeTab: View {
     var body: some View {
         NavigationStack(path: $path) {
             HomeView(
-                onSearchTapped:  {
-                    print("[Voygo] HomeTab: append .findRides; depth before=\(path.count)")
-                    path.append(.findRides)
-                },
-                onCarpoolTapped: {
-                    print("[Voygo] HomeTab: append .findRides via Carpool tile")
-                    path.append(.findRides)
-                },
-                onOpenRoute:     { id in
-                    print("[Voygo] HomeTab: append .routeDetails(\(id))")
-                    path.append(.routeDetails(routeId: id))
-                }
+                onSearchTapped:  { path.append(.findRides) },
+                onCarpoolTapped: { path.append(.findRides) },
+                onOpenRoute:     { id in path.append(.routeDetails(routeId: id)) }
             )
             .appRouteDestinations(
                 path: $path,
@@ -99,7 +90,7 @@ struct HomeView: View {
                         .padding(.top, 16)
                     promoBanner
                     suggestedRides
-                    Spacer().frame(height: 110) // tab bar clearance
+                    Spacer().frame(height: VTabBarLayout.clearance)
                 }
             }
             .scrollIndicators(.hidden)
@@ -181,13 +172,7 @@ struct HomeView: View {
     // MARK: Lifted search card
 
     private var searchCard: some View {
-        Button {
-            // Diagnostic — leaves a breadcrumb in the Xcode console so
-            // we can tell tap-fired-but-nav-failed from tap-never-fired.
-            // Cheap to keep until UI tests cover this button.
-            print("[Voygo] Home: Book a ride tapped")
-            onSearchTapped()
-        } label: {
+        Button(action: onSearchTapped) {
             HStack(spacing: 12) {
                 ZStack {
                     Circle().fill(VPalette.primaryContainer)

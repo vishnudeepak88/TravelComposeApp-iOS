@@ -97,12 +97,24 @@ private struct SyncStatusBanner: View {
     }
 }
 
+/// Posted when a user taps the already-selected tab. Tab roots opt
+/// in by listening for this and scrolling their primary ScrollView to
+/// the top. Each notification carries the tab index so multi-tab roots
+/// can disambiguate.
+extension Notification.Name {
+    static let voygoTabReselected = Notification.Name("voygo.tabReselected")
+}
+
 struct VoygoTabBar: View {
     @Binding var selectedIndex: Int
 
     private let items: [(icon: String, selectedIcon: String, label: String)] = [
+        // Renamed: "Routes" → "Search". The tab roots straight onto
+        // FindCommuteRoutesView which is a search experience, not a
+        // list of the user's routes — keeping the old "Routes" label
+        // confused users into thinking it'd show their subscriptions.
         ("house",        "house.fill",         "Home"),
-        ("car",          "car.fill",           "Routes"),
+        ("magnifyingglass", "magnifyingglass", "Search"),
         ("calendar",     "calendar",           "Calendar"),
         ("bubble.left",  "bubble.left.fill",   "Inbox"),
         ("person",       "person.fill",        "Profile")
@@ -111,7 +123,22 @@ struct VoygoTabBar: View {
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.offset) { i, item in
-                Button(action: { withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { selectedIndex = i } }) {
+                Button(action: {
+                    if selectedIndex == i {
+                        // iOS convention: tap the active tab again to
+                        // jump to the top. Roots that care subscribe
+                        // via `.voygoTabReselected`.
+                        NotificationCenter.default.post(
+                            name: .voygoTabReselected,
+                            object: nil,
+                            userInfo: ["index": i]
+                        )
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            selectedIndex = i
+                        }
+                    }
+                }) {
                     VStack(spacing: 5) {
                         Image(systemName: selectedIndex == i ? item.selectedIcon : item.icon)
                             .font(.system(size: 20, weight: selectedIndex == i ? .semibold : .regular))

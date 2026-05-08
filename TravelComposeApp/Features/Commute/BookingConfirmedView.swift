@@ -8,6 +8,12 @@ struct BookingConfirmedView: View {
     let driverName: String
     var onViewReceipt: () -> Void
     var onSeeSubscription: () -> Void
+    /// Pop-to-root closer. Confirmation screens shouldn't have a back
+    /// chevron (the previous screen was the payment sheet, returning
+    /// there is wrong) but they MUST have *some* exit other than the
+    /// two CTAs — earlier UX audit flagged this as a P0 dead-end.
+    /// Wired to `path = []` from `AppRouteDestinations`.
+    var onDone: () -> Void = {}
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -27,6 +33,28 @@ struct BookingConfirmedView: View {
                         .padding(.bottom, 30)
                 }
             }
+            // Done pill in the top-right of the hero. Floats over the
+            // gradient so it stays visible even when the user scrolls.
+            HStack {
+                Spacer()
+                Button(action: onDone) {
+                    Text("Done")
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 8)
+                        .background(Color.white.opacity(0.22))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(Color.white.opacity(0.35), lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Done")
+            }
+            .padding(.top, 56)
+            .padding(.trailing, 16)
         }
         .navigationBarHidden(true)
     }
@@ -202,7 +230,8 @@ struct BookingConfirmedView: View {
         pickup:           "USJ 9 LRT",
         driverName:       "Aiman",
         onViewReceipt:    {},
-        onSeeSubscription:{}
+        onSeeSubscription:{},
+        onDone:           {}
     )
     .environment(AppStore())
 }

@@ -170,8 +170,7 @@ struct RouteDetailsView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(title: "Route Details", showBack: true, onBack: onBack)
-                    .background(VoygoTheme.background)
+                VPolishedNavBar(title: "Route Details", onBack: onBack)
 
                 if vm.isLoading {
                     LoadingView()

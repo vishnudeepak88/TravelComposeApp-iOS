@@ -236,7 +236,7 @@ struct FindCommuteRoutesView: View {
                             }
                         }
                     }
-                    .padding(.bottom, 108)
+                    .padding(.bottom, VTabBarLayout.clearance)
                 }
                 .refreshable {
                     await store.refreshAll()

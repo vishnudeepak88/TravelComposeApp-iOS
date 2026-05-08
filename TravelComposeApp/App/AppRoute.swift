@@ -28,6 +28,16 @@ enum AppRoute: Hashable {
     case bookingConfirmed(bookingId: String, pickup: String, driverName: String)
     case rateRide(driverInitial: String, driverName: String, summary: String)
     case searchFilters
+    // Profile-tab destinations — folded in here so all four tabs share
+    // one destination vocabulary and a future deep link can route to
+    // any of these from any tab.
+    case wallet
+    case tripHistory
+    case notifications
+    case receipt(id: String)
+    case kyc
+    case privacy
+    case help
 }
 
 // MARK: - Shared destination builder
@@ -152,7 +162,8 @@ struct AppRouteDestinations: ViewModifier {
                     },
                     onSeeSubscription: {
                         path = [.mySubscriptions]
-                    }
+                    },
+                    onDone: { path = [] }
                 )
                 .navigationBarHidden(true)
 
@@ -164,7 +175,8 @@ struct AppRouteDestinations: ViewModifier {
                     dateLabel: dateLabelToday(),
                     durationLabel: "52 min",
                     onSubmit: { _, _, _ in path = [] },
-                    onSkip: { path = [] }
+                    onBack:   { if !path.isEmpty { path.removeLast() } },
+                    onSkip:   { path = [] }
                 )
                 .navigationBarHidden(true)
 
@@ -178,6 +190,40 @@ struct AppRouteDestinations: ViewModifier {
                     onBack:  { if !path.isEmpty { path.removeLast() } }
                 )
                 .navigationBarHidden(true)
+
+            case .wallet:
+                WalletView(onBack: { if !path.isEmpty { path.removeLast() } })
+                    .navigationBarHidden(true)
+
+            case .tripHistory:
+                TripHistoryView(
+                    onBack: { if !path.isEmpty { path.removeLast() } },
+                    onOpenReceipt: { id in path.append(.receipt(id: id)) }
+                )
+                .navigationBarHidden(true)
+
+            case .notifications:
+                NotificationsView(onBack: { if !path.isEmpty { path.removeLast() } })
+                    .navigationBarHidden(true)
+
+            case .receipt(let id):
+                ReceiptView(
+                    bookingId: id,
+                    onBack: { if !path.isEmpty { path.removeLast() } }
+                )
+                .navigationBarHidden(true)
+
+            case .kyc:
+                KycVerificationView(onBack: { if !path.isEmpty { path.removeLast() } })
+                    .navigationBarHidden(true)
+
+            case .privacy:
+                PrivacySecurityView(onBack: { if !path.isEmpty { path.removeLast() } })
+                    .navigationBarHidden(true)
+
+            case .help:
+                HelpCenterView(onBack: { if !path.isEmpty { path.removeLast() } })
+                    .navigationBarHidden(true)
             }
         }
     }

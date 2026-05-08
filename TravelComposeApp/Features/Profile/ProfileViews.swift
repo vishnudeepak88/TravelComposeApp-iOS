@@ -1,29 +1,26 @@
 import SwiftUI
 
 // MARK: - Profile (mirrors ProfileScreen.kt)
-
-enum ProfileRoute: Hashable {
-    case wallet
-    case tripHistory
-    case notifications
-    case receipt(id: String)
-    case driverDashboard
-    case driverPayouts
-    case kyc
-}
+//
+// The legacy `ProfileRoute` enum is gone — Profile now uses the shared
+// `AppRoute` so deep links and cross-tab navigation can route to any
+// destination from any tab.
+//
+// Privacy & Help previously presented as sheets. They were full-screen
+// settings pages with multiple toggles, not lightweight modals — now
+// they push onto the same nav stack as everything else for consistency.
 
 struct ProfileView: View {
     @Environment(AppStore.self) private var store
-    @State private var path: [ProfileRoute] = []
+    @State private var path: [AppRoute] = []
+    @State private var filtersQuery: String = ""
+    @State private var filtersEarliest: String = "06:30"
+    @State private var filtersLatest: String = "09:00"
+    @State private var filtersDays: DaysOfWeekFlags = .weekdays
     /// Notifications toggle is now persisted via @AppStorage so it survives
     /// app restarts — previously a pure @State, it reset to true every
     /// launch regardless of the user's preference.
     @AppStorage("voygo.settings.notificationsEnabled") private var notificationsEnabled: Bool = true
-    // showVerification used to drive a legacy step-wizard sheet. The KYC
-    // card now pushes `KycVerificationView` via the path, so the sheet
-    // and its state are removed to eliminate the dead UI surface.
-    @State private var showPrivacy = false
-    @State private var showHelp = false
     @State private var showLogoutAlert = false
     /// Throttles the logout alert primary button so a double-tap can't
     /// queue two logout calls (low-stakes but ugly when it happens).
@@ -55,45 +52,18 @@ struct ProfileView: View {
                         }
                         .padding(.horizontal, 16)
                         .padding(.top, 4)
-                        .padding(.bottom, 108)
+                        .padding(.bottom, VTabBarLayout.clearance)
                     }
                 }
             }
             .navigationBarHidden(true)
-            .navigationDestination(for: ProfileRoute.self) { route in
-                switch route {
-                case .wallet:
-                    WalletView(onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
-                case .tripHistory:
-                    TripHistoryView(
-                        onBack: { path.removeLast() },
-                        onOpenReceipt: { id in path.append(.receipt(id: id)) }
-                    )
-                    .navigationBarHidden(true)
-                case .notifications:
-                    NotificationsView(onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
-                case .receipt(let id):
-                    ReceiptView(bookingId: id, onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
-                case .driverDashboard:
-                    DriverDashboardView(
-                        onBack: { path.removeLast() },
-                        onOpenCalendar: { _ in },
-                        onOpenPayouts: { path.append(.driverPayouts) }
-                    )
-                    .navigationBarHidden(true)
-                case .driverPayouts:
-                    DriverPayoutsView(onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
-                case .kyc:
-                    KycVerificationView(onBack: { path.removeLast() })
-                        .navigationBarHidden(true)
-                }
-            }
-            .sheet(isPresented: $showPrivacy)      { PrivacySecurityView(onBack: { showPrivacy = false }) }
-            .sheet(isPresented: $showHelp)         { HelpCenterView(onBack: { showHelp = false }) }
+            .appRouteDestinations(
+                path: $path,
+                filtersQuery: $filtersQuery,
+                filtersEarliest: $filtersEarliest,
+                filtersLatest: $filtersLatest,
+                filtersDays: $filtersDays
+            )
             .alert("Log Out", isPresented: $showLogoutAlert) {
                 Button("Log Out", role: .destructive) {
                     guard !isLoggingOut else { return }
@@ -199,7 +169,7 @@ struct ProfileView: View {
             VStack(spacing: 0) {
                 row(icon: "bell.fill", color: VPalette.warning, title: "Notifications", trailing: AnyView(Toggle("", isOn: $notificationsEnabled).labelsHidden().tint(VPalette.primary)))
                 divider()
-                row(icon: "shield.lefthalf.filled", color: VPalette.accent, title: "Privacy & Security", chevron: true) { showPrivacy = true }
+                row(icon: "shield.lefthalf.filled", color: VPalette.accent, title: "Privacy & Security", chevron: true) { path.append(.privacy) }
                 divider()
                 row(icon: "creditcard.fill", color: VPalette.primary, title: "Payment methods", trailingText: "DuitNow · TNG") { path.append(.wallet) }
                 divider()
@@ -207,7 +177,7 @@ struct ProfileView: View {
                 divider()
                 row(icon: "doc.text.fill", color: VPalette.accent, title: "Trip history", chevron: true) { path.append(.tripHistory) }
                 divider()
-                row(icon: "questionmark.circle.fill", color: VPalette.secondary, title: "Help Center", chevron: true) { showHelp = true }
+                row(icon: "questionmark.circle.fill", color: VPalette.secondary, title: "Help Center", chevron: true) { path.append(.help) }
             }
             .background(VPalette.surface)
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
@@ -394,7 +364,7 @@ struct VerificationView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(title: "Identity Verification", showBack: true, onBack: onBack)
+                VPolishedNavBar(title: "Identity Verification", onBack: onBack)
                     .background(VoygoTheme.background)
 
                 StepperHeaderView(currentStep: vm.step, totalSteps: 3, titles: ["Documents", "Selfie", "Vehicle"])
@@ -499,7 +469,7 @@ struct PrivacySecurityView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(title: "Privacy & Security", showBack: true, onBack: onBack).background(VoygoTheme.background)
+                VPolishedNavBar(title: "Privacy & Security", onBack: onBack)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         Text("Privacy Controls").font(.title3.bold()).foregroundColor(VoygoTheme.textPrimary)
@@ -533,7 +503,7 @@ struct HelpCenterView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(title: "Help Center", showBack: true, onBack: onBack).background(VoygoTheme.background)
+                VPolishedNavBar(title: "Help Center", onBack: onBack)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         HStack {

@@ -9,6 +9,11 @@ struct RateRideView: View {
     let dateLabel: String
     let durationLabel: String
     var onSubmit: (Int, [String], Int) -> Void
+    /// Pop one level — go back to LiveTrip. Bound to the chevron.
+    var onBack: () -> Void = {}
+    /// Skip rating entirely and pop to root. Bound to the visible
+    /// "Skip" pill in the trailing nav slot. Previously the chevron
+    /// did this implicitly which surprised users.
     var onSkip: () -> Void
 
     @State private var rating: Int = 5
@@ -21,8 +26,18 @@ struct RateRideView: View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Rate your ride", onBack: onSkip) {
-                    Text("Skip").font(.system(size: 12, weight: .bold)).foregroundColor(VPalette.textSec)
+                VPolishedNavBar(title: "Rate your ride", onBack: onBack) {
+                    Button(action: onSkip) {
+                        Text("Skip")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(VPalette.textSec)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(VPalette.surfaceHigh)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Skip rating")
                 }
                 ScrollView {
                     VStack(spacing: 22) {
@@ -206,6 +221,7 @@ struct FlowLayout: Layout {
         dateLabel:     "8 May",
         durationLabel: "52 min",
         onSubmit:      { _, _, _ in },
+        onBack:        {},
         onSkip:        {}
     )
     .environment(AppStore())

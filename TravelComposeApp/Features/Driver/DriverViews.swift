@@ -29,22 +29,20 @@ struct DriverDashboardView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(
-                    title: "Driver Dashboard",
-                    showBack: true,
-                    onBack: onBack,
-                    trailingContent: onOpenPayouts.map { handler in
-                        AnyView(
-                            Button(action: handler) {
-                                Image(systemName: "banknote.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(VoygoTheme.primary)
-                                    .frame(width: 44, height: 44)
-                            }
-                        )
+                VPolishedNavBar(title: "Driver Dashboard", onBack: onBack) {
+                    if let onOpenPayouts {
+                        Button(action: onOpenPayouts) {
+                            Image(systemName: "banknote.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(VPalette.primary)
+                                .frame(width: 40, height: 40)
+                                .background(VPalette.primaryContainer)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Payouts")
                     }
-                )
-                .background(VoygoTheme.background)
+                }
 
                 if dashboards.isEmpty {
                     EmptyStateView(icon: "car.badge.plus", title: "No routes yet",
@@ -495,7 +493,7 @@ struct CreateRouteView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(title: "Create Route", showBack: true, onBack: onBack)
+                VPolishedNavBar(title: "Create Route", onBack: onBack)
                     .background(VoygoTheme.background)
 
                 ScrollView {

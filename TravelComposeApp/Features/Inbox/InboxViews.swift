@@ -4,28 +4,21 @@ import SwiftUI
 
 struct InboxView: View {
     @Environment(AppStore.self) private var store
-    @State private var selectedThreadId: String? = nil
+    /// Path-based stack so the chat thread can use the same custom
+    /// VPolishedNavBar pattern as the rest of the app, instead of the
+    /// system blue back arrow that came with the legacy NavigationLink.
+    @State private var path: [InboxRoute] = []
+
+    enum InboxRoute: Hashable {
+        case thread(id: String, title: String)
+    }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ZStack(alignment: .top) {
-                VoygoTheme.background.ignoresSafeArea()
+                VPalette.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
-                    VoygoNavBar(
-                        title: "Inbox",
-                        trailingContent: AnyView(
-                            Group {
-                                if store.threads.contains(where: { $0.unreadCount > 0 }) {
-                                    Text("\(store.threads.map(\.unreadCount).reduce(0, +))")
-                                        .font(.caption.bold())
-                                        .padding(.horizontal, 8).padding(.vertical, 3)
-                                        .background(VoygoTheme.danger)
-                                        .foregroundColor(.white)
-                                        .clipShape(Capsule())
-                                }
-                            }
-                        )
-                    )
+                    VPolishedNavBar(title: "Inbox", kicker: inboxKicker)
 
                     if store.threads.isEmpty {
                         EmptyStateView(icon: "bubble.left.and.bubble.right",
@@ -34,7 +27,9 @@ struct InboxView: View {
                         ScrollView {
                             VStack(spacing: 10) {
                                 ForEach(store.threads) { thread in
-                                    NavigationLink(destination: ChatThreadView(threadId: thread.id, title: thread.title)) {
+                                    Button {
+                                        path.append(.thread(id: thread.id, title: thread.title))
+                                    } label: {
                                         ThreadRow(thread: thread)
                                             .padding(.horizontal, 16)
                                     }
@@ -42,7 +37,7 @@ struct InboxView: View {
                                 }
                             }
                             .padding(.vertical, 12)
-                            .padding(.bottom, 96)
+                            .padding(.bottom, VTabBarLayout.clearance)
                         }
                         .refreshable {
                             await store.refreshAll()
@@ -51,10 +46,28 @@ struct InboxView: View {
                 }
             }
             .navigationBarHidden(true)
+            .navigationDestination(for: InboxRoute.self) { route in
+                switch route {
+                case .thread(let id, let title):
+                    ChatThreadView(
+                        threadId: id,
+                        title: title,
+                        onBack: { if !path.isEmpty { path.removeLast() } }
+                    )
+                    .navigationBarHidden(true)
+                }
+            }
         }
         .task {
             await store.refreshAll()
         }
+    }
+
+    /// Total unread count formatted as a kicker above the title — replaces
+    /// the legacy red badge in the trailing slot. Empty when zero.
+    private var inboxKicker: String? {
+        let total = store.threads.map(\.unreadCount).reduce(0, +)
+        return total > 0 ? "\(total) unread" : nil
     }
 }
 
@@ -89,6 +102,9 @@ struct ThreadRow: View {
 struct ChatThreadView: View {
     let threadId: String
     let title: String
+    /// Pop-up callback. Required because Inbox now drives the back via
+    /// its own NavigationStack path, not the system back chevron.
+    var onBack: () -> Void = {}
     @Environment(AppStore.self) private var store
     @State private var newMessage = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
@@ -97,8 +113,10 @@ struct ChatThreadView: View {
 
     var body: some View {
         ZStack {
-            VoygoTheme.background.ignoresSafeArea()
+            VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
+                VPolishedNavBar(title: title, kicker: "Direct chat", onBack: onBack)
+
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 6) {
@@ -118,27 +136,24 @@ struct ChatThreadView: View {
                 HStack(spacing: 10) {
                     TextField("Message...", text: $newMessage)
                         .padding(.horizontal, 14).padding(.vertical, 10)
-                        .background(VoygoTheme.surfaceHigh)
+                        .background(VPalette.surfaceHigh)
                         .cornerRadius(22)
-                        .foregroundColor(VoygoTheme.textPrimary)
-                        .tint(VoygoTheme.primary)
+                        .foregroundColor(VPalette.text)
+                        .tint(VPalette.primary)
 
                     Button(action: sendMessage) {
                         let isEmpty = newMessage.trimmingCharacters(in: .whitespaces).isEmpty
                         Image(systemName: "paperplane.circle.fill")
                             .font(.system(size: 36))
-                            .foregroundColor(isEmpty ? VoygoTheme.textHint : VoygoTheme.primary)
+                            .foregroundColor(isEmpty ? VPalette.textHint : VPalette.primary)
                     }
                     .disabled(newMessage.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(VoygoTheme.surface)
+                .background(VPalette.surface)
             }
         }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(VoygoTheme.background, for: .navigationBar)
         .task(id: threadId) {
             await store.refreshMessages(threadId: threadId)
             scrollToBottom()

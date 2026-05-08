@@ -16,8 +16,7 @@ struct DriverPayoutsView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(title: "This week", showBack: true, onBack: onBack)
-                    .background(VoygoTheme.background)
+                VPolishedNavBar(title: "This week", kicker: "Driver payouts", onBack: onBack)
 
                 if isLoading && store.payout == nil {
                     LoadingView()

@@ -152,8 +152,17 @@ struct VPrimaryButton: View {
         self.action = action
     }
 
+    @State private var hapticTrigger: Int = 0
+
     var body: some View {
-        Button(action: action) {
+        Button {
+            // Primary CTAs are the highest-stakes taps in the app
+            // (Subscribe & pay, Send OTP, Submit review). A short
+            // medium-strength impact gives confirmation without
+            // being intrusive — modern iOS apps universally do this.
+            hapticTrigger &+= 1
+            action()
+        } label: {
             HStack(spacing: 8) {
                 if isLoading {
                     ProgressView().tint(.white)
@@ -172,6 +181,7 @@ struct VPrimaryButton: View {
             .shadow(color: isEnabled ? VPalette.primary.opacity(0.35) : .clear, radius: 22, x: 0, y: 8)
         }
         .disabled(!isEnabled || isLoading)
+        .sensoryFeedback(.impact(weight: .medium), trigger: hapticTrigger)
     }
 }
 
@@ -501,5 +511,29 @@ struct VHeroGradient<Content: View>: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
         .shadow(color: VPalette.primary.opacity(0.45), radius: 22, x: 0, y: 12)
+    }
+}
+
+// MARK: - Tab bar safe-area
+//
+// `VoygoTabBar` floats above the home indicator at ~80–88pt total
+// height. Every tab root used to set its own `padding(.bottom, X)`
+// with hand-tuned values (96, 108, 110) that drifted as the bar
+// design changed. One constant + one modifier — change once, every
+// tab adapts.
+
+enum VTabBarLayout {
+    /// Visible content height of the floating tab bar (icon + label +
+    /// vertical padding) PLUS extra clearance for the home indicator.
+    /// Adjust this if the bar's chrome changes.
+    static let clearance: CGFloat = 110
+}
+
+extension View {
+    /// Reserves bottom padding so floating tab bar doesn't overlap the
+    /// last row of scrolled content. Apply at the bottom of any
+    /// `ScrollView` whose parent is a tab root.
+    func tabBarClearance() -> some View {
+        self.padding(.bottom, VTabBarLayout.clearance)
     }
 }

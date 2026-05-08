@@ -22,21 +22,18 @@ struct MySubscriptionsView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(
-                    title: "My Subscriptions",
-                    showBack: onBack != nil,
-                    onBack: onBack,
-                    trailingContent: AnyView(
-                        Button(action: onOpenCalendar) {
-                            Image(systemName: "calendar").font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(VoygoTheme.primary)
-                                .frame(width: 36, height: 36)
-                                .background(VoygoTheme.surfaceHigh)
-                                .clipShape(Circle())
-                        }
-                    )
-                )
-                .background(VoygoTheme.background)
+                VPolishedNavBar(title: "My Subscriptions", onBack: onBack) {
+                    Button(action: onOpenCalendar) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(VPalette.primary)
+                            .frame(width: 40, height: 40)
+                            .background(VPalette.primaryContainer)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Calendar")
+                }
 
                 if items.isEmpty {
                     EmptyStateView(icon: "mappin.slash", title: "No subscriptions",
@@ -319,7 +316,7 @@ struct UpcomingCalendarView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VoygoNavBar(title: "Upcoming Commutes", showBack: true, onBack: onBack)
+                VPolishedNavBar(title: "Upcoming Commutes", onBack: onBack)
                     .background(VoygoTheme.background)
 
                 if items.isEmpty {
