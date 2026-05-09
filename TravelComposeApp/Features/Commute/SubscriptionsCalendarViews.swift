@@ -182,16 +182,11 @@ struct MySubscriptionsView: View {
             let tier = item.subscription.tier
                 .flatMap { SubscriptionTier(rawValue: $0) } ?? .monthly
             let days = item.subscription.totalDays ?? 30
-            let amount = SubscriptionPricing.totalForTier(
-                pricePerSeatMyr: item.route.pricePerSeat,
-                tier: tier,
-                days: days
-            )
+            // Backend re-derives the amount; we only pass id + tier + days.
             let charge = await store.startCharge(
                 subscriptionId: item.subscription.id,
-                routeId: item.route.id,
-                amountMyr: amount,
-                tier: tier
+                tier: tier,
+                days: days
             )
             retryingId = nil
             switch charge {

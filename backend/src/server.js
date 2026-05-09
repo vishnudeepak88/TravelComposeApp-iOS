@@ -13,7 +13,7 @@ const {
   hashOtp,
   normalizePhone
 } = require("./auth");
-const { sendSms, smsConfigured, isProd } = require("./sms");
+const { sendSms, smsConfigured } = require("./sms");
 const { generateRideInstances } = require("./generation");
 const { autocompletePlaces } = require("./places");
 const {
@@ -205,23 +205,31 @@ app.post(
       });
       if (!result.ok) {
         console.warn(`[auth] sms send failed for ${phone}: ${result.reason}`);
-        if (isProd()) {
+        if (config.isProduction) {
           res.status(502).json({ detail: "sms_provider_error" });
           return;
         }
       }
-    } else if (isProd()) {
+    } else if (config.isProduction) {
       // Refuse to silently fall through to dev-mode in production. Better
       // to return 503 and have ops notice than to issue an OTP only the
       // server log can see.
       console.error("[auth] OTP requested in production but SMS is unconfigured — refusing");
       res.status(503).json({ detail: "sms_unconfigured" });
       return;
-    } else {
+    } else if (config.authDevMode) {
+      // Dev-only: log the code so the engineer running the local server
+      // can grab it without an SMS account. Hard-gated behind both the
+      // dev-mode flag AND a non-production NODE_ENV so it can never
+      // leak from a real deploy.
       console.log(`[auth] OTP for ${phone}: ${code} (expires ${expiresAt.toISOString()})`);
     }
     const response = { sent: true, expiresAt: expiresAt.toISOString() };
-    if (config.authDevMode && !smsConfigured()) response.devCode = code;
+    // devCode is returned only when explicitly in dev-mode AND not in
+    // production — never echo verification codes to a real client.
+    if (config.authDevMode && !config.isProduction && !smsConfigured()) {
+      response.devCode = code;
+    }
     res.json(response);
   })
 );
@@ -333,22 +341,43 @@ app.put(
   })
 );
 
-app.put(
-  "/users/me/kyc",
+// KYC self-submit. The previous implementation accepted any of
+// NOT_STARTED / PENDING / APPROVED / REJECTED from the client, which
+// let any authenticated user mark themselves APPROVED and unlock
+// driver mode without ever being reviewed. This endpoint is now
+// scoped to one transition only: the user attests they have uploaded
+// their documents and is requesting review (status moves to PENDING).
+//
+// APPROVED / REJECTED are reachable only via an admin/provider path
+// — TODO: ship that admin endpoint behind requireAdmin once the
+// trust & safety review tool exists. Until then, status flips to
+// APPROVED happen via direct DB update by ops.
+app.post(
+  "/users/me/kyc/submit",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const status = String(req.body?.status || req.body?.kycStatus || "")
-      .toUpperCase()
-      .trim();
-    if (!KYC_STATUSES.has(status)) {
-      res.status(400).json({ detail: "invalid kyc status" });
+    // Soft-require at least one uploaded document before flipping to
+    // PENDING — otherwise the ops queue fills with empty submissions.
+    const docs = await pool.query(
+      "SELECT 1 FROM kyc_documents WHERE user_id = $1 LIMIT 1",
+      [req.user.id]
+    );
+    if (docs.rowCount === 0) {
+      res.status(400).json({ detail: "no_documents_uploaded" });
       return;
     }
     await pool.query(
-      "UPDATE users SET kyc_status = $2, updated_at = NOW() WHERE id = $1",
-      [req.user.id, status]
+      `UPDATE users
+          SET kyc_status = 'PENDING', updated_at = NOW()
+        WHERE id = $1
+          AND kyc_status IN ('NOT_STARTED', 'PENDING', 'REJECTED')`,
+      [req.user.id]
     );
-    res.json({ kycStatus: status });
+    const after = await pool.query(
+      "SELECT kyc_status FROM users WHERE id = $1",
+      [req.user.id]
+    );
+    res.json({ kycStatus: after.rows[0]?.kyc_status || "PENDING" });
   })
 );
 
@@ -515,17 +544,39 @@ app.post(
   })
 );
 
-// GET /rides/:rideId/stream — Server-Sent Events feed of the latest
-// driver-pushed location plus future updates while the rider keeps
-// the stream open. Anyone authenticated can subscribe; we don't
-// gate by ride participation here because the ride id itself is a
-// hard-to-guess UUID and notification deep links carry it. If
-// privacy concerns escalate, gate by `confirmed_passengers`.
+// GET /rides/:rideId/stream — Server-Sent Events feed of the driver's
+// live location for a specific ride. Restricted to participants:
+// either the route's driver, or a passenger who has booked or is
+// subscribed to the route this ride belongs to. Knowing the ride
+// UUID alone is not sufficient — UUIDs leak through screenshots,
+// share sheets and notification payloads.
 app.get(
   "/rides/:rideId/stream",
   requireAuth,
   asyncHandler(async (req, res) => {
     const rideId = String(req.params.rideId);
+
+    // Authorise: caller must be the driver of the route, OR have a
+    // passenger row on this ride, OR hold a non-cancelled subscription
+    // on the route this ride belongs to. Anything else is a 403.
+    const access = await pool.query(
+      `SELECT 1
+         FROM commute_ride_instances i
+         JOIN recurring_routes r ON r.id = i.route_id
+         LEFT JOIN commute_ride_passengers p ON p.instance_id = i.id AND p.rider_id = $2
+         LEFT JOIN route_subscriptions s
+                ON s.route_id = r.id
+               AND s.rider_id = $2
+               AND s.status <> 'CANCELLED'
+        WHERE i.id = $1
+          AND (r.driver_id = $2 OR p.rider_id IS NOT NULL OR s.id IS NOT NULL)
+        LIMIT 1`,
+      [rideId, req.user.id]
+    );
+    if (access.rowCount === 0) {
+      res.status(403).json({ detail: "not_a_ride_participant" });
+      return;
+    }
 
     res.set({
       "Content-Type": "text/event-stream",
@@ -605,9 +656,21 @@ app.get(
 // here when `KYC_S3_BUCKET` is set; same response shape so iOS
 // doesn't need to know which backend.
 
+// KYC storage. Local-disk fallback (writing to `KYC_STORAGE_DIR`) is
+// fine for development but unsafe in production:
+//   1. PII at rest is unencrypted.
+//   2. Render's local disk is ephemeral — restarts wipe uploads.
+//   3. There's no retention policy or access audit.
+// In production we therefore require either a real durable backend
+// (S3 today; same env contract as the document signer ops will swap
+// in) or the endpoint refuses to accept uploads with 503. Any future
+// S3 path lands behind `KYC_S3_BUCKET`; until that's wired we fail
+// loud rather than pretend.
 const KYC_STORAGE_DIR =
   process.env.KYC_STORAGE_DIR ||
   path.join(__dirname, "..", "var", "kyc");
+
+const KYC_S3_BUCKET = process.env.KYC_S3_BUCKET || "";
 
 function ensureKycDirSync() {
   try { fs.mkdirSync(KYC_STORAGE_DIR, { recursive: true }); } catch (_e) {}
@@ -620,6 +683,14 @@ app.post(
   // the bytes directly. The iOS side sets Content-Type to image/jpeg.
   express.raw({ type: ["image/*", "application/octet-stream"], limit: "8mb" }),
   asyncHandler(async (req, res) => {
+    // Production storage gate — never silently write PII to a local
+    // disk that will evaporate on the next deploy.
+    if (config.isProduction && !KYC_S3_BUCKET) {
+      console.error("[kyc] upload refused: KYC_S3_BUCKET unset in production");
+      res.status(503).json({ detail: "kyc_storage_unconfigured" });
+      return;
+    }
+
     const kind = String(req.query.kind || req.body?.kind || "").trim();
     if (!kind) {
       res.status(400).json({ detail: "kind query param required" });
@@ -640,6 +711,11 @@ app.post(
     const ext = contentType.includes("png") ? "png"
               : contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg"
               : "bin";
+
+    // Local-disk path is reachable only outside production (the gate
+    // above blocks it there). When the S3 bucket is wired this branch
+    // gets replaced with a real upload — the response shape is
+    // unchanged so iOS doesn't need to know which backend served it.
     ensureKycDirSync();
     const filename = `${id}.${ext}`;
     const fullPath = path.join(KYC_STORAGE_DIR, filename);
@@ -963,7 +1039,7 @@ app.post(
 // reminders` from a scheduled job.
 app.post(
   "/admin/dispatch-ride-reminders",
-  requireAuth,
+  requireAdmin,
   asyncHandler(async (_req, res) => {
     const lookaheadHours = Number(process.env.RIDE_REMINDER_HOURS || 12);
     const result = await pool.query(
@@ -1045,7 +1121,7 @@ app.post(
 
 app.post(
   "/admin/prune-ride-locations",
-  requireAuth,
+  requireAdmin,
   asyncHandler(async (_req, res) => {
     const ttlHours = Number(process.env.RIDE_LOCATIONS_TTL_HOURS || 48);
     const result = await pool.query(
@@ -1890,24 +1966,138 @@ app.post(
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     const subscriptionId = bodyValue(body, "subscriptionId", "subscription_id");
-    const routeId = bodyValue(body, "routeId", "route_id");
-    const amountMyr = Number(bodyValue(body, "amountMyr", "amount_myr"));
-    if (!Number.isFinite(amountMyr) || amountMyr < 1) {
-      res.status(400).json({ detail: "amountMyr is required (>= RM 1)" });
+    const tier = String(bodyValue(body, "tier") || "MONTHLY").toUpperCase();
+    if (!SUBSCRIPTION_TIERS.has(tier)) {
+      res.status(400).json({ detail: "invalid_tier" });
       return;
     }
-    const tier = String(bodyValue(body, "tier") || "MONTHLY").toUpperCase();
+    if (!subscriptionId) {
+      res.status(400).json({ detail: "subscriptionId is required" });
+      return;
+    }
+
+    // Look up the subscription + its route. Authorising the caller AND
+    // computing the price from server-truth, so a tampered iOS build
+    // can't ask to be charged RM 1 for a RM 220 monthly tier.
+    const subRes = await pool.query(
+      `SELECT s.id, s.rider_id, s.route_id, s.start_date, s.end_date,
+              s.status, r.price_per_seat
+         FROM route_subscriptions s
+         JOIN recurring_routes r ON r.id = s.route_id
+        WHERE s.id = $1
+        LIMIT 1`,
+      [subscriptionId]
+    );
+    if (subRes.rowCount === 0) {
+      res.status(404).json({ detail: "subscription_not_found" });
+      return;
+    }
+    const sub = subRes.rows[0];
+    if (String(sub.rider_id) !== req.user.id) {
+      res.status(403).json({ detail: "not_your_subscription" });
+      return;
+    }
+    if (sub.status === "CANCELLED") {
+      res.status(409).json({ detail: "subscription_cancelled" });
+      return;
+    }
+
+    // Idempotency: refuse to open a second pending charge for the same
+    // subscription+tier. Riders who tap "Pay" twice (or whose redirect
+    // bounces) shouldn't end up with two Billplz bills.
+    const dupRes = await pool.query(
+      `SELECT id, billplz_payment_url
+         FROM payments
+        WHERE subscription_id = $1
+          AND tier = $2
+          AND status = 'PENDING'
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [subscriptionId, tier]
+    );
+    if (dupRes.rowCount > 0) {
+      res.json({
+        paymentId: dupRes.rows[0].id,
+        status: "PENDING",
+        paymentUrl: dupRes.rows[0].billplz_payment_url,
+        reused: true
+      });
+      return;
+    }
+
+    // Server-truth price. Mirrors `SubscriptionPricing.totalForTier` on
+    // iOS (Models/Trust.swift) — keep these two in sync until they share
+    // a code path. Days are derived from the subscription range so a
+    // partial-month signup pays the right pro-rated amount.
+    const daysClient = clampDays(bodyValue(body, "days", "totalDays"));
+    const days = daysClient ?? subscriptionWorkingDays(sub.start_date, sub.end_date);
+    const amountMyr = computeSubscriptionAmount(
+      Number(sub.price_per_seat),
+      tier,
+      days
+    );
+    if (!Number.isFinite(amountMyr) || amountMyr < 1) {
+      res.status(500).json({ detail: "amount_computation_failed" });
+      return;
+    }
+
     const result = await chargeSubscription(pool, {
       userId: req.user.id,
-      subscriptionId,
-      routeId,
+      subscriptionId: sub.id,
+      routeId: sub.route_id,
       amountMyr,
       tier,
       contact: bodyValue(body, "contact") || {}
     });
-    res.json(result);
+    res.json({ ...result, amountMyr });
   })
 );
+
+const SUBSCRIPTION_TIERS = new Set(["DAILY", "MONTHLY", "QUARTERLY"]);
+
+function tierBillingDays(tier) {
+  switch (tier) {
+    case "DAILY":     return 1;
+    case "QUARTERLY": return 66;
+    case "MONTHLY":
+    default:          return 22;
+  }
+}
+
+function tierDiscountFactor(tier) {
+  switch (tier) {
+    case "DAILY":     return 1.00;
+    case "QUARTERLY": return 0.85;
+    case "MONTHLY":
+    default:          return 0.90;
+  }
+}
+
+function clampDays(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(1, Math.min(Math.floor(n), 90));
+}
+
+function subscriptionWorkingDays(start, end) {
+  if (!start || !end) return 22;
+  const startMs = new Date(start).getTime();
+  const endMs   = new Date(end).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return 22;
+  let count = 0;
+  for (let t = startMs; t <= endMs; t += 86_400_000) {
+    const wd = new Date(t).getUTCDay();
+    if (wd >= 1 && wd <= 5) count += 1;
+  }
+  return Math.max(1, count);
+}
+
+function computeSubscriptionAmount(pricePerSeatMyr, tier, days) {
+  if (!Number.isFinite(pricePerSeatMyr) || pricePerSeatMyr < 1) return 0;
+  const perSeat = Math.max(1, Math.round(pricePerSeatMyr * tierDiscountFactor(tier)));
+  const billable = Math.max(1, Math.min(days, tierBillingDays(tier)));
+  return perSeat * billable;
+}
 
 app.get(
   "/payments/me",

@@ -293,19 +293,27 @@ final class AppStore {
     /// proceed straight to confirmation (mock mode). Result is also cached
     /// in `lastChargeResult` so peripheral views (Wallet hero, BookingConfirmed
     /// banner) can react without re-binding the in-flight task.
+    /// Charges the rider for a subscription tier. The `amountMyr` is no
+    /// longer trusted from the client — the backend looks up the route's
+    /// price-per-seat, applies the tier discount, and computes the
+    /// authoritative amount. Callers may keep their own pre-computed
+    /// estimate for display (e.g. on the subscribe button), but it has
+    /// no effect on what gets charged.
+    ///
+    /// `subscriptionId` is required. The previous `routeId` parameter
+    /// was redundant — the server resolves the route via the
+    /// subscription join — and `amountMyr` is removed entirely.
     func startCharge(
-        subscriptionId: String?,
-        routeId: String?,
-        amountMyr: Int,
-        tier: SubscriptionTier
+        subscriptionId: String,
+        tier: SubscriptionTier,
+        days: Int? = nil
     ) async -> Result<PaymentChargeResult, AppError> {
         guard isAuthenticated else { return .failure(.message("Sign in first")) }
         do {
             let result = try await VoygoAPIClient.chargeSubscription(
                 subscriptionId: subscriptionId,
-                routeId: routeId,
-                amountMyr: amountMyr,
-                tier: tier
+                tier: tier,
+                days: days
             )
             lastChargeResult = result
             await refreshPayments()
@@ -601,11 +609,17 @@ final class AppStore {
         }
     }
 
-    func submitKyc(status: KycStatus) async -> Result<Void, AppError> {
+    /// Submits the user's uploaded documents for trust-and-safety review.
+    /// Server unconditionally moves the user to PENDING (or rejects with
+    /// `no_documents_uploaded`) — APPROVED and REJECTED are admin-only,
+    /// so this method intentionally does not take a target status. The
+    /// previous `submitKyc(status:)` signature implied the client could
+    /// pick its own KYC outcome and is removed.
+    func submitKycForReview() async -> Result<Void, AppError> {
         guard isAuthenticated else { return .failure(.message("Sign in first")) }
         do {
-            let response = try await VoygoAPIClient.updateKyc(status: status)
-            kycStatus = KycStatus(rawValue: response.kycStatus) ?? status
+            let response = try await VoygoAPIClient.submitKycForReview()
+            kycStatus = KycStatus(rawValue: response.kycStatus) ?? .pending
             UserDefaults.standard.set(kycStatus.rawValue, forKey: SessionKeys.kycStatus)
             return .success(())
         } catch APIError.unauthorized {

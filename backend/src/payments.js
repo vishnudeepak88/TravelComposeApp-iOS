@@ -217,12 +217,13 @@ async function chargeSubscription(pool, { userId, subscriptionId, routeId, amoun
   });
 
   if (config.billplz.isMockMode) {
-    // SAFETY: in production a missing Billplz key would silently mark every
-    // ride paid. Refuse to do that — fail loud so ops notices instead of
-    // discovering it via a revenue ledger that doesn't match reality.
-    if (process.env.NODE_ENV === "production") {
+    // Defense-in-depth: config.js already refuses to start in production
+    // when Billplz keys are missing, but the mock path is dangerous
+    // enough that we double-check here. Better to throw than to mark
+    // a real charge PAID without taking the rider's money.
+    if (config.isProduction) {
       console.error(
-        "[payments] BILLPLZ_API_KEY/COLLECTION_ID unset in production — refusing to mock-pay"
+        "[payments] mock-mode reached in production — refusing to mock-pay"
       );
       const err = new Error("payments_unconfigured");
       err.statusCode = 503;

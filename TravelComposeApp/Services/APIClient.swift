@@ -1,4 +1,31 @@
 import Foundation
+import os.log
+
+/// DEBUG-only diagnostics channel for the HTTP client. Production builds
+/// see only the privacy-public fields explicitly emitted; response
+/// bodies are gated behind `#if DEBUG` and pass through `errorSnippet`
+/// for token redaction.
+private let apiLog = Logger(subsystem: "app.voygo", category: "api")
+
+private extension DecodingError {
+    /// Compact, single-line description suitable for os_log. We keep
+    /// the path + debug description and drop the underlying error
+    /// (it tends to be very long and wraps to the prior context).
+    var shortDescription: String {
+        switch self {
+        case .typeMismatch(let type, let ctx):
+            return "typeMismatch \(type) at \(ctx.codingPath.map(\.stringValue).joined(separator: ".")): \(ctx.debugDescription)"
+        case .valueNotFound(let type, let ctx):
+            return "valueNotFound \(type) at \(ctx.codingPath.map(\.stringValue).joined(separator: ".")): \(ctx.debugDescription)"
+        case .keyNotFound(let key, let ctx):
+            return "keyNotFound \(key.stringValue) at \(ctx.codingPath.map(\.stringValue).joined(separator: ".")): \(ctx.debugDescription)"
+        case .dataCorrupted(let ctx):
+            return "dataCorrupted at \(ctx.codingPath.map(\.stringValue).joined(separator: ".")): \(ctx.debugDescription)"
+        @unknown default:
+            return "decoding error: \(localizedDescription)"
+        }
+    }
+}
 
 // MARK: - API Client (mirrors Android ApiService.kt)
 
@@ -30,9 +57,14 @@ struct VoygoAPIClient {
         try await get(baseURL.appendingPathComponent("auth/me"), as: AuthUserDTO.self)
     }
 
-    static func updateKyc(status: KycStatus) async throws -> KycResponse {
-        let body = UpdateKycRequest(status: status.rawValue)
-        return try await put(body, to: baseURL.appendingPathComponent("users/me/kyc"), as: KycResponse.self)
+    /// Submits the user's uploaded KYC documents for review. Server
+    /// flips status to PENDING; APPROVED/REJECTED are admin-only and
+    /// not reachable from this client. Renamed from `updateKyc(status:)`
+    /// — the previous name implied the client could pick a target
+    /// state (including APPROVED), which it explicitly cannot.
+    static func submitKycForReview() async throws -> KycResponse {
+        let body = EmptyRequest()
+        return try await post(body, to: baseURL.appendingPathComponent("users/me/kyc/submit"), as: KycResponse.self)
     }
 
     static func updateDisplayName(_ name: String) async throws {
@@ -53,17 +85,19 @@ struct VoygoAPIClient {
 
     // MARK: - Payments + payouts
 
+    /// Charge a subscription. Server derives the amount from the
+    /// route × tier × days; the client no longer sends a trusted
+    /// `amountMyr`. `days` is optional metadata — backend falls back
+    /// to the subscription's date range when omitted.
     static func chargeSubscription(
-        subscriptionId: String?,
-        routeId: String?,
-        amountMyr: Int,
-        tier: SubscriptionTier
+        subscriptionId: String,
+        tier: SubscriptionTier,
+        days: Int? = nil
     ) async throws -> PaymentChargeResult {
         let body = ChargeSubscriptionRequest(
             subscriptionId: subscriptionId,
-            routeId: routeId,
-            amountMyr: amountMyr,
-            tier: tier.rawValue
+            tier: tier.rawValue,
+            days: days
         )
         return try await post(body, to: baseURL.appendingPathComponent("payments/charge"), as: PaymentChargeResult.self)
     }
@@ -229,8 +263,8 @@ struct VoygoAPIClient {
         let url = baseURL.appendingPathComponent("rides/\(rideId)/location")
         var req = authedRequest(url, method: "POST")
         req.httpBody = try encoder.encode(body)
-        let (_, response) = try await session.data(for: req)
-        try validate(response)
+        let (data, response) = try await session.data(for: req)
+        try validate(response, data: data, url: url)
     }
 
     // MARK: - Pilot-blocker plumbing
@@ -245,12 +279,13 @@ struct VoygoAPIClient {
         var comps = URLComponents(url: baseURL.appendingPathComponent("users/me/kyc-documents/upload"),
                                   resolvingAgainstBaseURL: false)!
         comps.queryItems = [URLQueryItem(name: "kind", value: kind.rawValue)]
-        var req = authedRequest(comps.url!, method: "POST")
+        let url = comps.url!
+        var req = authedRequest(url, method: "POST")
         req.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         req.httpBody = imageData
         let (data, response) = try await session.data(for: req)
-        try validate(response)
-        return try decode(KycUploadResponse.self, from: data)
+        try validate(response, data: data, url: url)
+        return try decode(KycUploadResponse.self, from: data, url: url)
     }
 
     /// POST /safety/sos — persists the alert to the on-call queue.
@@ -361,38 +396,38 @@ struct VoygoAPIClient {
     private static func get<T: Decodable>(_ url: URL, as type: T.Type) async throws -> T {
         let req = authedRequest(url, method: "GET")
         let (data, response) = try await session.data(for: req)
-        try validate(response)
-        return try decode(T.self, from: data)
+        try validate(response, data: data, url: url)
+        return try decode(T.self, from: data, url: url)
     }
 
     private static func post<B: Encodable, R: Decodable>(_ body: B, to url: URL, as type: R.Type) async throws -> R {
         var req = authedRequest(url, method: "POST")
         req.httpBody = try encoder.encode(body)
         let (data, response) = try await session.data(for: req)
-        try validate(response)
-        return try decode(R.self, from: data)
+        try validate(response, data: data, url: url)
+        return try decode(R.self, from: data, url: url)
     }
 
     private static func postVoid<B: Encodable>(_ body: B, to url: URL) async throws {
         var req = authedRequest(url, method: "POST")
         req.httpBody = try encoder.encode(body)
-        let (_, response) = try await session.data(for: req)
-        try validate(response)
+        let (data, response) = try await session.data(for: req)
+        try validate(response, data: data, url: url)
     }
 
     private static func put<B: Encodable, R: Decodable>(_ body: B, to url: URL, as type: R.Type) async throws -> R {
         var req = authedRequest(url, method: "PUT")
         req.httpBody = try encoder.encode(body)
         let (data, response) = try await session.data(for: req)
-        try validate(response)
-        return try decode(R.self, from: data)
+        try validate(response, data: data, url: url)
+        return try decode(R.self, from: data, url: url)
     }
 
     private static func putVoid<B: Encodable>(_ body: B, to url: URL) async throws {
         var req = authedRequest(url, method: "PUT")
         req.httpBody = try encoder.encode(body)
-        let (_, response) = try await session.data(for: req)
-        try validate(response)
+        let (data, response) = try await session.data(for: req)
+        try validate(response, data: data, url: url)
     }
 
     /// Bodyless PUT — used for idempotent state flips like
@@ -400,21 +435,71 @@ struct VoygoAPIClient {
     /// intent and the backend returns 204.
     private static func putVoidNoBody(_ url: URL) async throws {
         let req = authedRequest(url, method: "PUT")
-        let (_, response) = try await session.data(for: req)
-        try validate(response)
+        let (data, response) = try await session.data(for: req)
+        try validate(response, data: data, url: url)
     }
 
-    private static func validate(_ response: URLResponse) throws {
+    private static func validate(_ response: URLResponse, data: Data, url: URL) throws {
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         if http.statusCode == 401 {
             throw APIError.unauthorized
         }
-        guard (200..<300).contains(http.statusCode) else { throw APIError.serverError(http.statusCode) }
+        guard (200..<300).contains(http.statusCode) else {
+            // Surface the server's error body so we can debug 4xx/5xx
+            // cases. Keep it short and DEBUG-only — production logs
+            // shouldn't carry response payloads, and we never log the
+            // Authorization header (only the URL path is included).
+            #if DEBUG
+            let snippet = errorSnippet(from: data)
+            apiLog.debug("HTTP \(http.statusCode, privacy: .public) \(http.url?.path ?? url.path, privacy: .public) — body: \(snippet, privacy: .public)")
+            #endif
+            throw APIError.serverError(http.statusCode)
+        }
     }
 
-    private static func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
-        do { return try decoder.decode(T.self, from: data) }
-        catch { throw APIError.decodingError }
+    private static func decode<T: Decodable>(_ type: T.Type, from data: Data, url: URL) throws -> T {
+        do {
+            return try decoder.decode(T.self, from: data)
+        } catch let decodingError as DecodingError {
+            // Preserve the structured DecodingError context so the
+            // caller can see *what* failed to decode, not just that
+            // something did. DEBUG-only logging keeps response bodies
+            // out of production. The thrown APIError stays opaque so
+            // user-facing copy doesn't leak server schema.
+            #if DEBUG
+            let snippet = errorSnippet(from: data)
+            apiLog.debug("decode \(String(describing: T.self), privacy: .public) failed at \(url.path, privacy: .public): \(decodingError.shortDescription, privacy: .public) — body: \(snippet, privacy: .public)")
+            #endif
+            throw APIError.decodingError
+        } catch {
+            #if DEBUG
+            apiLog.debug("decode \(String(describing: T.self), privacy: .public) threw \(error.localizedDescription, privacy: .public)")
+            #endif
+            throw APIError.decodingError
+        }
+    }
+
+    /// Truncated, secret-scrubbed string view of a response body for
+    /// DEBUG logs. We cap at 512 bytes and strip anything that looks
+    /// like a bearer token to be defensive — the backend shouldn't
+    /// echo tokens, but a future endpoint might.
+    private static func errorSnippet(from data: Data) -> String {
+        let cap = min(data.count, 512)
+        var s = String(data: data.prefix(cap), encoding: .utf8) ?? "<binary \(data.count)B>"
+        if data.count > cap { s += "…[+\(data.count - cap)B]" }
+        // Defense-in-depth: scrub anything that smells like a JWT or
+        // long opaque token before it lands in os_log.
+        s = s.replacingOccurrences(
+            of: #"(?i)(bearer\s+)[A-Za-z0-9._\-]{16,}"#,
+            with: "$1<redacted>",
+            options: .regularExpression
+        )
+        s = s.replacingOccurrences(
+            of: #"\"token\"\s*:\s*\"[^\"]{8,}\""#,
+            with: "\"token\":\"<redacted>\"",
+            options: .regularExpression
+        )
+        return s
     }
 
     private static var decoder: JSONDecoder {
@@ -504,7 +589,9 @@ struct AuthUserDTO: Decodable {
     var kyc: KycStatus { KycStatus(rawValue: kycStatus) ?? .notStarted }
 }
 
-struct UpdateKycRequest: Encodable { var status: String }
+// `UpdateKycRequest` was removed — the server no longer accepts a
+// client-supplied target status. Submission is `POST /users/me/kyc/submit`
+// with an empty body and always lands on PENDING.
 struct KycResponse: Decodable { var kycStatus: String }
 struct UpdateDisplayNameRequest: Encodable { var displayName: String }
 struct EmptyRequest: Encodable {}
@@ -786,10 +873,12 @@ struct CreateRecurringRouteRequest: Encodable {
 // MARK: - Payments / KYC DTOs
 
 struct ChargeSubscriptionRequest: Encodable {
-    var subscriptionId: String?
-    var routeId: String?
-    var amountMyr: Int
+    var subscriptionId: String
     var tier: String
+    /// Optional — backend computes from the subscription's date range
+    /// when nil. `amountMyr` is intentionally NOT in this request:
+    /// the server is the only authority on what a charge costs.
+    var days: Int?
 }
 
 struct UploadKycDocumentRequest: Encodable {

@@ -224,14 +224,19 @@ struct KycVerificationView: View {
 
     private var footer: some View {
         VStack(spacing: 10) {
-            Text("We use your documents to verify identity, run a quick safety check, and meet Bank Negara KYC rules. Photos are stored encrypted and only seen by trust & safety reviewers.")
+            // Honest copy: until durable+encrypted storage (S3 with SSE
+            // and a documented retention policy) is wired through to
+            // production we don't claim "encrypted at rest". The
+            // backend gates uploads behind `KYC_S3_BUCKET` in
+            // production so we can't lie by accident.
+            Text("We use your documents to verify identity, run a quick safety check, and meet Bank Negara KYC rules. Only trust & safety reviewers see your photos.")
                 .font(.system(size: 11))
                 .foregroundColor(VPalette.textHint)
                 .multilineTextAlignment(.center)
 
             if !store.kycDocuments.isEmpty {
                 Button {
-                    Task { await store.submitKyc(status: .pending) }
+                    Task { await store.submitKycForReview() }
                 } label: {
                     Text("Mark verification submitted")
                         .font(.system(size: 13, weight: .heavy))

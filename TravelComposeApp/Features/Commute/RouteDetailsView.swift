@@ -52,7 +52,11 @@ import SwiftUI
     func subscribe() {
         guard let store, let route, let pickupId = selectedPickupId, let dropId = selectedDropId else { return }
         let days = Int(numberOfDays) ?? 30
-        let amount = SubscriptionPricing.totalForTier(
+        // Local pre-computed total stays for the in-flight CTA copy
+        // (`subscribe.payCTA` already references it). Backend recomputes
+        // the authoritative amount from server-truth — see
+        // `AppStore.startCharge` and `/payments/charge`.
+        _ = SubscriptionPricing.totalForTier(
             pricePerSeatMyr: route.pricePerSeat,
             tier: selectedTier,
             days: days
@@ -65,9 +69,8 @@ import SwiftUI
                 subscribeState = .charging
                 let chargeResult = await store.startCharge(
                     subscriptionId: subscriptionId,
-                    routeId: route.id,
-                    amountMyr: amount,
-                    tier: selectedTier
+                    tier: selectedTier,
+                    days: days
                 )
                 switch chargeResult {
                 case .success(let charge):
