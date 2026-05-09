@@ -52,6 +52,10 @@
 		07D37C2480054FB6B660CB1A /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01382652F995463C8E4271A4 /* Navigation.swift */; };
 1A2B3C4D5E6F708190A0B0C1 /* TravelComposeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708190A0B0C0 /* TravelComposeApp.swift */; };
 		1A2B3C4D5E6F708190A0B0C3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708190A0B0C2 /* Assets.xcassets */; };
+		A1B2C3D4E5F60718BBBB0001 /* LongHaul.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718AAAA0001 /* LongHaul.swift */; };
+		A1B2C3D4E5F60718BBBB0002 /* LongHaulBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718AAAA0002 /* LongHaulBrowseView.swift */; };
+		A1B2C3D4E5F60718BBBB0003 /* LongHaulTripDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718AAAA0003 /* LongHaulTripDetailView.swift */; };
+		A1B2C3D4E5F60718BBBB0004 /* PostLongHaulTripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718AAAA0004 /* PostLongHaulTripView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -102,6 +106,10 @@
 1A2B3C4D5E6F708190A0B0C0 /* TravelComposeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TravelComposeApp.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708190A0B0C2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708190A0B0C4 /* TravelComposeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TravelComposeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F60718AAAA0001 /* LongHaul.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongHaul.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718AAAA0002 /* LongHaulBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongHaulBrowseView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718AAAA0003 /* LongHaulTripDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongHaulTripDetailView.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718AAAA0004 /* PostLongHaulTripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostLongHaulTripView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -173,6 +181,7 @@
 				8326BF042D76456AB9676156 /* Models.swift */,
 				E1A2B3D4E5F607182939A103 /* Payments.swift */,
 				E1A2B3D4E5F607182939A104 /* Trust.swift */,
+				A1B2C3D4E5F60718AAAA0001 /* LongHaul.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -199,8 +208,19 @@
 				D2A2B3D4E5F607182939A001 /* Money */,
 				D2A2B3D4E5F607182939A002 /* System */,
 				F1A2B3D4E5F607182939A201 /* Home */,
+				A1B2C3D4E5F60718CCCC0001 /* LongHaul */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60718CCCC0001 /* LongHaul */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60718AAAA0002 /* LongHaulBrowseView.swift */,
+				A1B2C3D4E5F60718AAAA0003 /* LongHaulTripDetailView.swift */,
+				A1B2C3D4E5F60718AAAA0004 /* PostLongHaulTripView.swift */,
+			);
+			path = LongHaul;
 			sourceTree = "<group>";
 		};
 		D2A2B3D4E5F607182939A001 /* Money */ = {
@@ -413,6 +433,10 @@
 				1D03BA0BB1954F6AAC480339 /* InboxViews.swift in Sources */,
 				D4248259CEB249D09527745C /* ProfileViews.swift in Sources */,
 				07D37C2480054FB6B660CB1A /* Navigation.swift in Sources */,
+				A1B2C3D4E5F60718BBBB0001 /* LongHaul.swift in Sources */,
+				A1B2C3D4E5F60718BBBB0002 /* LongHaulBrowseView.swift in Sources */,
+				A1B2C3D4E5F60718BBBB0003 /* LongHaulTripDetailView.swift in Sources */,
+				A1B2C3D4E5F60718BBBB0004 /* PostLongHaulTripView.swift in Sources */,
 
 			);
 			runOnlyForDeploymentPostprocessing = 0;

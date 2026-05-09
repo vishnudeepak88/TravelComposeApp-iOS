@@ -277,6 +277,71 @@ struct VoygoAPIClient {
         try validate(response, data: data, url: url)
     }
 
+    // MARK: - Long-haul
+
+    static func listLongHaulTrips(origin: String? = nil,
+                                  destination: String? = nil,
+                                  fromDate: Date? = nil) async throws -> [LongHaulTrip] {
+        var comps = URLComponents(url: baseURL.appendingPathComponent("longhaul/trips"),
+                                  resolvingAgainstBaseURL: false)!
+        var items: [URLQueryItem] = []
+        if let o = origin?.trimmingCharacters(in: .whitespaces), !o.isEmpty {
+            items.append(URLQueryItem(name: "origin", value: o))
+        }
+        if let d = destination?.trimmingCharacters(in: .whitespaces), !d.isEmpty {
+            items.append(URLQueryItem(name: "destination", value: d))
+        }
+        if let date = fromDate {
+            items.append(URLQueryItem(name: "fromDate", value: longHaulIsoFormatter.string(from: date)))
+        }
+        if !items.isEmpty { comps.queryItems = items }
+        return try await get(comps.url!, as: [LongHaulTrip].self)
+    }
+
+    static func getLongHaulTrip(id: String) async throws -> LongHaulTrip {
+        try await get(baseURL.appendingPathComponent("longhaul/trips/\(id)"),
+                      as: LongHaulTrip.self)
+    }
+
+    static func createLongHaulTrip(origin: String, destination: String,
+                                   departAt: Date, seatsTotal: Int,
+                                   pricePerSeatMyr: Int, notes: String) async throws -> IdResponse {
+        let body = CreateLongHaulTripRequest(
+            origin: origin, destination: destination,
+            departAt: longHaulIsoFormatter.string(from: departAt),
+            seatsTotal: seatsTotal, pricePerSeatMyr: pricePerSeatMyr,
+            notes: notes
+        )
+        return try await post(body, to: baseURL.appendingPathComponent("longhaul/trips"),
+                              as: IdResponse.self)
+    }
+
+    static func bookLongHaulTrip(tripId: String, seats: Int) async throws -> LongHaulBookingResponse {
+        let body = BookLongHaulTripRequest(seats: seats)
+        return try await post(body,
+                              to: baseURL.appendingPathComponent("longhaul/trips/\(tripId)/book"),
+                              as: LongHaulBookingResponse.self)
+    }
+
+    static func myLongHaulBookings() async throws -> [LongHaulBooking] {
+        try await get(baseURL.appendingPathComponent("longhaul/bookings/me"),
+                      as: [LongHaulBooking].self)
+    }
+
+    static func myDriverLongHaulTrips() async throws -> [LongHaulTrip] {
+        try await get(baseURL.appendingPathComponent("longhaul/trips/driver/me"),
+                      as: [LongHaulTrip].self)
+    }
+
+    /// Long-haul `departAt` is a wall-clock ISO datetime, NOT the
+    /// y-m-d format `isoDateFormatter` emits. Local helper so we
+    /// don't piggy-back on the global encoder/decoder for this case.
+    nonisolated(unsafe) private static let longHaulIsoFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     // MARK: - Pilot-blocker plumbing
 
     /// POST /users/me/kyc-documents/upload — uploads raw image bytes
@@ -605,6 +670,21 @@ struct AuthUserDTO: Decodable {
 struct KycResponse: Decodable { var kycStatus: String }
 struct UpdateDisplayNameRequest: Encodable { var displayName: String }
 struct EmptyRequest: Encodable {}
+
+struct CreateLongHaulTripRequest: Encodable {
+    var origin: String
+    var destination: String
+    /// Server expects ISO-8601 datetime; encoded as a string so we
+    /// don't go through the global encoder's y-m-d strategy.
+    var departAt: String
+    var seatsTotal: Int
+    var pricePerSeatMyr: Int
+    var notes: String
+}
+
+struct BookLongHaulTripRequest: Encodable {
+    var seats: Int
+}
 
 struct SkipRideResponse: Decodable {
     var ok: Bool

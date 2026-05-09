@@ -1979,6 +1979,332 @@ app.post(
   })
 );
 
+// ───────────────────────── Long-haul (one-off inter-city) ────────────────
+//
+// Orthogonal to the recurring-routes commute product: drivers post a
+// single trip (KL → Penang Friday 6pm), riders book N seats, server
+// reserves capacity inside a transaction and charges via the existing
+// Billplz pipeline. We deliberately reuse the `payments` table (with
+// subscription_id NULL, tier='LONGHAUL') rather than minting a new
+// charge schema — receipts and refunds stay one-source-of-truth.
+
+const LONG_HAUL_MAX_SEATS_PER_BOOKING = 8;
+
+function toLongHaulTripDto(row) {
+  return {
+    id: String(row.id),
+    driverId: String(row.driver_id),
+    driverName: row.driver_name || null,
+    driverPhone: row.driver_phone || null,
+    driverRating: row.average_rating != null ? Number(row.average_rating) : null,
+    origin: row.origin,
+    destination: row.destination,
+    departAt: row.depart_at,
+    seatsTotal: Number(row.seats_total),
+    seatsAvailable: Number(row.seats_available),
+    pricePerSeatMyr: Number(row.price_per_seat_myr),
+    status: row.status,
+    notes: row.notes || ""
+  };
+}
+
+// Driver creates a trip. Rejects past departures, absurd seat counts,
+// and absurd prices so a fat-finger doesn't list a RM 5000 / seat trip
+// for 50 seats. Status starts OPEN.
+app.post(
+  "/longhaul/trips",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const origin = String(bodyValue(body, "origin") || "").trim();
+    const destination = String(bodyValue(body, "destination") || "").trim();
+    const departAtRaw = bodyValue(body, "departAt", "depart_at");
+    const seatsTotal = Number(bodyValue(body, "seatsTotal", "seats_total"));
+    const pricePerSeatMyr = Number(bodyValue(body, "pricePerSeatMyr", "price_per_seat_myr"));
+    const notes = String(bodyValue(body, "notes") || "").slice(0, 1000);
+
+    if (!origin || !destination) {
+      res.status(400).json({ detail: "origin and destination required" });
+      return;
+    }
+    const departAt = new Date(departAtRaw);
+    if (Number.isNaN(departAt.getTime()) || departAt.getTime() < Date.now() - 60_000) {
+      res.status(400).json({ detail: "departAt must be a future ISO datetime" });
+      return;
+    }
+    if (!Number.isFinite(seatsTotal) || seatsTotal < 1 || seatsTotal > 20) {
+      res.status(400).json({ detail: "seatsTotal must be 1..20" });
+      return;
+    }
+    if (!Number.isFinite(pricePerSeatMyr) || pricePerSeatMyr < 5 || pricePerSeatMyr > 5000) {
+      res.status(400).json({ detail: "pricePerSeatMyr must be RM 5..5000" });
+      return;
+    }
+
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO long_haul_trips
+         (id, driver_id, origin, destination, depart_at,
+          seats_total, seats_available, price_per_seat_myr, status, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $6, $7, 'OPEN', $8)`,
+      [id, req.user.id, origin, destination, departAt.toISOString(),
+       seatsTotal, pricePerSeatMyr, notes]
+    );
+    res.status(201).json({ id });
+  })
+);
+
+// Browse open trips. Filters: origin, destination (substring match —
+// people type "KL" or "Kuala Lumpur"), fromDate (default = now). Caps
+// at 100 rows so a degenerate query can't bloat the response.
+app.get(
+  "/longhaul/trips",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const origin = String(req.query.origin || "").trim();
+    const destination = String(req.query.destination || "").trim();
+    const fromDate = req.query.fromDate
+      ? new Date(String(req.query.fromDate))
+      : new Date();
+    const fromIso = Number.isNaN(fromDate.getTime())
+      ? new Date().toISOString()
+      : fromDate.toISOString();
+
+    const where = ["t.depart_at >= $1", "t.status = 'OPEN'", "t.seats_available > 0"];
+    const params = [fromIso];
+    if (origin) {
+      params.push(`%${origin}%`);
+      where.push(`t.origin ILIKE $${params.length}`);
+    }
+    if (destination) {
+      params.push(`%${destination}%`);
+      where.push(`t.destination ILIKE $${params.length}`);
+    }
+    const sql = `
+      SELECT t.id, t.driver_id, t.origin, t.destination, t.depart_at,
+             t.seats_total, t.seats_available, t.price_per_seat_myr, t.status, t.notes,
+             u.display_name AS driver_name,
+             u.phone        AS driver_phone,
+             dr.average_rating
+        FROM long_haul_trips t
+        LEFT JOIN users u             ON u.id = t.driver_id
+        LEFT JOIN driver_reliability dr ON dr.driver_id = t.driver_id
+       WHERE ${where.join(" AND ")}
+       ORDER BY t.depart_at ASC
+       LIMIT 100
+    `;
+    const result = await pool.query(sql, params);
+    res.json(result.rows.map(toLongHaulTripDto));
+  })
+);
+
+// Trip detail — same shape as the list rows.
+app.get(
+  "/longhaul/trips/:id",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `SELECT t.id, t.driver_id, t.origin, t.destination, t.depart_at,
+              t.seats_total, t.seats_available, t.price_per_seat_myr, t.status, t.notes,
+              u.display_name AS driver_name,
+              u.phone        AS driver_phone,
+              dr.average_rating
+         FROM long_haul_trips t
+         LEFT JOIN users u             ON u.id = t.driver_id
+         LEFT JOIN driver_reliability dr ON dr.driver_id = t.driver_id
+        WHERE t.id = $1`,
+      [req.params.id]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ detail: "trip_not_found" });
+      return;
+    }
+    res.json(toLongHaulTripDto(result.rows[0]));
+  })
+);
+
+// Book N seats. Transactional seat reservation + payment row insert
+// so two concurrent bookings can't oversell. Amount is server-derived
+// from the trip's price × seats — client-supplied amounts are
+// ignored, same security boundary as the subscription charge path.
+app.post(
+  "/longhaul/trips/:id/book",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const tripId = req.params.id;
+    const seats = Number(bodyValue(req.body || {}, "seats") || 1);
+    if (!Number.isFinite(seats) || seats < 1 || seats > LONG_HAUL_MAX_SEATS_PER_BOOKING) {
+      res.status(400).json({ detail: `seats must be 1..${LONG_HAUL_MAX_SEATS_PER_BOOKING}` });
+      return;
+    }
+
+    const client = await pool.connect();
+    let bookingId = null;
+    let amountMyr = 0;
+    let driverId = null;
+    let trip = null;
+    let committed = false;
+    try {
+      await client.query("BEGIN");
+      const tripRes = await client.query(
+        `SELECT id, driver_id, origin, destination, depart_at,
+                seats_total, seats_available, price_per_seat_myr, status
+           FROM long_haul_trips
+          WHERE id = $1
+          FOR UPDATE`,
+        [tripId]
+      );
+      if (tripRes.rowCount === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ detail: "trip_not_found" });
+        return;
+      }
+      trip = tripRes.rows[0];
+      if (trip.status !== "OPEN") {
+        await client.query("ROLLBACK");
+        res.status(409).json({ detail: "trip_not_open" });
+        return;
+      }
+      if (String(trip.driver_id) === req.user.id) {
+        await client.query("ROLLBACK");
+        res.status(400).json({ detail: "cannot_book_own_trip" });
+        return;
+      }
+      if (Number(trip.seats_available) < seats) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ detail: "not_enough_seats" });
+        return;
+      }
+      const dup = await client.query(
+        "SELECT id FROM long_haul_bookings WHERE trip_id = $1 AND rider_id = $2",
+        [tripId, req.user.id]
+      );
+      if (dup.rowCount > 0) {
+        await client.query("ROLLBACK");
+        res.status(409).json({ detail: "already_booked" });
+        return;
+      }
+
+      bookingId = crypto.randomUUID();
+      driverId = trip.driver_id;
+      amountMyr = Number(trip.price_per_seat_myr) * seats;
+
+      await client.query(
+        `INSERT INTO long_haul_bookings (id, trip_id, rider_id, seats)
+         VALUES ($1, $2, $3, $4)`,
+        [bookingId, tripId, req.user.id, seats]
+      );
+      await client.query(
+        `UPDATE long_haul_trips
+            SET seats_available = seats_available - $1,
+                status = CASE WHEN seats_available - $1 <= 0 THEN 'FULL' ELSE status END,
+                updated_at = NOW()
+          WHERE id = $2`,
+        [seats, tripId]
+      );
+      await client.query("COMMIT");
+      committed = true;
+    } catch (err) {
+      if (!committed) await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    // Charge via the existing Billplz pipeline. subscriptionId/routeId
+    // stay NULL — long-haul has its own first-class booking row. The
+    // billplz callback rolls these into PAYMENT_SUCCEEDED notifications
+    // with copy that adapts when subscription_id is null.
+    const charge = await chargeSubscription(pool, {
+      userId: req.user.id,
+      subscriptionId: null,
+      routeId: null,
+      amountMyr,
+      tier: "LONGHAUL",
+      contact: bodyValue(req.body || {}, "contact") || {}
+    });
+    await pool.query(
+      "UPDATE long_haul_bookings SET payment_id = $1 WHERE id = $2",
+      [charge.paymentId, bookingId]
+    );
+
+    if (driverId) {
+      await createNotification({
+        userId: driverId,
+        type: "LONGHAUL_BOOKING",
+        title: "New long-haul booking",
+        body: `${seats} seat${seats === 1 ? "" : "s"} — ${trip.origin} → ${trip.destination}`
+      });
+    }
+
+    res.status(201).json({
+      bookingId,
+      tripId,
+      seats,
+      amountMyr,
+      payment: charge
+    });
+  })
+);
+
+// Rider's bookings. Joins back through long_haul_trips so the iOS
+// list can render origin/destination/depart-at without a second fetch.
+app.get(
+  "/longhaul/bookings/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `SELECT b.id, b.trip_id, b.seats, b.status, b.payment_id, b.created_at,
+              t.origin, t.destination, t.depart_at, t.price_per_seat_myr,
+              u.display_name AS driver_name,
+              u.phone        AS driver_phone
+         FROM long_haul_bookings b
+         JOIN long_haul_trips t  ON t.id = b.trip_id
+         LEFT JOIN users u       ON u.id = t.driver_id
+        WHERE b.rider_id = $1
+        ORDER BY t.depart_at DESC
+        LIMIT 50`,
+      [req.user.id]
+    );
+    res.json(result.rows.map((row) => ({
+      id: String(row.id),
+      tripId: String(row.trip_id),
+      seats: Number(row.seats),
+      status: row.status,
+      paymentId: row.payment_id ? String(row.payment_id) : null,
+      origin: row.origin,
+      destination: row.destination,
+      departAt: row.depart_at,
+      pricePerSeatMyr: Number(row.price_per_seat_myr),
+      driverName: row.driver_name || null,
+      driverPhone: row.driver_phone || null
+    })));
+  })
+);
+
+// Driver's posted trips, including a rolling booked-seats count.
+app.get(
+  "/longhaul/trips/driver/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `SELECT t.id, t.driver_id, t.origin, t.destination, t.depart_at,
+              t.seats_total, t.seats_available, t.price_per_seat_myr, t.status, t.notes,
+              u.display_name AS driver_name,
+              u.phone        AS driver_phone,
+              dr.average_rating
+         FROM long_haul_trips t
+         LEFT JOIN users u             ON u.id = t.driver_id
+         LEFT JOIN driver_reliability dr ON dr.driver_id = t.driver_id
+        WHERE t.driver_id = $1
+        ORDER BY t.depart_at DESC
+        LIMIT 100`,
+      [req.user.id]
+    );
+    res.json(result.rows.map(toLongHaulTripDto));
+  })
+);
+
 // ───────────────────────── Payments + payouts ─────────────────────────────
 //
 // Auth-gated charge endpoint. In mock mode (no Billplz creds) the call
@@ -2163,11 +2489,16 @@ app.post(
       if (paid) {
         await markPaymentPaid(pool, { billId });
         if (row?.user_id) {
+          // Long-haul payments have neither subscription_id nor route_id
+          // — keep the body copy honest in that case.
+          const isSubscription = !!row.subscription_id;
           await createNotification({
             userId: row.user_id,
             type: "PAYMENT_SUCCEEDED",
             title: "Payment received",
-            body: `Your subscription is active. RM ${row.amount_myr} charged.`,
+            body: isSubscription
+              ? `Your subscription is active. RM ${row.amount_myr} charged.`
+              : `RM ${row.amount_myr} charged.`,
             routeId: row.route_id,
             subscriptionId: row.subscription_id
           });
@@ -2176,11 +2507,14 @@ app.post(
         // Treat any non-paid callback (cancelled, expired, refused)
         // as a failed-payment signal so the rider sees an honest
         // notification + can retry from the wallet.
+        const isSubscription = !!row.subscription_id;
         await createNotification({
           userId: row.user_id,
           type: "PAYMENT_FAILED",
           title: "Payment didn't go through",
-          body: "Your subscription is paused. Retry from My Subscriptions.",
+          body: isSubscription
+            ? "Your subscription is paused. Retry from My Subscriptions."
+            : "We couldn't charge your card. Try again from My Bookings.",
           routeId: row.route_id,
           subscriptionId: row.subscription_id
         });

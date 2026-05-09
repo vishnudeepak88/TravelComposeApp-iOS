@@ -309,6 +309,52 @@ async function initSchema(pool) {
     )
   `);
 
+  // Long-haul: one-off inter-city trips. Orthogonal to recurring_routes
+  // — riders book a single seat for a specific datetime rather than
+  // subscribing to a weekday cadence. Drivers post these as
+  // need-arises (going home for the weekend, festival travel) so the
+  // schema is intentionally lean: no days_of_week, no pickup_points
+  // (rider coordinates pickup via the driver_phone the route DTO
+  // already exposes).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS long_haul_trips (
+      id                 UUID PRIMARY KEY,
+      driver_id          TEXT NOT NULL,
+      origin             TEXT NOT NULL,
+      destination        TEXT NOT NULL,
+      depart_at          TIMESTAMPTZ NOT NULL,
+      seats_total        INTEGER NOT NULL,
+      seats_available    INTEGER NOT NULL,
+      price_per_seat_myr INTEGER NOT NULL,
+      status             TEXT NOT NULL DEFAULT 'OPEN',
+      notes              TEXT NOT NULL DEFAULT '',
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_lh_trips_search ON long_haul_trips(depart_at, status)"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_lh_trips_driver ON long_haul_trips(driver_id, depart_at DESC)"
+  );
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS long_haul_bookings (
+      id          UUID PRIMARY KEY,
+      trip_id     UUID NOT NULL REFERENCES long_haul_trips(id) ON DELETE CASCADE,
+      rider_id    TEXT NOT NULL,
+      seats       INTEGER NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'CONFIRMED',
+      payment_id  UUID NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_lh_booking_rider UNIQUE (trip_id, rider_id)
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_lh_bookings_rider ON long_haul_bookings(rider_id, created_at DESC)"
+  );
+
   // Telemetry — best-effort funnel events. Append-only, fire-and-forget
   // from the client, so we tolerate missing user_id and free-form props.
   await pool.query(`

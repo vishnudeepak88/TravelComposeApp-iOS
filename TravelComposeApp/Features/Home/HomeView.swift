@@ -38,6 +38,7 @@ struct HomeTab: View {
                     path.append(.findRides)
                 },
                 onCarpoolTapped:      { path.append(.findRides) },
+                onLongHaulTapped:     { path.append(.longHaulBrowse) },
                 onOpenRoute:          { id in path.append(.routeDetails(routeId: id)) },
                 onOpenNotifications:  { path.append(.notifications) },
                 onOpenCalendar:       { path.append(.calendar()) },
@@ -77,6 +78,10 @@ struct HomeView: View {
     @Environment(AppStore.self) private var store
     var onSearchTapped: () -> Void = {}
     var onCarpoolTapped: () -> Void = {}
+    /// Tap on the Long-haul service tile. Pushes onto the new
+    /// `LongHaulBrowseView`; previously this raised the same
+    /// "coming soon" alert as the other aspirational tiles.
+    var onLongHaulTapped: () -> Void = {}
     /// Callback when a "Heading your way" card is tapped. Closures the
     /// route id rather than the row so HomeTab can drill straight into
     /// the shared `AppRoute.routeDetails(...)` without HomeView needing
@@ -611,12 +616,16 @@ struct HomeView: View {
             .init(icon: "car.fill",            label: "Carpool",   fg: VPalette.primary,      bg: VPalette.primaryContainer,      isPrimary: true,  badge: "NEW"),
             .init(icon: "person.fill",         label: "Ride solo", fg: VPalette.accentCoral,  bg: VPalette.accentCoralContainer),
             .init(icon: "calendar",            label: "Schedule",  fg: VPalette.accentPurple, bg: VPalette.accentPurpleContainer),
-            .init(icon: "location.north.fill", label: "Long-haul", fg: VPalette.accentAmber,  bg: VPalette.accentAmberContainer)
+            // Long-haul is the second real surface (after Carpool):
+            // tapping it pushes onto the long-haul browse view.
+            // `isLongHaul` peels it out of the coming-soon path.
+            .init(icon: "location.north.fill", label: "Long-haul", fg: VPalette.accentAmber,  bg: VPalette.accentAmberContainer, isLongHaul: true)
         ]
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 14) {
             ForEach(tiles) { tile in
                 Button {
                     if tile.isPrimary { onCarpoolTapped() }
+                    else if tile.isLongHaul { onLongHaulTapped() }
                     else { showComingSoonFor = tile.label }
                 } label: {
                     serviceTileBody(tile)
@@ -809,6 +818,9 @@ private struct ServiceTile: Identifiable {
     let fg: Color
     let bg: Color
     var isPrimary: Bool = false
+    /// Routes this tile to the long-haul browse flow instead of the
+    /// coming-soon alert. Mutually exclusive with `isPrimary` today.
+    var isLongHaul: Bool = false
     var badge: String? = nil
 }
 

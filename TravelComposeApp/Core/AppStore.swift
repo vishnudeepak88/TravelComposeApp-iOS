@@ -52,6 +52,14 @@ final class AppStore {
     var messages: [ChatMessage] = []
     var bookings: [RideBooking] = []
 
+    /// Long-haul. `longHaulSearchResults` is the most-recent browse
+    /// response so the list view re-renders without each tab switch
+    /// triggering a refetch. `myLongHaulBookings` and
+    /// `driverLongHaulTrips` are user-scoped and reset on logout.
+    var longHaulSearchResults: [LongHaulTrip] = []
+    var myLongHaulBookings: [LongHaulBooking] = []
+    var driverLongHaulTrips: [LongHaulTrip] = []
+
     /// Backend-backed notifications feed. Populated from
     /// `GET /notifications/me`. `unreadNotificationsCount` is derived
     /// from this so views can drive a bell badge / inbox kicker
@@ -671,6 +679,8 @@ final class AppStore {
             await refreshKycDocuments()
             await refreshNotifications()
             await refreshBookings()
+            await refreshMyLongHaulBookings()
+            await refreshDriverLongHaulTrips()
             lastSyncError = nil
             connectionState = .online
         } catch APIError.unauthorized {
@@ -810,6 +820,115 @@ final class AppStore {
         } catch {
             if let snap = snapshot { rideInstances.append(snap) }
             return .failure(.from(error))
+        }
+    }
+
+    // MARK: - Long-haul
+
+    /// Browses open long-haul trips. Pure-online — there's no offline
+    /// matcher because there's no recurring cadence to compute against.
+    func searchLongHaul(origin: String, destination: String, fromDate: Date) async -> Result<[LongHaulTrip], AppError> {
+        Telemetry.track("longhaul_searched", [
+            "has_origin": .bool(!origin.isEmpty),
+            "has_destination": .bool(!destination.isEmpty)
+        ])
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            let trips = try await VoygoAPIClient.listLongHaulTrips(
+                origin: origin.isEmpty ? nil : origin,
+                destination: destination.isEmpty ? nil : destination,
+                fromDate: fromDate
+            )
+            longHaulSearchResults = trips
+            connectionState = .online
+            return .success(trips)
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            return .failure(.from(error))
+        }
+    }
+
+    /// Books N seats on a long-haul trip. The server reserves seats
+    /// transactionally and opens a Billplz bill — caller routes into
+    /// the hosted-checkout sheet using `payment.paymentUrl` when the
+    /// returned status is `.pending`.
+    func bookLongHaul(tripId: String, seats: Int) async -> Result<LongHaulBookingResponse, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        Telemetry.track("longhaul_book_started", [
+            "trip_id": .string(tripId),
+            "seats": .int(seats)
+        ])
+        do {
+            let response = try await VoygoAPIClient.bookLongHaulTrip(tripId: tripId, seats: seats)
+            // Drop the booked trip from the in-memory search results
+            // so a stale cached row doesn't stay tappable.
+            longHaulSearchResults.removeAll { $0.id == tripId }
+            await refreshMyLongHaulBookings()
+            await refreshPayments()
+            Telemetry.track("longhaul_book_succeeded", [
+                "trip_id": .string(tripId),
+                "amount_myr": .int(response.amountMyr)
+            ])
+            return .success(response)
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            return .failure(.from(error))
+        }
+    }
+
+    /// Driver-side: post a one-off trip. Caller-side validation lives
+    /// in `PostLongHaulTripView`; we also let the server reject so
+    /// constraint changes don't need a client-side bump.
+    func postLongHaul(origin: String, destination: String, departAt: Date,
+                      seatsTotal: Int, pricePerSeatMyr: Int, notes: String) async -> Result<String, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            let response = try await VoygoAPIClient.createLongHaulTrip(
+                origin: origin, destination: destination, departAt: departAt,
+                seatsTotal: seatsTotal, pricePerSeatMyr: pricePerSeatMyr, notes: notes
+            )
+            await refreshDriverLongHaulTrips()
+            // `IdResponse.id` is optional so the backend can omit it for
+            // routes that return a different key — for /longhaul/trips
+            // the id is always present, but the type stays Optional.
+            let tripId = response.id ?? "lh-\(UUID().uuidString)"
+            Telemetry.track("longhaul_trip_posted", [
+                "trip_id": .string(tripId),
+                "seats_total": .int(seatsTotal),
+                "price_per_seat": .int(pricePerSeatMyr)
+            ])
+            return .success(tripId)
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            return .failure(.from(error))
+        }
+    }
+
+    func refreshMyLongHaulBookings() async {
+        guard useOnline, isAuthenticated else { return }
+        do {
+            myLongHaulBookings = try await VoygoAPIClient.myLongHaulBookings()
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal; leave cache.
+        }
+    }
+
+    func refreshDriverLongHaulTrips() async {
+        guard useOnline, isAuthenticated else { return }
+        do {
+            driverLongHaulTrips = try await VoygoAPIClient.myDriverLongHaulTrips()
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal; leave cache.
         }
     }
 
@@ -1268,6 +1387,9 @@ final class AppStore {
         payments = []
         kycDocuments = []
         cancellationRecords = []
+        longHaulSearchResults = []
+        myLongHaulBookings = []
+        driverLongHaulTrips = []
         payout = nil
         lastChargeResult = nil
         checkoutDismissalSignal = 0

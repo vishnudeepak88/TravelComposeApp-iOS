@@ -39,6 +39,11 @@ enum AppRoute: Hashable {
     case kyc
     case privacy
     case help
+    // Long-haul (one-off inter-city). Browse is the rider entry point,
+    // tripDetail is the drilldown, postTrip is the driver create form.
+    case longHaulBrowse
+    case longHaulTripDetail(tripId: String)
+    case longHaulPostTrip
 }
 
 // MARK: - Shared destination builder
@@ -260,6 +265,39 @@ struct AppRouteDestinations: ViewModifier {
             case .help:
                 HelpCenterView(onBack: { if !path.isEmpty { path.removeLast() } })
                     .navigationBarHidden(true)
+
+            case .longHaulBrowse:
+                LongHaulBrowseView(
+                    onBack:    { if !path.isEmpty { path.removeLast() } },
+                    onOpenTrip: { tripId in path.append(.longHaulTripDetail(tripId: tripId)) },
+                    onPostTrip: { path.append(.longHaulPostTrip) }
+                )
+                .navigationBarHidden(true)
+
+            case .longHaulTripDetail(let tripId):
+                LongHaulTripDetailView(
+                    tripId: tripId,
+                    onBack:    { if !path.isEmpty { path.removeLast() } },
+                    onBooked:  {
+                        // Pop back to the browse list once the rider
+                        // returns from Billplz so they immediately see
+                        // their booking confirmation in My Bookings.
+                        if !path.isEmpty { path.removeLast() }
+                    }
+                )
+                .navigationBarHidden(true)
+
+            case .longHaulPostTrip:
+                PostLongHaulTripView(
+                    onBack:    { if !path.isEmpty { path.removeLast() } },
+                    onCreated: { _ in
+                        // After posting, return the driver to the
+                        // browse list so they can verify their trip
+                        // appears in the public listing.
+                        if !path.isEmpty { path.removeLast() }
+                    }
+                )
+                .navigationBarHidden(true)
             }
         }
     }
