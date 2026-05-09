@@ -104,9 +104,17 @@ struct WalletView: View {
 
                 ScrollView {
                     VStack(spacing: 18) {
-                        creditHero
-                        paymentMethods
-                        recent
+                        if isPaymentsLoading && store.payments.isEmpty {
+                            // Page-shaped skeleton on first load. Far
+                            // more honest than the misleading "RM 0.00"
+                            // the hero would otherwise render before
+                            // payments arrive.
+                            walletSkeleton
+                        } else {
+                            creditHero
+                            paymentMethods
+                            recent
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 40)
@@ -135,6 +143,28 @@ struct WalletView: View {
             Button("OK", role: .cancel) { showComingSoonFor = nil }
         } message: { feature in
             Text("\(feature) is on the roadmap. We'll let you know when it lands.")
+        }
+    }
+
+    /// Page-shaped placeholder during the first sync. Mirrors the
+    /// real layout (hero · methods card · 3 tx rows) so the screen
+    /// fills in instead of popping.
+    private var walletSkeleton: some View {
+        VStack(spacing: 18) {
+            VSkeleton(height: 160, corner: 22)
+            VStack(spacing: 0) {
+                VSkeleton(height: 60, corner: 0)
+                Rectangle().fill(VPalette.border).frame(height: 1)
+                VSkeleton(height: 60, corner: 0)
+            }
+            .background(VPalette.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
+            VStack(spacing: 12) {
+                VSkeleton(height: 50, corner: 14)
+                VSkeleton(height: 50, corner: 14)
+                VSkeleton(height: 50, corner: 14)
+            }
         }
     }
 

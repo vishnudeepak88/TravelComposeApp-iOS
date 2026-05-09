@@ -174,7 +174,7 @@ struct HomeView: View {
                     .buttonStyle(.plain)
                 }
 
-                Text("Where to,\nthis morning?")
+                Text(S.homeWhereTo)
                     .font(.system(size: 26, weight: .black))
                     .tracking(-0.5)
                     .foregroundColor(.white)
@@ -209,11 +209,9 @@ struct HomeView: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                // Renamed from "Find ride" → "Book a ride" so the
-                // primary CTA matches the user's mental model. The
-                // destination is unchanged: it pushes the route
-                // search screen via `AppRoute.findRides`.
-                Text("Book a ride")
+                // Localized via `Strings.swift` → `Localizable.strings`.
+                // English "Book a ride" / Malay "Tempah perjalanan".
+                Text(S.homeBookARide)
                     .font(.system(size: 13, weight: .heavy))
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
@@ -307,11 +305,11 @@ struct HomeView: View {
 
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("FIRST RIDE FREE")
+                    Text(S.homePromoKicker)
                         .font(.system(size: 12, weight: .heavy))
                         .tracking(0.4)
                         .foregroundColor(.white.opacity(0.92))
-                    Text("Try carpool today, save RM 14")
+                    Text(S.homePromoTitle)
                         .font(.system(size: 15, weight: .heavy))
                         .foregroundColor(.white)
                 }
@@ -338,13 +336,13 @@ struct HomeView: View {
     private var suggestedRides: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Heading your way")
+                Text(S.homeHeadingYourWay)
                     .font(.system(size: 16, weight: .black))
                     .tracking(-0.2)
                     .foregroundColor(VPalette.text)
                 Spacer()
                 Button(action: onSearchTapped) {
-                    Text("See all")
+                    Text(S.homeSeeAll)
                         .font(.system(size: 12, weight: .heavy))
                         .foregroundColor(VPalette.primary)
                 }

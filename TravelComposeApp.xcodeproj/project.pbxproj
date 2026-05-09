@@ -39,6 +39,7 @@
 		F1A2B3D4E5F607182939A005 /* SwipeBack.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A105 /* SwipeBack.swift */; };
 		F1A2B3D4E5F607182939A006 /* SharePresenters.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A106 /* SharePresenters.swift */; };
 		F1A2B3D4E5F607182939A007 /* PhotoPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A107 /* PhotoPicker.swift */; };
+		F1A2B3D4E5F607182939A008 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A200 /* Localizable.strings */; };
 		8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DA9910E6D4CA595C6D018 /* AppStore.swift */; };
 		7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */; };
 		87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */; };
@@ -85,6 +86,8 @@
 		F1A2B3D4E5F607182939A105 /* SwipeBack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeBack.swift; sourceTree = "<group>"; };
 		F1A2B3D4E5F607182939A106 /* SharePresenters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePresenters.swift; sourceTree = "<group>"; };
 		F1A2B3D4E5F607182939A107 /* PhotoPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPicker.swift; sourceTree = "<group>"; };
+		F1A2B3D4E5F607182939A301 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = "Resources/en.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		F1A2B3D4E5F607182939A302 /* ms */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ms; path = "Resources/ms.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		AC7DA9910E6D4CA595C6D018 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		123335A343CD4FE28C4A4A15 /* FindCommuteRoutesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindCommuteRoutesView.swift; sourceTree = "<group>"; };
@@ -126,6 +129,7 @@
 				20919291E6064F3BBBE16F4E /* Models */,
 				291FE55741024D9984A0B558 /* Services */,
 				8A68D56A52AC40A486194C16 /* Features */,
+				F1A2B3D4E5F607182939A200 /* Localizable.strings */,
 				1A2B3C4D5E6F708190A0B0C2 /* Assets.xcassets */,
 			);
 			path = TravelComposeApp;
@@ -282,6 +286,18 @@
 		};
 /* End PBXGroup section */
 
+/* Begin PBXVariantGroup section */
+		F1A2B3D4E5F607182939A200 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F1A2B3D4E5F607182939A301 /* en */,
+				F1A2B3D4E5F607182939A302 /* ms */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
 /* Begin PBXNativeTarget section */
 		1A2B3C4D5E6F708190A0B0C9 /* TravelComposeApp */ = {
 			isa = PBXNativeTarget;
@@ -321,6 +337,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				ms,
 				Base,
 			);
 			mainGroup = 1A2B3C4D5E6F708190A0B0C6;
@@ -339,6 +356,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A2B3C4D5E6F708190A0B0C3 /* Assets.xcassets in Resources */,
+				F1A2B3D4E5F607182939A008 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

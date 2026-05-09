@@ -1,0 +1,43 @@
+/* Bahasa Malaysia translations. Initial draft — please review with a
+   native speaker before any release. Reference UI:
+   - "Tempah perjalanan" = standard ride-booking phrasing in MY ride-share apps
+   - "Sahkan" / "Mengesahkan" = confirm / confirming
+   - Currency stays "RM" (no translation needed). */
+
+"common.comingSoon.title" = "Akan datang";
+"common.comingSoon.message" = "%@ sedang dalam perancangan. Kami akan beritahu apabila ia tersedia.";
+"common.ok" = "OK";
+"common.cancel" = "Batal";
+"common.retry" = "Cuba lagi";
+"common.back" = "Kembali";
+"common.error.unknown" = "Sesuatu telah berlaku. Cuba lagi sebentar lagi.";
+"common.error.network" = "Anda tidak dalam talian. Sambung semula dan cuba lagi.";
+"common.error.sessionExpired" = "Sesi anda telah tamat. Sila log masuk semula.";
+
+"auth.enterPhone" = "Masukkan nombor telefon anda";
+"auth.enterOtp" = "Masukkan kod 6 digit";
+"auth.phoneMissing" = "Nombor telefon tiada — kembali dan masukkan semula";
+
+"subscribe.payCTA" = "Langgan & bayar RM %d";
+"subscribe.creating" = "Mencipta langganan…";
+"subscribe.charging" = "Memproses pembayaran…";
+"subscribe.cancelTitle" = "Batal langganan?";
+"subscribe.cancelMessage" = "Perjalanan yang berbaki akan dibatalkan. Bayaran balik dikira oleh enjin polisi kami dan dikreditkan ke Voygo Credit anda.";
+"subscribe.confirmCancel" = "Ya, batalkan";
+
+"wallet.title" = "Dompet";
+"wallet.syncing" = "Mengemas kini dompet anda…";
+"wallet.autoApplied" = "Digunakan secara automatik pada perjalanan seterusnya";
+"wallet.earnPrompt" = "Dapatkan kredit melalui rujukan & pembatalan";
+
+"live.sos.title" = "Hantar SOS?";
+"live.sos.message" = "Kami akan memaklumkan kontak kecemasan anda dan kongsi lokasi langsung anda.";
+"live.sos.confirm" = "Hantar SOS";
+
+"home.whereTo" = "Ke mana hari ini,\npagi ini?";
+"home.findRide" = "Cari perjalanan";
+"home.bookARide" = "Tempah perjalanan";
+"home.headingYourWay" = "Menuju ke arah anda";
+"home.seeAll" = "Lihat semua";
+"home.promo.kicker" = "PERJALANAN PERTAMA PERCUMA";
+"home.promo.title" = "Cuba carpool hari ini, jimat RM 14";

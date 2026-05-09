@@ -80,6 +80,13 @@ struct TripHistoryView: View {
 
                 ScrollView {
                     LazyVStack(spacing: 8) {
+                        // Page-shaped skeleton during first refresh.
+                        if isRefreshing && trips.isEmpty {
+                            ForEach(0..<5, id: \.self) { _ in
+                                VSkeleton(height: 76, corner: 16)
+                            }
+                            .padding(.horizontal, 0)
+                        }
                         ForEach(filteredTrips) { t in
                             // Only completed rows are interactive — cancelled
                             // rows have no receipt to open, so we don't add
@@ -129,8 +136,12 @@ struct TripHistoryView: View {
         .task {
             // Pull payments on open so the user sees real data even
             // if the global refresh hasn't fired yet (e.g. they jumped
-            // straight to TripHistory from a deep link).
+            // straight to TripHistory from a deep link). Flip
+            // `isRefreshing` so the skeleton row count holds the
+            // ScrollView shape during the first fetch.
+            isRefreshing = true
             await store.refreshPayments()
+            isRefreshing = false
         }
     }
 

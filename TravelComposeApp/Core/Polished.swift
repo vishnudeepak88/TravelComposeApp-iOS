@@ -504,3 +504,131 @@ struct VSkeleton: View {
             .accessibilityHidden(true)
     }
 }
+
+// MARK: - Typed-error banner
+//
+// Surfaces `AppError` cases with case-aware copy + retry behavior.
+// Most call sites used to show `Text(err.localizedDescription)` in
+// red, which lost the structural meaning of the typed enum we
+// introduced in commit 34aaea9. This banner restores that:
+//   .unauthorized → "Sign in again" (no retry)
+//   .network      → "Offline" (with retry)
+//   .validation   → "Check your input" (no retry)
+//   .server       → "Server error" (with retry)
+//   .decoding     → "Unexpected response" (with retry)
+//   .message      → catch-all "Something went wrong"
+
+struct VErrorBanner: View {
+    let error: AppError
+    var onRetry: (() -> Void)? = nil
+    var onSignIn: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(VPalette.danger)
+                .frame(width: 28, height: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundColor(VPalette.text)
+                Text(error.errorDescription ?? "Try again in a moment.")
+                    .font(.system(size: 12))
+                    .foregroundColor(VPalette.textSec)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            actionButton
+        }
+        .padding(12)
+        .background(VPalette.dangerContainer)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(VPalette.danger.opacity(0.2), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        if case .unauthorized = error, let onSignIn {
+            Button(action: onSignIn) {
+                Text("Sign in")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundColor(VPalette.primary)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(VPalette.primaryContainer)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        } else if isRetryable, let onRetry {
+            Button(action: onRetry) {
+                Text("Retry")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundColor(VPalette.primary)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(VPalette.primaryContainer)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var icon: String {
+        switch error {
+        case .unauthorized: return "lock.slash.fill"
+        case .network:      return "wifi.slash"
+        case .server:       return "exclamationmark.icloud.fill"
+        case .decoding:     return "arrow.triangle.2.circlepath"
+        case .validation, .message: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var title: String {
+        switch error {
+        case .unauthorized: return "Sign in again"
+        case .network:      return "You're offline"
+        case .validation:   return "Check your input"
+        case .server:       return "Server error"
+        case .decoding:     return "Unexpected response"
+        case .message:      return "Something went wrong"
+        }
+    }
+
+    private var isRetryable: Bool {
+        switch error {
+        case .unauthorized, .validation, .message: return false
+        case .network, .server, .decoding:         return true
+        }
+    }
+}
+
+// MARK: - Dynamic-Type-aware semantic font ladder
+//
+// Most of the existing `.font(.system(size: N))` literals don't scale
+// with iOS Dynamic Type — large-text users see the same 11pt the
+// designer drew. These wrappers hand the OS a semantic role so the
+// system can scale within reason while preserving the design weight.
+//
+// Use sites convert mechanically:
+//   .font(.system(size: 28, weight: .black))    → .font(.vTitle)
+//   .font(.system(size: 18, weight: .heavy))    → .font(.vHeadline)
+//   .font(.system(size: 13, weight: .heavy))    → .font(.vBodyHeavy)
+//   .font(.system(size: 13))                    → .font(.vBody)
+//   .font(.system(size: 11))                    → .font(.vCaption)
+//   .font(.system(size: 14, design: .monospaced).weight(.heavy))
+//                                              → .font(.vMonoSmall)
+//
+// Bespoke `.tracking(...)` is intentionally dropped — visually a wash
+// at scale, accessibility cheaper to maintain.
+
+extension Font {
+    static let vTitle      = Font.system(.title,    design: .default).weight(.black)
+    static let vHeadline   = Font.system(.headline, design: .default).weight(.heavy)
+    static let vBodyHeavy  = Font.system(.body,     design: .default).weight(.heavy)
+    static let vBody       = Font.system(.body,     design: .default)
+    static let vCaption    = Font.system(.caption,  design: .default)
+    static let vMonoSmall  = Font.system(.caption,  design: .monospaced).weight(.heavy)
+}

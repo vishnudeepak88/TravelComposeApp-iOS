@@ -1,0 +1,42 @@
+/* English source-of-truth. Each key here is referenced from
+   Core/Strings.swift via NSLocalizedString. The value is also
+   embedded in the .swift source as the fallback, so missing keys
+   here never crash — but it's tidier to keep them aligned. */
+
+"common.comingSoon.title" = "Coming soon";
+"common.comingSoon.message" = "%@ is on the roadmap. We'll let you know when it lands.";
+"common.ok" = "OK";
+"common.cancel" = "Cancel";
+"common.retry" = "Retry";
+"common.back" = "Back";
+"common.error.unknown" = "Something went wrong. Try again in a moment.";
+"common.error.network" = "You're offline. Reconnect and try again.";
+"common.error.sessionExpired" = "Your session has expired. Please sign in again.";
+
+"auth.enterPhone" = "Enter your phone number";
+"auth.enterOtp" = "Enter the 6-digit code";
+"auth.phoneMissing" = "Phone number missing — go back and re-enter";
+
+"subscribe.payCTA" = "Subscribe & pay RM %d";
+"subscribe.creating" = "Creating subscription…";
+"subscribe.charging" = "Charging payment…";
+"subscribe.cancelTitle" = "Cancel subscription?";
+"subscribe.cancelMessage" = "Your remaining rides will be cancelled. Refunds are calculated by our policy engine and applied to your Voygo Credit.";
+"subscribe.confirmCancel" = "Yes, cancel";
+
+"wallet.title" = "Wallet";
+"wallet.syncing" = "Syncing your wallet…";
+"wallet.autoApplied" = "Auto-applied to next ride";
+"wallet.earnPrompt" = "Earn credit from referrals & cancellations";
+
+"live.sos.title" = "Send SOS?";
+"live.sos.message" = "We'll alert your emergency contacts and share your live location.";
+"live.sos.confirm" = "Send SOS";
+
+"home.whereTo" = "Where to,\nthis morning?";
+"home.findRide" = "Find ride";
+"home.bookARide" = "Book a ride";
+"home.headingYourWay" = "Heading your way";
+"home.seeAll" = "See all";
+"home.promo.kicker" = "FIRST RIDE FREE";
+"home.promo.title" = "Try carpool today, save RM 14";

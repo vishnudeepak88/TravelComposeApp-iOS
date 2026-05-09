@@ -8,7 +8,10 @@ struct AuthPhoneView: View {
 
     @State private var phone = ""
     @State private var isLoading = false
-    @State private var error: String? = nil
+    /// Typed AppError so we can render a `VErrorBanner` that branches on
+    /// the case (network → Retry; unauthorized → Sign in again; etc.)
+    /// instead of a flat red string.
+    @State private var error: AppError? = nil
 
     var body: some View {
         ZStack {
@@ -93,10 +96,7 @@ struct AuthPhoneView: View {
                     }
 
                     if let err = error {
-                        HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.circle.fill").foregroundColor(VPalette.danger)
-                            Text(err).font(.system(size: 12)).foregroundColor(VPalette.danger)
-                        }
+                        VErrorBanner(error: err, onRetry: { sendOtp() })
                     }
 
                     VPrimaryButton("Send OTP", isLoading: isLoading, isEnabled: phone.count >= 9) {
@@ -184,7 +184,7 @@ struct AuthPhoneView: View {
                 error = nil
                 onSent(phone)
             case .failure(let err):
-                error = err.localizedDescription
+                error = err
             }
         }
     }
@@ -210,7 +210,7 @@ struct AuthOtpView: View {
     @State private var otp = ""
     @State private var isLoading = false
     @State private var isResending = false
-    @State private var error: String? = nil
+    @State private var error: AppError? = nil
     @State private var timeLeft = 30
     /// Holds a reference to the running countdown task so we can cancel it
     /// in `.onDisappear`. The previous Timer.publish autoconnect leaked
@@ -257,21 +257,12 @@ struct AuthOtpView: View {
                         otpField
 
                         if let err = error {
-                            HStack(spacing: 6) {
-                                Image(systemName: "exclamationmark.circle.fill").foregroundColor(VPalette.danger)
-                                Text(err).font(.system(size: 12)).foregroundColor(VPalette.danger)
-                            }
+                            VErrorBanner(error: err, onRetry: { verify() })
+                                .padding(.horizontal, 24)
                         }
 
                         VPrimaryButton("Verify", isLoading: isLoading, isEnabled: otp.count == 6) {
-                            Task {
-                                isLoading = true
-                                let result = await store.verifyOtp(code: otp)
-                                isLoading = false
-                                if case .failure(let err) = result {
-                                    error = err.localizedDescription
-                                }
-                            }
+                            verify()
                         }
                         .padding(.horizontal, 24)
 
@@ -291,7 +282,7 @@ struct AuthOtpView: View {
                                     // Don't reset the cooldown if the resend
                                     // failed — user shouldn't have to wait
                                     // 30s before retrying.
-                                    error = e.localizedDescription
+                                    error = e
                                 }
                             }
                         } label: {
@@ -335,6 +326,18 @@ struct AuthOtpView: View {
     /// Replaces the previous `Timer.publish(...).autoconnect()` which
     /// never stopped. `Task.sleep` is cooperatively cancellable, so
     /// `.onDisappear` reliably tears it down.
+    private func verify() {
+        guard !isLoading, otp.count == 6 else { return }
+        Task {
+            isLoading = true
+            let result = await store.verifyOtp(code: otp)
+            isLoading = false
+            if case .failure(let err) = result {
+                error = err
+            }
+        }
+    }
+
     private func startCountdown() {
         countdownTask?.cancel()
         countdownTask = Task {
