@@ -14,6 +14,7 @@ import SwiftUI
 // uses, so the tile is honest about what's wired up vs. on the roadmap.
 
 struct HomeTab: View {
+    @Environment(AppStore.self) private var store
     @State private var path: [AppRoute] = []
     /// Filter state pinned at the tab level — Home doesn't host
     /// SearchFilters today, but the shared destination map needs the
@@ -23,6 +24,11 @@ struct HomeTab: View {
     @State private var filtersEarliest: String = "06:30"
     @State private var filtersLatest: String = "09:00"
     @State private var filtersDays: DaysOfWeekFlags = .weekdays
+    /// Tab-bar selectedIndex would let us deep-link "Inbox" from
+    /// Home's Message-driver action, but that lives one level up
+    /// (`MainTabView`). We surface a notification instead and let
+    /// MainTabView map the request to a tab switch.
+    static let switchToInboxNotification = Notification.Name("voygo.switchToInbox")
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -30,7 +36,18 @@ struct HomeTab: View {
                 onSearchTapped:       { path.append(.findRides) },
                 onCarpoolTapped:      { path.append(.findRides) },
                 onOpenRoute:          { id in path.append(.routeDetails(routeId: id)) },
-                onOpenNotifications:  { path.append(.notifications) }
+                onOpenNotifications:  { path.append(.notifications) },
+                onOpenCalendar:       { path.append(.calendar()) },
+                onMessageDriver:      { _ in
+                    // Switch the user to the Inbox tab. Deep-linking
+                    // into a specific thread requires the Inbox tab's
+                    // path which we don't own here — so for now we
+                    // hand the user to the Inbox root.
+                    NotificationCenter.default.post(
+                        name: HomeTab.switchToInboxNotification,
+                        object: nil
+                    )
+                }
             )
             .appRouteDestinations(
                 path: $path,
@@ -58,6 +75,12 @@ struct HomeView: View {
     /// lives in `AppRoute`; previously this fell through to the
     /// "Coming soon" alert because there was no path to push.
     var onOpenNotifications: () -> Void = {}
+    /// "Open calendar" action on the Next-commute card.
+    var onOpenCalendar: () -> Void = {}
+    /// "Message driver" action on the Next-commute card. The argument
+    /// is the route id so the parent can decide whether to open an
+    /// existing chat thread or fall back to the Inbox root.
+    var onMessageDriver: (_ routeId: String) -> Void = { _ in }
 
     @State private var showComingSoonFor: String? = nil
 
@@ -77,6 +100,15 @@ struct HomeView: View {
         return full.split(separator: " ").first.map(String.init) ?? full
     }
 
+    /// Adaptive home: when the user has at least one active
+    /// subscription with a real next ride, the "Next commute" card
+    /// becomes the first major content under the hero — Voygo reads
+    /// as a daily commute dashboard, not a search app. Without an
+    /// active subscription we keep the original search-first layout.
+    private var hasActiveCommute: Bool {
+        nextCommute != nil
+    }
+
     var body: some View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
@@ -85,20 +117,30 @@ struct HomeView: View {
                     VStack(spacing: 0) {
                         Color.clear.frame(height: 0).id("top")
                         hero
-                    // No overlap: the search card sits flush below
-                    // the hero. Two earlier fixes (overlay+offset,
-                    // then negative padding+zIndex) chased a "lifted
-                    // card" visual but kept dropping taps in real
-                    // builds — SwiftUI's hit-test kept picking the
-                    // hero's gradient over the search card in the
-                    // overlap region. Reliable taps > pretty overlap.
-                    searchCard
-                        .padding(.top, 16)
-                    serviceGrid
-                        .padding(.top, 16)
-                    promoBanner
-                    suggestedRides
-                    Spacer().frame(height: VTabBarLayout.clearance)
+
+                        if hasActiveCommute {
+                            // Subscribed user — lead with the next
+                            // commute. Search drops below as a
+                            // secondary affordance ("looking for a
+                            // different route?").
+                            nextCommuteSection
+                                .padding(.horizontal, 16)
+                                .padding(.top, 16)
+                            searchCard
+                                .padding(.top, 16)
+                        } else {
+                            // No active subscription — keep the
+                            // original search-first layout so first-
+                            // time users can find a ride.
+                            searchCard
+                                .padding(.top, 16)
+                        }
+
+                        serviceGrid
+                            .padding(.top, 16)
+                        promoBanner
+                        suggestedRides
+                        Spacer().frame(height: VTabBarLayout.clearance)
                     }
                 }
                 .scrollIndicators(.hidden)
@@ -127,6 +169,246 @@ struct HomeView: View {
         } message: { feature in
             Text("\(feature) is on the roadmap. We'll let you know when it lands.")
         }
+    }
+
+    // MARK: - Next-commute derivation
+    //
+    // A "next commute" is the soonest upcoming ride on a route the
+    // signed-in rider is actively subscribed to. We resolve via
+    // `store.mySubscriptions()` (which already filters cancelled subs
+    // out and joins the route). Falling back to the subscription's
+    // start date when no future ride instance exists yet keeps the
+    // card useful right after Subscribe & pay completes — before the
+    // first ride instance has been generated server-side.
+
+    private struct NextCommute {
+        let subscription: RouteSubscription
+        let route: RecurringRoute
+        /// The actual ride instance, when one exists in the next 30 days.
+        let ride: CommuteRideInstance?
+        /// The ride's date when present, otherwise the subscription's
+        /// start-of-window so the card always has a real timestamp.
+        let displayDate: Date
+    }
+
+    private var nextCommute: NextCommute? {
+        let subs = store.mySubscriptions()
+            .filter { $0.subscription.status == .active }
+        guard !subs.isEmpty else { return nil }
+
+        let now = Calendar.current.startOfDay(for: Date())
+
+        // Each subscription with route gets ranked by its soonest
+        // upcoming ride; the rider's whole list is then ranked by
+        // those soonest dates so we pick the truly-next commute even
+        // across multiple active subs.
+        let ranked: [(NextCommute, Date)] = subs.compactMap { item in
+            let upcoming = store.upcomingRides(routeId: item.route.id)
+                .first { $0.confirmedPassengers.contains(store.riderId) || item.subscription.status == .active }
+            let displayDate: Date = upcoming?.date
+                ?? item.nextRideDate
+                ?? max(item.subscription.startDate, now)
+            // Skip subscriptions whose window has already ended.
+            if item.subscription.endDate < now { return nil }
+            return (
+                NextCommute(
+                    subscription: item.subscription,
+                    route:        item.route,
+                    ride:         upcoming,
+                    displayDate:  displayDate
+                ),
+                displayDate
+            )
+        }
+        return ranked.sorted { $0.1 < $1.1 }.first?.0
+    }
+
+    // MARK: - Next commute section
+
+    @ViewBuilder
+    private var nextCommuteSection: some View {
+        if let nc = nextCommute {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Next commute")
+                        .font(.system(size: 16, weight: .black))
+                        .tracking(-0.2)
+                        .foregroundColor(VPalette.text)
+                    Spacer()
+                    VBadge(text: statusLabel(nc), color: statusColor(nc), container: statusColor(nc).opacity(0.15))
+                }
+
+                Button {
+                    onOpenRoute(nc.route.id)
+                } label: {
+                    nextCommuteCard(nc)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open route details for next commute")
+
+                nextCommuteActions(nc)
+            }
+        }
+    }
+
+    private func nextCommuteCard(_ nc: NextCommute) -> some View {
+        // Single rounded surface — no card-inside-card. Internal rows
+        // use hairline dividers to delineate sections.
+        VStack(alignment: .leading, spacing: 0) {
+            // Top row — When (date + departure time)
+            HStack(alignment: .center, spacing: 12) {
+                VIconBubble(systemName: "clock.fill", color: VPalette.primary, size: 36, iconSize: 16)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(whenLabel(nc))
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundColor(VPalette.text)
+                    Text("Departs \(nc.route.departureTime)")
+                        .font(.system(size: 11))
+                        .foregroundColor(VPalette.textSec)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundColor(VPalette.textHint)
+            }
+            .padding(14)
+
+            Rectangle().fill(VPalette.border).frame(height: 1)
+
+            // Route — start → end
+            HStack(alignment: .center, spacing: 12) {
+                VIconBubble(systemName: "arrow.right.circle.fill", color: VPalette.success, size: 36, iconSize: 16)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(shortStop(nc.route.startLocation)) → \(shortStop(nc.route.endLocation))")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundColor(VPalette.text)
+                        .lineLimit(2)
+                    HStack(spacing: 6) {
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(VPalette.textHint)
+                        Text(pickupDropLabel(nc))
+                            .font(.system(size: 11))
+                            .foregroundColor(VPalette.textSec)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+
+            Rectangle().fill(VPalette.border).frame(height: 1)
+
+            // Driver row — name only; verified tick when the route
+            // exists, no fake ratings or photos here.
+            HStack(alignment: .center, spacing: 12) {
+                HueAvatar(name: nc.route.driverName.isEmpty ? "Driver" : nc.route.driverName,
+                          hue: 200, size: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(nc.route.driverName.isEmpty ? "Driver" : nc.route.driverName)
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundColor(VPalette.text)
+                        VVerifiedTick(size: 10)
+                    }
+                    Text(nc.route.carType.label)
+                        .font(.system(size: 11))
+                        .foregroundColor(VPalette.textSec)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+        }
+        .background(VPalette.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(VPalette.border, lineWidth: 1)
+        )
+    }
+
+    private func nextCommuteActions(_ nc: NextCommute) -> some View {
+        HStack(spacing: 8) {
+            actionPill(icon: "calendar", label: "Calendar", action: onOpenCalendar)
+            actionPill(icon: "bubble.left.fill", label: messageLabel(nc),
+                       action: { onMessageDriver(nc.route.id) })
+            actionPill(icon: "info.circle.fill", label: "Details",
+                       action: { onOpenRoute(nc.route.id) })
+        }
+    }
+
+    private func actionPill(icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .heavy))
+                Text(label)
+                    .font(.system(size: 12, weight: .heavy))
+                    .lineLimit(1)
+            }
+            .foregroundColor(VPalette.primary)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(VPalette.primaryContainer)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Next commute helpers
+
+    private func shortStop(_ raw: String) -> String {
+        let trimmed = raw.split(separator: ",").first.map(String.init) ?? raw
+        return trimmed.trimmingCharacters(in: .whitespaces)
+    }
+
+    private func whenLabel(_ nc: NextCommute) -> String {
+        let cal = Calendar.current
+        if cal.isDateInToday(nc.displayDate) { return "Today" }
+        if cal.isDateInTomorrow(nc.displayDate) { return "Tomorrow" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_MY")
+        // `EEE, d MMM` reads "Mon, 12 May"
+        f.dateFormat = "EEE, d MMM"
+        return f.string(from: nc.displayDate)
+    }
+
+    private func pickupDropLabel(_ nc: NextCommute) -> String {
+        // Prefer the rider's selected pickup/drop on the subscription;
+        // fall back to the route's first pickup/drop point label so
+        // we never render an empty subtitle.
+        let pickup = nc.subscription.selectedPickupPoint.label.isEmpty
+            ? (nc.route.pickupPoints.first?.label ?? "Pickup")
+            : nc.subscription.selectedPickupPoint.label
+        let drop = nc.subscription.selectedDropPoint.label.isEmpty
+            ? (nc.route.dropPoints.first?.label ?? "Drop")
+            : nc.subscription.selectedDropPoint.label
+        return "\(pickup) → \(drop)"
+    }
+
+    private func statusLabel(_ nc: NextCommute) -> String {
+        switch nc.subscription.status {
+        case .active:    return "Confirmed"
+        case .paused:    return "Paused"
+        case .completed: return "Completed"
+        case .cancelled: return "Cancelled"
+        }
+    }
+
+    private func statusColor(_ nc: NextCommute) -> Color {
+        switch nc.subscription.status {
+        case .active:    return VPalette.success
+        case .paused:    return VPalette.warning
+        case .completed: return VPalette.accent
+        case .cancelled: return VPalette.danger
+        }
+    }
+
+    private func messageLabel(_ nc: NextCommute) -> String {
+        // Short-circuit on whether a real chat thread already exists
+        // for this route. The thread DTO uses `tripId` (which the
+        // backend populates from `chat_threads.route_id`).
+        let hasThread = store.threads.contains { $0.tripId == nc.route.id }
+        return hasThread ? "Message" : "Inbox"
     }
 
     // MARK: Hero
@@ -164,12 +446,26 @@ struct HomeView: View {
                     }
                     Spacer(minLength: 0)
                     Button(action: onOpenNotifications) {
-                        Image(systemName: "bell")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 40, height: 40)
-                            .background(Color.white.opacity(0.18))
-                            .clipShape(Circle())
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: "bell")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                                .background(Color.white.opacity(0.18))
+                                .clipShape(Circle())
+                            // Unread badge — coral dot when there's
+                            // anything new in `store.notifications`.
+                            // Reads from the derived counter so we
+                            // don't keep a separate flag in sync.
+                            if store.unreadNotificationsCount > 0 {
+                                Circle()
+                                    .fill(VPalette.accentCoral)
+                                    .frame(width: 10, height: 10)
+                                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                                    .offset(x: 2, y: -2)
+                                    .accessibilityLabel("\(store.unreadNotificationsCount) unread notifications")
+                            }
+                        }
                     }
                     .buttonStyle(.plain)
                 }

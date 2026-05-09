@@ -181,6 +181,22 @@ struct VoygoAPIClient {
         _ = try await postVoid(body, to: baseURL.appendingPathComponent("chats/\(threadId)/send"))
     }
 
+    // MARK: - Notifications
+
+    /// GET /notifications/me — most-recent first, defaults to 30 rows.
+    static func listNotifications(limit: Int = 30) async throws -> [NotificationDTO] {
+        var comps = URLComponents(url: baseURL.appendingPathComponent("notifications/me"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
+        return try await get(comps.url!, as: [NotificationDTO].self)
+    }
+
+    /// PUT /notifications/{id}/read — idempotent. Server returns 204 with
+    /// no body, so the client side just needs to validate the response.
+    static func markNotificationRead(id: String) async throws {
+        let url = baseURL.appendingPathComponent("notifications/\(id)/read")
+        try await putVoidNoBody(url)
+    }
+
     // GET /health
     static func health() async throws -> Bool {
         let _: HealthResponse = try await get(baseURL.appendingPathComponent("health"), as: HealthResponse.self)
@@ -234,6 +250,15 @@ struct VoygoAPIClient {
     private static func putVoid<B: Encodable>(_ body: B, to url: URL) async throws {
         var req = authedRequest(url, method: "PUT")
         req.httpBody = try encoder.encode(body)
+        let (_, response) = try await session.data(for: req)
+        try validate(response)
+    }
+
+    /// Bodyless PUT — used for idempotent state flips like
+    /// `/notifications/{id}/read` where the URL itself encodes the
+    /// intent and the backend returns 204.
+    private static func putVoidNoBody(_ url: URL) async throws {
+        let req = authedRequest(url, method: "PUT")
         let (_, response) = try await session.data(for: req)
         try validate(response)
     }
@@ -499,6 +524,30 @@ struct UpdateRouteScheduleRequest: Encodable {
 }
 struct SendMessageRequest: Encodable { var text: String }
 struct HealthResponse: Decodable { var status: String }
+
+// MARK: - Notification DTO
+//
+// Mirrors the row shape from `GET /notifications/me`:
+//   id · type · title · body · routeId? · subscriptionId? ·
+//   rideInstanceId? · readAt? · createdAt
+//
+// `type` is intentionally a free-form string from the backend
+// (`RIDE_REMINDER`, `PAYMENT_FAILED`, `DRIVER_UPDATE`, …) — the iOS
+// side maps known kinds to icons + colors, with a generic fallback
+// for anything new the backend introduces. That keeps the iOS build
+// forward-compatible with new notification kinds without needing
+// an app release.
+struct NotificationDTO: Decodable, Equatable {
+    var id: String
+    var type: String
+    var title: String
+    var body: String
+    var routeId: String?
+    var subscriptionId: String?
+    var rideInstanceId: String?
+    var readAt: Date?
+    var createdAt: Date
+}
 
 struct CreateRecurringRouteRequest: Encodable {
     var driverId: String

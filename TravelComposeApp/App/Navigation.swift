@@ -62,6 +62,14 @@ struct MainTabView: View {
         .task {
             await store.refreshAll()
         }
+        // Cross-tab deep linking. HomeTab posts this when the user
+        // taps Message-driver on the Next-commute card; we switch
+        // tabs without owning a shared NavigationPath.
+        .onReceive(NotificationCenter.default.publisher(for: HomeTab.switchToInboxNotification)) { _ in
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                selectedTab = 3
+            }
+        }
     }
 }
 

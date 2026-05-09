@@ -51,6 +51,18 @@ final class AppStore {
     var threads: [ChatThread] = []
     var messages: [ChatMessage] = []
 
+    /// Backend-backed notifications feed. Populated from
+    /// `GET /notifications/me`. `unreadNotificationsCount` is derived
+    /// from this so views can drive a bell badge / inbox kicker
+    /// directly from the source list (no separate counter to keep in
+    /// sync). The list is most-recent first, matching the API.
+    var notifications: [NotificationDTO] = []
+
+    /// Local-only marker that bumps when the notifications list is
+    /// refreshed; used by views that want to flash a "got new
+    /// notifications" UI without diffing the array themselves.
+    private(set) var notificationsTick: Int = 0
+
     /// Driver weekly payout statement. Populated by `refreshPayout()` from
     /// `/payouts/me`. Stays nil until the first sync (or if the call fails),
     /// in which case DriverPayoutsView falls back to its empty state.
@@ -378,6 +390,65 @@ final class AppStore {
         Task { await refreshPayments() }
     }
 
+    // MARK: - Notifications
+
+    /// Pulls the most recent notifications for the signed-in user.
+    /// Best-effort — never throws to the caller; on failure we keep
+    /// the previously-fetched list so the bell badge doesn't flicker
+    /// and the user can still scroll through what they already had.
+    func refreshNotifications() async {
+        guard useOnline, isAuthenticated else { return }
+        do {
+            let rows = try await VoygoAPIClient.listNotifications(limit: 50)
+            notifications = rows
+            notificationsTick &+= 1
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal — leave existing list in place.
+        }
+    }
+
+    /// Optimistically marks a notification as read locally, then fires
+    /// the PUT to persist server-side. If the network call fails we
+    /// roll back so the bell badge doesn't lie. Idempotent on the
+    /// backend so a duplicate call is harmless.
+    func markNotificationRead(_ id: String) async {
+        guard let idx = notifications.firstIndex(where: { $0.id == id }) else { return }
+        guard notifications[idx].readAt == nil else { return } // already read
+        let previous = notifications[idx]
+        notifications[idx].readAt = Date()
+        guard useOnline, isAuthenticated else { return }
+        do {
+            try await VoygoAPIClient.markNotificationRead(id: id)
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Roll back on failure so the UI doesn't claim "read" while
+            // the server still has it as unread.
+            if let rollbackIdx = notifications.firstIndex(where: { $0.id == id }) {
+                notifications[rollbackIdx] = previous
+            }
+        }
+    }
+
+    /// Convenience for "Mark all read". Walks the list and fires PUTs
+    /// for each unread row — backend doesn't have a bulk endpoint yet
+    /// (when it does we swap this implementation, view doesn't change).
+    func markAllNotificationsRead() async {
+        let unread = notifications.filter { $0.readAt == nil }.map(\.id)
+        guard !unread.isEmpty else { return }
+        for id in unread {
+            await markNotificationRead(id)
+        }
+    }
+
+    /// Derived counter so the bell badge / inbox kicker can read this
+    /// directly without computing the filter at the call site.
+    var unreadNotificationsCount: Int {
+        notifications.lazy.filter { $0.readAt == nil }.count
+    }
+
     // MARK: - KYC
 
     func refreshKycDocuments() async {
@@ -489,6 +560,7 @@ final class AppStore {
             // primary refresh result.
             await refreshPayout()
             await refreshKycDocuments()
+            await refreshNotifications()
             lastSyncError = nil
             connectionState = .online
         } catch APIError.unauthorized {

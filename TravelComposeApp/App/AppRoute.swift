@@ -206,8 +206,13 @@ struct AppRouteDestinations: ViewModifier {
                 .navigationBarHidden(true)
 
             case .notifications:
-                NotificationsView(onBack: { if !path.isEmpty { path.removeLast() } })
-                    .navigationBarHidden(true)
+                NotificationsView(
+                    onBack: { if !path.isEmpty { path.removeLast() } },
+                    onOpenRoute: { id in path.append(.routeDetails(routeId: id)) },
+                    onOpenSubscriptions: { path.append(.mySubscriptions) },
+                    onOpenCalendar: { path.append(.calendar()) }
+                )
+                .navigationBarHidden(true)
 
             case .receipt(let id):
                 ReceiptView(
