@@ -31,10 +31,15 @@ const https = require("https");
 // When both are configured, Resend wins. The OTP route only tries one;
 // no point burning 8s on SMTP if the API call already worked.
 
+// Resend's sandbox sender. Available to every account without DNS
+// verification but only delivers to the email tied to the Resend
+// account. For production, override via OTP_FROM_EMAIL once your
+// own domain is verified in Resend.
+const DEFAULT_RESEND_FROM = "Voygo <onboarding@resend.dev>";
+
 function resendConfigured() {
   return Boolean(
     process.env.RESEND_API_KEY &&
-    process.env.OTP_FROM_EMAIL &&
     process.env.OTP_TO_EMAIL
   );
 }
@@ -193,7 +198,11 @@ async function sendOtpEmail({ phone, code, expiresAt }) {
         <span style="font-size:28px;letter-spacing:4px;font-family:Menlo,monospace">${code}</span><br/>
         <span style="color:#666">Expires in ${expiresMin} minutes. Requested for ${phone}.</span>
       </p>`;
-  const from = process.env.OTP_FROM_EMAIL || process.env.SMTP_USER;
+  // Pick a `from` that matches the active provider. Resend sandbox
+  // works without OTP_FROM_EMAIL set; SMTP falls back to SMTP_USER
+  // since most providers require auth-user == from.
+  const from = process.env.OTP_FROM_EMAIL
+    || (resendConfigured() ? DEFAULT_RESEND_FROM : process.env.SMTP_USER);
   const to   = process.env.OTP_TO_EMAIL;
 
   let result;
