@@ -2096,7 +2096,7 @@ app.get(
              u.phone        AS driver_phone,
              dr.average_rating
         FROM long_haul_trips t
-        LEFT JOIN users u             ON u.id = t.driver_id
+        LEFT JOIN users u             ON u.id::text = t.driver_id
         LEFT JOIN driver_reliability dr ON dr.driver_id = t.driver_id
        WHERE ${where.join(" AND ")}
        ORDER BY t.depart_at ASC
@@ -2119,7 +2119,7 @@ app.get(
               u.phone        AS driver_phone,
               dr.average_rating
          FROM long_haul_trips t
-         LEFT JOIN users u             ON u.id = t.driver_id
+         LEFT JOIN users u             ON u.id::text = t.driver_id
          LEFT JOIN driver_reliability dr ON dr.driver_id = t.driver_id
         WHERE t.id = $1`,
       [req.params.id]
@@ -2269,7 +2269,7 @@ app.get(
               u.phone        AS driver_phone
          FROM long_haul_bookings b
          JOIN long_haul_trips t  ON t.id = b.trip_id
-         LEFT JOIN users u       ON u.id = t.driver_id
+         LEFT JOIN users u       ON u.id::text = t.driver_id
         WHERE b.rider_id = $1
         ORDER BY t.depart_at DESC
         LIMIT 50`,
@@ -2303,7 +2303,7 @@ app.get(
               u.phone        AS driver_phone,
               dr.average_rating
          FROM long_haul_trips t
-         LEFT JOIN users u             ON u.id = t.driver_id
+         LEFT JOIN users u             ON u.id::text = t.driver_id
          LEFT JOIN driver_reliability dr ON dr.driver_id = t.driver_id
         WHERE t.driver_id = $1
         ORDER BY t.depart_at DESC
