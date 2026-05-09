@@ -463,6 +463,52 @@ final class AppStore {
         notifications.lazy.filter { $0.readAt == nil }.count
     }
 
+    // MARK: - Live ride locations (rider-side)
+    //
+    // Last-known location per ride id, populated by an SSE consumer
+    // on `LiveTripView`. Views read `liveLocation(for:)` and animate.
+
+    var liveLocations: [String: RideLocationDTO] = [:]
+
+    func liveLocation(for rideId: String) -> RideLocationDTO? {
+        liveLocations[rideId]
+    }
+
+    /// Open an SSE subscription for a ride. Returns the cancellable
+    /// `Task` so the view that subscribed can cancel on `.onDisappear`.
+    /// The store stores each update so other views (e.g. a small
+    /// "live" pill on Home or My Subscriptions) can read it too.
+    func streamRideLocation(_ rideId: String) -> Task<Void, Never> {
+        return Task { [weak self] in
+            for await update in VoygoAPIClient.streamRideLocation(rideId: rideId) {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.liveLocations[rideId] = update
+                }
+            }
+        }
+    }
+
+    /// Driver-side breadcrumb push. Best-effort — failures are
+    /// swallowed because dropping a single sample isn't worth a
+    /// user-visible error; the next sample (5–10s later) will get
+    /// through if the network recovered.
+    func postRideLocation(rideId: String,
+                          lat: Double, lng: Double,
+                          heading: Double? = nil, speedMps: Double? = nil) async {
+        guard useOnline, isAuthenticated else { return }
+        do {
+            try await VoygoAPIClient.postRideLocation(
+                rideId: rideId, lat: lat, lng: lng,
+                heading: heading, speedMps: speedMps
+            )
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // non-fatal
+        }
+    }
+
     // MARK: - KYC
 
     func refreshKycDocuments() async {

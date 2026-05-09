@@ -205,6 +205,26 @@ async function initSchema(pool) {
   await pool.query(
     "CREATE INDEX IF NOT EXISTS ix_notifications_user ON notifications(user_id, created_at DESC)"
   );
+
+  // Live ride locations — driver-side breadcrumbs the rider's
+  // LiveTripView consumes via SSE. Latest row per ride wins; we keep
+  // the historical trail so we can backfill the driver's actual
+  // path on the receipt + drive-quality reviews. Pruned by a
+  // separate cron (not implemented yet) once the ride completes.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ride_locations (
+      ride_id      TEXT NOT NULL,
+      driver_id    TEXT NOT NULL,
+      lat          DOUBLE PRECISION NOT NULL,
+      lng          DOUBLE PRECISION NOT NULL,
+      heading      DOUBLE PRECISION NULL,
+      speed_mps    DOUBLE PRECISION NULL,
+      recorded_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_ride_locations_ride_recent ON ride_locations(ride_id, recorded_at DESC)"
+  );
 }
 
 module.exports = { initSchema };

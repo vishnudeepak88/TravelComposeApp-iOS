@@ -211,6 +211,76 @@ struct VoygoAPIClient {
         try await putVoidNoBody(url)
     }
 
+    // MARK: - Live ride location
+
+    /// POST /rides/{rideId}/location — driver-side breadcrumb push.
+    /// Server validates that the caller drives the route attached to
+    /// the ride; rider-side calls return 403.
+    static func postRideLocation(rideId: String,
+                                  lat: Double,
+                                  lng: Double,
+                                  heading: Double? = nil,
+                                  speedMps: Double? = nil) async throws {
+        let body = RideLocationPushBody(lat: lat, lng: lng, heading: heading, speedMps: speedMps)
+        let url = baseURL.appendingPathComponent("rides/\(rideId)/location")
+        var req = authedRequest(url, method: "POST")
+        req.httpBody = try encoder.encode(body)
+        let (_, response) = try await session.data(for: req)
+        try validate(response)
+    }
+
+    /// GET /rides/{rideId}/stream — SSE feed of live driver
+    /// breadcrumbs. Yields the latest cached location first, then
+    /// each subsequent push from the driver. Cancellation of the
+    /// returned task drops the connection cleanly.
+    static func streamRideLocation(rideId: String) -> AsyncStream<RideLocationDTO> {
+        AsyncStream { continuation in
+            let url = baseURL.appendingPathComponent("rides/\(rideId)/stream")
+            var req = URLRequest(url: url)
+            req.httpMethod = "GET"
+            req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+            if let token = SessionStorage.authToken, !token.isEmpty {
+                req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+            // SSE connections live for the duration of the ride.
+            // Default URLSession timeouts (60s) would close the
+            // stream prematurely.
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = 600     // 10 min idle
+            config.timeoutIntervalForResource = 60 * 60 * 6 // 6 hours total
+            let session = URLSession(configuration: config)
+
+            let task = Task {
+                do {
+                    let (bytes, response) = try await session.bytes(for: req)
+                    if let http = response as? HTTPURLResponse,
+                       !(200..<300).contains(http.statusCode) {
+                        continuation.finish()
+                        return
+                    }
+                    let decoder = JSONDecoder()
+                    decoder.keyDecodingStrategy = .convertFromSnakeCase
+                    decoder.dateDecodingStrategy = .iso8601
+                    for try await line in bytes.lines {
+                        // SSE framing: only `data:` lines are payload;
+                        // we ignore comments (`:`) and event names.
+                        guard line.hasPrefix("data:") else { continue }
+                        let json = String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                        guard let data = json.data(using: .utf8),
+                              let update = try? decoder.decode(RideLocationDTO.self, from: data) else {
+                            continue
+                        }
+                        continuation.yield(update)
+                    }
+                } catch {
+                    // network drop / cancellation — finish the stream
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     // GET /health
     static func health() async throws -> Bool {
         let _: HealthResponse = try await get(baseURL.appendingPathComponent("health"), as: HealthResponse.self)
@@ -562,6 +632,29 @@ struct NotificationDTO: Decodable, Equatable {
     var rideInstanceId: String?
     var readAt: Date?
     var createdAt: Date
+}
+
+// MARK: - Live ride location DTOs
+//
+// `RideLocationDTO` is what arrives via SSE on the rider side; the
+// push body is `RideLocationPushBody`. Heading is in degrees clockwise
+// from north (0…360), speed in metres-per-second; both optional
+// because Core Location doesn't always have a confident value.
+
+struct RideLocationDTO: Decodable, Equatable {
+    var rideId: String
+    var lat: Double
+    var lng: Double
+    var heading: Double?
+    var speedMps: Double?
+    var recordedAt: Date
+}
+
+struct RideLocationPushBody: Encodable {
+    var lat: Double
+    var lng: Double
+    var heading: Double?
+    var speedMps: Double?
 }
 
 struct CreateRecurringRouteRequest: Encodable {

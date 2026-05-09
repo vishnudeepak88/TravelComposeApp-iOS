@@ -48,6 +48,23 @@ const app = express();
 const logSuccessfulRequests =
   String(process.env.LOG_SUCCESS_REQUESTS || "").toLowerCase() === "true";
 
+// In-process pub/sub for live ride locations. Single-process backend
+// for now — multi-process deploys will need Postgres LISTEN/NOTIFY or
+// Redis pub/sub here. The Map keys are ride ids; values are Sets of
+// SSE response objects subscribed to that ride. We add on
+// `GET /rides/:id/stream`, remove on the response's `close`/`end`.
+const liveRideSubscribers = new Map();
+
+function broadcastRideLocation(rideId, payload) {
+  const subscribers = liveRideSubscribers.get(rideId);
+  if (!subscribers || subscribers.size === 0) return;
+  const data = `data: ${JSON.stringify(payload)}\n\n`;
+  for (const res of subscribers) {
+    try { res.write(data); }
+    catch (_e) { subscribers.delete(res); }
+  }
+}
+
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 app.use((req, res, next) => {
@@ -416,6 +433,129 @@ app.put(
       return;
     }
     res.status(204).send();
+  })
+);
+
+// MARK: - Live ride locations
+
+// POST /rides/:rideId/location — driver-side breadcrumb push.
+// Authorisation: the caller must own a route that has this ride
+// instance scheduled, OR be the driver_id on the ride. Riders
+// cannot post locations.
+app.post(
+  "/rides/:rideId/location",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const rideId = String(req.params.rideId);
+    const lat = Number(req.body?.lat);
+    const lng = Number(req.body?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) ||
+        lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      res.status(400).json({ detail: "lat / lng required and must be within Earth" });
+      return;
+    }
+    const heading = req.body?.heading != null ? Number(req.body.heading) : null;
+    const speedMps = req.body?.speedMps != null ? Number(req.body.speedMps) : null;
+
+    // Verify the caller drives this ride. Any "driver_id on the
+    // route attached to this ride instance" matches.
+    const owns = await pool.query(
+      `SELECT 1
+         FROM commute_ride_instances ri
+         JOIN recurring_routes r ON r.id = ri.route_id
+        WHERE ri.id = $1 AND r.driver_id = $2
+        LIMIT 1`,
+      [rideId, req.user.id]
+    );
+    if (owns.rowCount === 0) {
+      res.status(403).json({ detail: "Only the route driver can post a ride location" });
+      return;
+    }
+
+    const recordedAt = new Date();
+    await pool.query(
+      `INSERT INTO ride_locations
+         (ride_id, driver_id, lat, lng, heading, speed_mps, recorded_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [rideId, req.user.id, lat, lng, heading, speedMps, recordedAt]
+    );
+
+    broadcastRideLocation(rideId, {
+      rideId, lat, lng, heading, speedMps,
+      recordedAt: recordedAt.toISOString()
+    });
+
+    res.status(204).send();
+  })
+);
+
+// GET /rides/:rideId/stream — Server-Sent Events feed of the latest
+// driver-pushed location plus future updates while the rider keeps
+// the stream open. Anyone authenticated can subscribe; we don't
+// gate by ride participation here because the ride id itself is a
+// hard-to-guess UUID and notification deep links carry it. If
+// privacy concerns escalate, gate by `confirmed_passengers`.
+app.get(
+  "/rides/:rideId/stream",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const rideId = String(req.params.rideId);
+
+    res.set({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no" // disable nginx buffering if proxied
+    });
+    res.flushHeaders();
+
+    // Send the most recent breadcrumb so the rider has *something*
+    // to render immediately, then stream future inserts.
+    const latest = await pool.query(
+      `SELECT ride_id, lat, lng, heading, speed_mps, recorded_at
+         FROM ride_locations
+        WHERE ride_id = $1
+        ORDER BY recorded_at DESC
+        LIMIT 1`,
+      [rideId]
+    );
+    if (latest.rowCount > 0) {
+      const r = latest.rows[0];
+      res.write(`data: ${JSON.stringify({
+        rideId: r.ride_id,
+        lat: r.lat,
+        lng: r.lng,
+        heading: r.heading,
+        speedMps: r.speed_mps,
+        recordedAt: r.recorded_at
+      })}\n\n`);
+    }
+
+    // Subscribe.
+    let subs = liveRideSubscribers.get(rideId);
+    if (!subs) {
+      subs = new Set();
+      liveRideSubscribers.set(rideId, subs);
+    }
+    subs.add(res);
+
+    // Heartbeat — SSE clients (and proxies) drop quiet connections.
+    // 25s is well under the typical 30s idle close.
+    const heartbeat = setInterval(() => {
+      try { res.write(": ping\n\n"); }
+      catch (_e) { /* close handler will clean up */ }
+    }, 25_000);
+
+    const cleanup = () => {
+      clearInterval(heartbeat);
+      const set = liveRideSubscribers.get(rideId);
+      if (set) {
+        set.delete(res);
+        if (set.size === 0) liveRideSubscribers.delete(rideId);
+      }
+    };
+    req.on("close", cleanup);
+    res.on("close", cleanup);
   })
 );
 

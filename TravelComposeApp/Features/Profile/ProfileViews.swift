@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 
 // MARK: - Profile (mirrors ProfileScreen.kt)
 //
@@ -496,11 +497,21 @@ struct LiveTripView: View {
     @State private var showSOSAlert = false
     @State private var showShareSheet = false
     @State private var showSOSMessageComposer = false
-    /// Live ETA in minutes — counts down. Real implementation would pull
-    /// from a route + GPS + ETA service; the demo just decrements every
-    /// minute so the screen visibly works.
+    /// Live ETA in minutes. Computed from the live driver location +
+    /// drop-point distance when a real GPS sample is in. Falls back to
+    /// the timer-driven demo countdown until the first sample arrives.
     @State private var etaMinutes: Int = 12
     @State private var etaTask: Task<Void, Never>? = nil
+    /// SSE subscription for the driver's live breadcrumbs. Started in
+    /// `.onAppear`, cancelled in `.onDisappear` so we don't keep the
+    /// connection open after the rider navigates away.
+    @State private var liveLocationTask: Task<Void, Never>? = nil
+    /// Driver-side foreground push. When the user is the driver and
+    /// flips this on, `CLLocationManager` delivers location updates
+    /// every ~10s and we POST each one to /rides/:id/location.
+    @State private var isSharingLocation: Bool = false
+    @State private var driverLocationManager: CLLocationManager? = nil
+    @State private var driverLocationDelegate: DriverLocationDelegate? = nil
 
     /// Real ride context: looks up the trip from `store.rideInstances`
     /// and resolves its route. Falls back to nil when the lookup fails
@@ -618,14 +629,45 @@ struct LiveTripView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 54)
 
+                    // GPS dot — animates along the abstract diagram
+                    // based on real driver progress when an SSE
+                    // sample is in. We compute progress as a 0…1
+                    // value from the driver's lat/lng vs. the
+                    // route's pickup/drop bounds; idle position is
+                    // the previous "47% × 55%" demo midpoint.
                     GeometryReader { geo in
+                        let progress = liveProgressFraction()
                         ZStack {
                             Circle().fill(VPalette.primary).frame(width: 30, height: 30)
                                 .overlay(Circle().stroke(.white, lineWidth: 3))
                                 .shadow(color: VPalette.primary.opacity(0.5), radius: 12, y: 4)
-                            Image(systemName: "car.fill").font(.system(size: 13, weight: .bold)).foregroundColor(.white)
+                            Image(systemName: "car.fill")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.white)
                         }
-                        .position(x: geo.size.width * 0.47, y: geo.size.height * 0.55)
+                        .position(
+                            x: geo.size.width  * (0.10 + 0.80 * progress),
+                            y: geo.size.height * (0.85 - 0.70 * progress)
+                        )
+                        .animation(.easeOut(duration: 0.6), value: progress)
+                        // "Live" pill when we have a fresh SSE sample.
+                        if let live = store.liveLocation(for: tripId),
+                           Date().timeIntervalSince(live.recordedAt) < 60 {
+                            HStack(spacing: 4) {
+                                Circle().fill(VPalette.success).frame(width: 6, height: 6)
+                                Text("Live")
+                                    .font(.system(size: 9, weight: .black))
+                                    .tracking(0.6)
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Capsule())
+                            .position(
+                                x: geo.size.width  * (0.10 + 0.80 * progress),
+                                y: geo.size.height * (0.85 - 0.70 * progress) - 26
+                            )
+                        }
                     }
                 }
                 .frame(height: 360)
@@ -638,8 +680,21 @@ struct LiveTripView: View {
             }
         }
         .navigationBarHidden(true)
-        .onAppear { startEtaCountdown() }
-        .onDisappear { etaTask?.cancel(); etaTask = nil }
+        .onAppear {
+            startEtaCountdown()
+            // Open the SSE breadcrumb stream as soon as the rider
+            // mounts the screen. The store caches the latest sample
+            // so the GPS dot has a starting point even if the driver
+            // hasn't pushed in the last 30 seconds.
+            liveLocationTask?.cancel()
+            liveLocationTask = store.streamRideLocation(tripId)
+        }
+        .onDisappear {
+            etaTask?.cancel(); etaTask = nil
+            liveLocationTask?.cancel(); liveLocationTask = nil
+            // Stop driver-side push if it was running.
+            if isSharingLocation { stopDriverLocationPush() }
+        }
         .alert("Send SOS?", isPresented: $showSOSAlert) {
             Button("Compose SMS", role: .destructive) {
                 sosPressed = true
@@ -825,6 +880,35 @@ struct LiveTripView: View {
             .accessibilityLabel("Send SOS")
             .padding(.top, 14)
 
+            // Driver-only: share live location for the duration of the
+            // trip. Foreground only — the toggle copy is honest about
+            // the trade-off so a driver doesn't expect background
+            // updates while their phone is locked.
+            if isDriver {
+                Button {
+                    if isSharingLocation {
+                        stopDriverLocationPush()
+                        isSharingLocation = false
+                    } else {
+                        startDriverLocationPush()
+                        isSharingLocation = true
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: isSharingLocation ? "location.fill" : "location")
+                            .font(.system(size: 14, weight: .heavy))
+                        Text(isSharingLocation ? "Sharing live · keep app open" : "Share live location")
+                            .font(.system(size: 13, weight: .black))
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .foregroundColor(isSharingLocation ? .white : VPalette.primary)
+                    .background(isSharingLocation ? VPalette.primary : VPalette.primaryContainer)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 10)
+            }
+
             // End Trip is the primary path for a rider — visible on every
             // live trip so they can flow into rating without hunting for
             // the action.
@@ -855,20 +939,138 @@ struct LiveTripView: View {
     private var etaSubtitle: String {
         if etaMinutes <= 0 { return "Your driver is at the pickup" }
         let arrival = Date().addingTimeInterval(TimeInterval(etaMinutes * 60))
-        return "Arriving \(Formatters.time(arrival)) · 8.4 km"
+        if let km = liveDistanceKm() {
+            return "Arriving \(Formatters.time(arrival)) · \(String(format: "%.1f", km)) km"
+        }
+        return "Arriving \(Formatters.time(arrival))"
     }
 
-    /// Stub-grade ETA tick — drops a minute every 60s until 0 so the
-    /// number isn't visibly frozen during demos. The real implementation
-    /// will pull from a routing service.
+    /// Demo countdown — kept as a fallback so the ETA stays visible
+    /// even if no SSE sample arrives. Once a sample lands,
+    /// `recomputeEtaFromLive(_:)` overrides this.
     private func startEtaCountdown() {
         etaTask?.cancel()
         etaTask = Task {
             while !Task.isCancelled && etaMinutes > 0 {
                 try? await Task.sleep(nanoseconds: 60_000_000_000)
                 if Task.isCancelled { return }
-                await MainActor.run { if etaMinutes > 0 { etaMinutes -= 1 } }
+                await MainActor.run {
+                    // Only let the timer drift the ETA when there's
+                    // no recent live sample — the live consumer is
+                    // the source of truth when present.
+                    if let live = store.liveLocation(for: tripId),
+                       Date().timeIntervalSince(live.recordedAt) < 90 {
+                        return
+                    }
+                    if etaMinutes > 0 { etaMinutes -= 1 }
+                }
             }
+        }
+    }
+
+    // MARK: - Live progress + ETA helpers
+
+    /// 0…1 progress along the route based on the driver's current
+    /// position. `0` = at the route's first pickup point; `1` = at
+    /// the route's last drop point. Without geo data we return 0.5
+    /// so the dot sits at the diagram's midpoint (matching the
+    /// previous demo behaviour).
+    private func liveProgressFraction() -> CGFloat {
+        guard let live = store.liveLocation(for: tripId),
+              let r = route,
+              let pickup = r.pickupPoints.first,
+              let drop   = r.dropPoints.last else {
+            return 0.5
+        }
+        let total = haversineMeters(
+            lat1: pickup.lat, lng1: pickup.lng,
+            lat2: drop.lat,   lng2: drop.lng
+        )
+        guard total > 0 else { return 0.5 }
+        let travelled = haversineMeters(
+            lat1: pickup.lat, lng1: pickup.lng,
+            lat2: live.lat,   lng2: live.lng
+        )
+        return CGFloat(min(1.0, max(0.0, travelled / total)))
+    }
+
+    /// Straight-line distance from the live position to the route's
+    /// drop point. Used as the ETA distance for the subtitle when a
+    /// sample is in. Returns nil when we have no live data.
+    private func liveDistanceKm() -> Double? {
+        guard let live = store.liveLocation(for: tripId),
+              let drop = route?.dropPoints.last else { return nil }
+        let m = haversineMeters(
+            lat1: live.lat, lng1: live.lng,
+            lat2: drop.lat, lng2: drop.lng
+        )
+        return m / 1000.0
+    }
+
+    private func haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double) -> Double {
+        let R = 6_371_000.0
+        let dLat = (lat2 - lat1) * .pi / 180
+        let dLng = (lng2 - lng1) * .pi / 180
+        let a = sin(dLat/2)*sin(dLat/2)
+              + cos(lat1 * .pi/180)*cos(lat2 * .pi/180)
+              * sin(dLng/2)*sin(dLng/2)
+        return R * 2 * atan2(sqrt(a), sqrt(1-a))
+    }
+
+    // MARK: - Driver-side foreground push
+    //
+    // Only available when this LiveTripView was opened in driver mode
+    // (`isDriver: true`). Foreground-only for now — background
+    // location requires `Always` permission + a Live Activity / Lock
+    // Screen presence to be honest. Adding a "Share location" pill
+    // surfaces the trade-off explicitly to the driver.
+
+    fileprivate func startDriverLocationPush() {
+        guard isDriver else { return }
+        let manager = CLLocationManager()
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = 10  // metres; throttles unchanged samples
+        let delegate = DriverLocationDelegate(rideId: tripId, store: store)
+        manager.delegate = delegate
+        manager.requestWhenInUseAuthorization()
+        manager.startUpdatingLocation()
+        driverLocationManager = manager
+        driverLocationDelegate = delegate
+    }
+
+    fileprivate func stopDriverLocationPush() {
+        driverLocationManager?.stopUpdatingLocation()
+        driverLocationManager = nil
+        driverLocationDelegate = nil
+    }
+}
+
+/// CLLocationManager delegate that POSTs each location update to the
+/// `/rides/:id/location` endpoint. Lives outside `LiveTripView` so the
+/// view stays a struct (delegates need a class).
+private final class DriverLocationDelegate: NSObject, CLLocationManagerDelegate {
+    let rideId: String
+    weak var store: AppStore?
+
+    init(rideId: String, store: AppStore) {
+        self.rideId = rideId
+        self.store = store
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager,
+                                      didUpdateLocations locations: [CLLocation]) {
+        guard let loc = locations.last else { return }
+        let lat = loc.coordinate.latitude
+        let lng = loc.coordinate.longitude
+        let heading = loc.course >= 0 ? loc.course : nil
+        let speedMps: Double? = loc.speed >= 0 ? loc.speed : nil
+        let id = rideId
+        let storeRef = store
+        Task { @MainActor in
+            await storeRef?.postRideLocation(
+                rideId: id, lat: lat, lng: lng,
+                heading: heading, speedMps: speedMps
+            )
         }
     }
 }
