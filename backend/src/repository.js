@@ -222,60 +222,143 @@ async function createRoute(pool, payload, options = {}) {
 }
 
 async function createSubscription(pool, payload) {
+  const client = await pool.connect();
   const routeId = payload.routeId;
   const pickupPointId = payload.pickupPointId;
   const dropPointId = payload.dropPointId;
 
-  const routeRes = await pool.query(
-    "SELECT id FROM recurring_routes WHERE id = $1 LIMIT 1",
-    [routeId]
-  );
-  if (routeRes.rows.length === 0) {
-    const error = new Error("Route not found");
-    error.status = 404;
-    throw error;
-  }
+  try {
+    await client.query("BEGIN");
 
-  const pointsRes = await pool.query(
-    `SELECT id, route_id
-     FROM route_points
-     WHERE id = ANY($1::uuid[])`,
-    [[pickupPointId, dropPointId]]
-  );
-  if (pointsRes.rows.length !== 2) {
-    const error = new Error("Selected pickup/drop points not found");
-    error.status = 400;
-    throw error;
-  }
-  for (const row of pointsRes.rows) {
-    if (String(row.route_id) !== String(routeId)) {
-      const error = new Error("Pickup/drop points must belong to the same route");
+    const routeRes = await client.query(
+      `SELECT id, driver_id, driver_name, start_location, end_location, seat_count, active_status
+       FROM recurring_routes
+       WHERE id = $1
+       FOR UPDATE`,
+      [routeId]
+    );
+    const route = routeRes.rows[0];
+    if (!route) {
+      const error = new Error("Route not found");
+      error.status = 404;
+      throw error;
+    }
+    if (!route.active_status) {
+      const error = new Error("Route is not accepting new subscriptions");
+      error.status = 409;
+      throw error;
+    }
+    if (String(route.driver_id) === String(payload.riderId)) {
+      const error = new Error("Drivers cannot subscribe to their own route");
+      error.status = 409;
+      throw error;
+    }
+
+    const duplicateRes = await client.query(
+      `SELECT id
+       FROM route_subscriptions
+       WHERE route_id = $1
+         AND rider_id = $2
+         AND status = 'ACTIVE'
+       LIMIT 1`,
+      [routeId, payload.riderId]
+    );
+    if (duplicateRes.rows.length > 0) {
+      const error = new Error("You already have an active subscription for this route");
+      error.status = 409;
+      throw error;
+    }
+
+    const activeCountRes = await client.query(
+      `SELECT COUNT(*)::int AS active_count
+       FROM route_subscriptions
+       WHERE route_id = $1
+         AND status = 'ACTIVE'`,
+      [routeId]
+    );
+    const activeCount = Number(activeCountRes.rows[0]?.active_count || 0);
+    if (activeCount >= Number(route.seat_count || 0)) {
+      const error = new Error("No seats available on this route");
+      error.status = 409;
+      throw error;
+    }
+
+    const pointsRes = await client.query(
+      `SELECT id, route_id
+       FROM route_points
+       WHERE id = ANY($1::uuid[])`,
+      [[pickupPointId, dropPointId]]
+    );
+    if (pointsRes.rows.length !== 2) {
+      const error = new Error("Selected pickup/drop points not found");
       error.status = 400;
       throw error;
     }
+    for (const row of pointsRes.rows) {
+      if (String(row.route_id) !== String(routeId)) {
+        const error = new Error("Pickup/drop points must belong to the same route");
+        error.status = 400;
+        throw error;
+      }
+    }
+
+    const subscriptionId = randomUUID();
+    await client.query(
+      `INSERT INTO route_subscriptions (
+        id, route_id, rider_id, rider_name, start_date, end_date,
+        selected_pickup_point_id, selected_drop_point_id, status
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        subscriptionId,
+        routeId,
+        payload.riderId,
+        payload.riderName || payload.riderId,
+        payload.startDate,
+        payload.endDate,
+        pickupPointId,
+        dropPointId,
+        payload.status || "ACTIVE"
+      ]
+    );
+
+    await ensureRouteChatThread(client, route, [payload.riderId, route.driver_id]);
+    await client.query("COMMIT");
+    return subscriptionId;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function ensureRouteChatThread(client, route, userIds = []) {
+  const existing = await client.query(
+    "SELECT id FROM chat_threads WHERE route_id = $1 LIMIT 1",
+    [route.id]
+  );
+  let threadId = existing.rows[0]?.id;
+  if (!threadId) {
+    threadId = randomUUID();
+    const title = `${route.driver_name || "Driver"} - ${route.start_location} to ${route.end_location}`;
+    await client.query(
+      `INSERT INTO chat_threads (id, route_id, title, last_message, unread_count)
+       VALUES ($1, $2, $3, '', 0)`,
+      [threadId, route.id, title]
+    );
   }
 
-  const subscriptionId = randomUUID();
-  await pool.query(
-    `INSERT INTO route_subscriptions (
-      id, route_id, rider_id, rider_name, start_date, end_date,
-      selected_pickup_point_id, selected_drop_point_id, status
-    )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [
-      subscriptionId,
-      routeId,
-      payload.riderId,
-      payload.riderName || payload.riderId,
-      payload.startDate,
-      payload.endDate,
-      pickupPointId,
-      dropPointId,
-      payload.status || "ACTIVE"
-    ]
-  );
+  for (const userId of userIds.filter(Boolean)) {
+    await client.query(
+      `INSERT INTO chat_participants (thread_id, user_id)
+       VALUES ($1, $2)
+       ON CONFLICT ON CONSTRAINT uq_chat_participant DO NOTHING`,
+      [threadId, String(userId)]
+    );
+  }
 
-  return subscriptionId;
+  return threadId;
 }
 
 async function listSubscriptions(pool, whereClause, params) {
@@ -537,11 +620,13 @@ async function findLegacyMatchCandidates(pool, payload) {
   return candidates;
 }
 
-async function listChatThreads(pool) {
+async function listChatThreads(pool, userId) {
   const res = await pool.query(
-    `SELECT id, route_id, title, last_message, unread_count
-     FROM chat_threads
-     ORDER BY updated_at DESC, created_at DESC`
+    `SELECT t.id, t.route_id, t.title, t.last_message, p.unread_count
+     FROM chat_threads t
+     JOIN chat_participants p ON p.thread_id = t.id AND p.user_id = $1
+     ORDER BY t.updated_at DESC, t.created_at DESC`,
+    [userId]
   );
 
   return res.rows.map((row) => ({
@@ -563,16 +648,24 @@ function mapSenderForRequester(rawSender, requesterId) {
   return "OTHER";
 }
 
-async function listChatMessages(pool, threadId, requesterId = null) {
+async function assertChatParticipant(pool, threadId, userId) {
   const threadRes = await pool.query(
-    "SELECT id FROM chat_threads WHERE id = $1 LIMIT 1",
-    [threadId]
+    `SELECT t.id
+     FROM chat_threads t
+     JOIN chat_participants p ON p.thread_id = t.id AND p.user_id = $2
+     WHERE t.id = $1
+     LIMIT 1`,
+    [threadId, userId]
   );
   if (threadRes.rows.length === 0) {
     const error = new Error("Thread not found");
     error.status = 404;
     throw error;
   }
+}
+
+async function listChatMessages(pool, threadId, requesterId = null) {
+  await assertChatParticipant(pool, threadId, requesterId);
 
   const res = await pool.query(
     `SELECT id, thread_id, sender, text, timestamp_ms
@@ -599,15 +692,7 @@ async function appendChatMessage(pool, threadId, text, sender = "ME") {
     throw error;
   }
 
-  const threadRes = await pool.query(
-    "SELECT id FROM chat_threads WHERE id = $1 LIMIT 1",
-    [threadId]
-  );
-  if (threadRes.rows.length === 0) {
-    const error = new Error("Thread not found");
-    error.status = 404;
-    throw error;
-  }
+  await assertChatParticipant(pool, threadId, sender);
 
   const messageId = randomUUID();
   const timestampMs = Date.now();
@@ -625,6 +710,12 @@ async function appendChatMessage(pool, threadId, text, sender = "ME") {
      WHERE id = $1`,
     [threadId, trimmedText]
   );
+  await pool.query(
+    `UPDATE chat_participants
+     SET unread_count = CASE WHEN user_id = $2 THEN 0 ELSE unread_count + 1 END
+     WHERE thread_id = $1`,
+    [threadId, String(sender)]
+  );
 
   return messageId;
 }
@@ -641,6 +732,7 @@ module.exports = {
   listRouteRides,
   listSubscriptions,
   loadRouteContexts,
+  assertChatParticipant,
   normalizeDaysOfWeek,
   normalizeActiveStatus
 };

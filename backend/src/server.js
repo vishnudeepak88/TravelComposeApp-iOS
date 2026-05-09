@@ -59,6 +59,7 @@ app.use((req, res, next) => {
   });
   next();
 });
+app.use(rateLimitGlobal);
 
 function asyncHandler(fn) {
   return (req, res, next) => {
@@ -87,6 +88,33 @@ function bodyValue(body, ...keys) {
   return undefined;
 }
 
+async function createNotification({
+  userId,
+  type,
+  title,
+  body = "",
+  routeId = null,
+  subscriptionId = null,
+  rideInstanceId = null
+}) {
+  if (!userId) return;
+  await pool.query(
+    `INSERT INTO notifications
+       (id, user_id, type, title, body, route_id, subscription_id, ride_instance_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      crypto.randomUUID(),
+      String(userId),
+      type,
+      title,
+      body,
+      routeId ? String(routeId) : null,
+      subscriptionId ? String(subscriptionId) : null,
+      rideInstanceId ? String(rideInstanceId) : null
+    ]
+  );
+}
+
 function normalizeCommuteSearchBody(body) {
   return {
     ...body,
@@ -111,6 +139,7 @@ app.get(
 );
 
 const KYC_STATUSES = new Set(["NOT_STARTED", "PENDING", "APPROVED", "REJECTED"]);
+const SUBSCRIPTION_STATUSES = new Set(["ACTIVE", "PAUSED", "CANCELLED"]);
 
 app.post(
   "/auth/request-otp",
@@ -332,6 +361,53 @@ app.post(
   })
 );
 
+app.get(
+  "/notifications/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const limit = toInt(req.query.limit, 30, 1, 100);
+    const result = await pool.query(
+      `SELECT id, type, title, body, route_id, subscription_id, ride_instance_id, read_at, created_at
+         FROM notifications
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2`,
+      [req.user.id, limit]
+    );
+    res.json(result.rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      body: row.body,
+      routeId: row.route_id,
+      subscriptionId: row.subscription_id,
+      rideInstanceId: row.ride_instance_id,
+      readAt: row.read_at,
+      createdAt: row.created_at
+    })));
+  })
+);
+
+app.put(
+  "/notifications/:notificationId/read",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `UPDATE notifications
+          SET read_at = COALESCE(read_at, NOW())
+        WHERE id = $1
+          AND user_id = $2
+        RETURNING id`,
+      [req.params.notificationId, req.user.id]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ detail: "Notification not found" });
+      return;
+    }
+    res.status(204).send();
+  })
+);
+
 app.post(
   "/ai/support",
   requireAuth,
@@ -443,6 +519,46 @@ async function loadRouteOwner(routeId) {
   return result.rows[0]?.driver_id ?? null;
 }
 
+async function canAccessRouteRideData(routeId, userId) {
+  const result = await pool.query(
+    `SELECT 1
+       FROM recurring_routes r
+      WHERE r.id = $1
+        AND (
+          r.driver_id = $2
+          OR EXISTS (
+            SELECT 1
+              FROM route_subscriptions s
+             WHERE s.route_id = r.id
+               AND s.rider_id = $2
+               AND s.status = 'ACTIVE'
+          )
+        )
+      LIMIT 1`,
+    [routeId, userId]
+  );
+  return result.rowCount > 0;
+}
+
+async function notifyRouteSubscribers(routeId, type, title, body) {
+  const result = await pool.query(
+    `SELECT DISTINCT rider_id
+       FROM route_subscriptions
+      WHERE route_id = $1
+        AND status = 'ACTIVE'`,
+    [routeId]
+  );
+  for (const row of result.rows) {
+    await createNotification({
+      userId: row.rider_id,
+      type,
+      title,
+      body,
+      routeId
+    });
+  }
+}
+
 app.put(
   "/commute/routes/:routeId/schedule",
   requireAuth,
@@ -469,6 +585,12 @@ app.put(
       ]
     );
     await generateRideInstances(pool, todayIso(), 30);
+    await notifyRouteSubscribers(
+      routeId,
+      "ROUTE_SCHEDULE_UPDATED",
+      "Route schedule updated",
+      "Your driver changed the recurring route schedule."
+    );
     res.status(204).send();
   })
 );
@@ -495,6 +617,12 @@ app.put(
       [routeId, normalizeActiveStatus(bodyValue(body, "activeStatus", "active_status"))]
     );
     await generateRideInstances(pool, todayIso(), 30);
+    await notifyRouteSubscribers(
+      routeId,
+      "ROUTE_STATUS_UPDATED",
+      "Route status updated",
+      "Your driver changed this route's active status."
+    );
     res.status(204).send();
   })
 );
@@ -540,8 +668,12 @@ app.get(
   asyncHandler(async (req, res) => {
     const fromDate = String(req.query.fromDate || todayIso());
     const days = toInt(req.query.days, 7, 1, 60);
+    const canSeePassengers = await canAccessRouteRideData(req.params.routeId, req.user.id);
     const rides = await listRouteRides(pool, req.params.routeId, fromDate, days);
-    res.json(rides);
+    res.json(canSeePassengers ? rides : rides.map((ride) => ({
+      ...ride,
+      confirmedPassengers: []
+    })));
   })
 );
 
@@ -587,6 +719,28 @@ app.post(
       status: "ACTIVE"
     });
     await generateRideInstances(pool, todayIso(), 30);
+    const route = (await pool.query(
+      "SELECT driver_id, start_location, end_location FROM recurring_routes WHERE id = $1",
+      [bodyValue(body, "routeId", "route_id")]
+    )).rows[0];
+    await createNotification({
+      userId: req.user.id,
+      type: "SUBSCRIPTION_CONFIRMED",
+      title: "Subscription confirmed",
+      body: route ? `${route.start_location} to ${route.end_location}` : "Your route subscription is active.",
+      routeId: bodyValue(body, "routeId", "route_id"),
+      subscriptionId: id
+    });
+    if (route?.driver_id) {
+      await createNotification({
+        userId: route.driver_id,
+        type: "NEW_SUBSCRIBER",
+        title: "New rider subscribed",
+        body: route ? `${route.start_location} to ${route.end_location}` : "A rider joined your route.",
+        routeId: bodyValue(body, "routeId", "route_id"),
+        subscriptionId: id
+      });
+    }
     res.json({ id });
   })
 );
@@ -609,6 +763,10 @@ app.put(
       return;
     }
     const status = String(req.body?.status || "ACTIVE").toUpperCase();
+    if (!SUBSCRIPTION_STATUSES.has(status)) {
+      res.status(400).json({ detail: "invalid subscription status" });
+      return;
+    }
     await pool.query(
       `UPDATE route_subscriptions
        SET status = $2
@@ -616,6 +774,18 @@ app.put(
       [subscriptionId, status]
     );
     await generateRideInstances(pool, todayIso(), 30);
+    const sub = (await pool.query(
+      "SELECT route_id FROM route_subscriptions WHERE id = $1",
+      [subscriptionId]
+    )).rows[0];
+    await createNotification({
+      userId: req.user.id,
+      type: "SUBSCRIPTION_STATUS_UPDATED",
+      title: "Subscription updated",
+      body: `Status changed to ${status}.`,
+      routeId: sub?.route_id,
+      subscriptionId
+    });
     res.status(204).send();
   })
 );
@@ -712,6 +882,28 @@ app.post(
       status: body.status || "ACTIVE"
     });
     await generateRideInstances(pool, todayIso(), 30);
+    const route = (await pool.query(
+      "SELECT driver_id, start_location, end_location FROM recurring_routes WHERE id = $1",
+      [body.route_id]
+    )).rows[0];
+    await createNotification({
+      userId: req.user.id,
+      type: "SUBSCRIPTION_CONFIRMED",
+      title: "Subscription confirmed",
+      body: route ? `${route.start_location} to ${route.end_location}` : "Your route subscription is active.",
+      routeId: body.route_id,
+      subscriptionId: id
+    });
+    if (route?.driver_id) {
+      await createNotification({
+        userId: route.driver_id,
+        type: "NEW_SUBSCRIBER",
+        title: "New rider subscribed",
+        body: route ? `${route.start_location} to ${route.end_location}` : "A rider joined your route.",
+        routeId: body.route_id,
+        subscriptionId: id
+      });
+    }
     res.json({ subscription_id: id });
   })
 );
@@ -745,13 +937,137 @@ app.post(
   })
 );
 
-app.post("/trips/:id/book", requireAuth, (_req, res) => res.status(204).send());
-app.get("/bookings/me", requireAuth, (_req, res) => res.json([]));
+app.post(
+  "/trips/:id/book",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const client = await pool.connect();
+    let committed = false;
+    try {
+      await client.query("BEGIN");
+      const rideRes = await client.query(
+        `SELECT i.id, i.route_id, i.seat_availability, i.ride_status,
+                r.driver_id, r.start_location, r.end_location
+           FROM commute_ride_instances i
+           JOIN recurring_routes r ON r.id = i.route_id
+          WHERE i.id = $1
+          FOR UPDATE`,
+        [req.params.id]
+      );
+      const ride = rideRes.rows[0];
+      if (!ride) {
+        res.status(404).json({ detail: "Ride not found" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (String(ride.driver_id) === req.user.id) {
+        res.status(409).json({ detail: "Drivers cannot book their own ride" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (ride.ride_status !== "SCHEDULED") {
+        res.status(409).json({ detail: "Ride is not bookable" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      const existing = await client.query(
+        `SELECT id
+           FROM commute_ride_passengers
+          WHERE instance_id = $1
+            AND rider_id = $2
+          LIMIT 1`,
+        [req.params.id, req.user.id]
+      );
+      if (existing.rows.length > 0) {
+        res.status(409).json({ detail: "Ride already booked" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (Number(ride.seat_availability) <= 0) {
+        res.status(409).json({ detail: "No seats available" });
+        await client.query("ROLLBACK");
+        return;
+      }
+
+      const bookingId = crypto.randomUUID();
+      await client.query(
+        `INSERT INTO commute_ride_passengers (id, instance_id, rider_id)
+         VALUES ($1, $2, $3)`,
+        [bookingId, req.params.id, req.user.id]
+      );
+      await client.query(
+        `UPDATE commute_ride_instances
+            SET seat_availability = GREATEST(0, seat_availability - 1)
+          WHERE id = $1`,
+        [req.params.id]
+      );
+      await client.query("COMMIT");
+      committed = true;
+
+      await createNotification({
+        userId: req.user.id,
+        type: "RIDE_BOOKED",
+        title: "Ride booked",
+        body: `${ride.start_location} to ${ride.end_location}`,
+        routeId: ride.route_id,
+        rideInstanceId: req.params.id
+      });
+      await createNotification({
+        userId: ride.driver_id,
+        type: "RIDE_SEAT_BOOKED",
+        title: "Seat booked",
+        body: "A rider booked a seat on your ride.",
+        routeId: ride.route_id,
+        rideInstanceId: req.params.id
+      });
+
+      res.status(201).json({
+        id: bookingId,
+        rideInstanceId: req.params.id,
+        routeId: String(ride.route_id)
+      });
+    } catch (error) {
+      if (!committed) {
+        await client.query("ROLLBACK");
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+app.get(
+  "/bookings/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `SELECT p.id, p.instance_id, i.route_id, i.date, i.ride_status,
+              r.driver_name, r.start_location, r.end_location
+         FROM commute_ride_passengers p
+         JOIN commute_ride_instances i ON i.id = p.instance_id
+         JOIN recurring_routes r ON r.id = i.route_id
+        WHERE p.rider_id = $1
+        ORDER BY i.date ASC`,
+      [req.user.id]
+    );
+    res.json(result.rows.map((row) => ({
+      id: row.id,
+      rideInstanceId: row.instance_id,
+      routeId: row.route_id,
+      date: row.date,
+      rideStatus: row.ride_status,
+      driverName: row.driver_name,
+      startLocation: row.start_location,
+      endLocation: row.end_location
+    })));
+  })
+);
 app.get(
   "/chats/threads",
   requireAuth,
-  asyncHandler(async (_req, res) => {
-    const threads = await listChatThreads(pool);
+  asyncHandler(async (req, res) => {
+    const threads = await listChatThreads(pool, req.user.id);
     res.json(threads);
   })
 );
@@ -870,8 +1186,35 @@ app.post(
       "SELECT driver_id, price_per_seat FROM recurring_routes WHERE id = $1 LIMIT 1",
       [routeId]
     )).rows[0];
+    if (!routeRow) {
+      res.status(404).json({ detail: "Route not found" });
+      return;
+    }
     const pricePerSeat = Number(routeRow?.price_per_seat || 0);
     const driverId = routeRow?.driver_id || null;
+    if (actor === "DRIVER" && String(driverId) !== req.user.id) {
+      res.status(403).json({ detail: "Only the route driver can report driver cancellations" });
+      return;
+    }
+    if (actor === "RIDER") {
+      const riderAccess = await pool.query(
+        `SELECT id
+           FROM route_subscriptions
+          WHERE route_id = $1
+            AND rider_id = $2
+            AND ($3::text IS NULL OR id::text = $3::text)
+          LIMIT 1`,
+        [routeId, req.user.id, subscriptionId || null]
+      );
+      if (riderAccess.rowCount === 0) {
+        res.status(403).json({ detail: "Only subscribed riders can report rider cancellations" });
+        return;
+      }
+    }
+    if (actor === "SYSTEM") {
+      res.status(403).json({ detail: "System cancellations require an admin workflow" });
+      return;
+    }
 
     const lateCancelsRes = await pool.query(
       `SELECT COUNT(*)::int AS count
@@ -936,6 +1279,7 @@ async function start() {
   await ensureCancellationSchema(pool);
   await ensureKycDocsSchema(pool);
   await seedIfEmpty(pool);
+  await backfillChatParticipants(pool);
 
   app.listen(config.port, "0.0.0.0", () => {
     const billplzMode = config.billplz.isMockMode ? "MOCK" : "LIVE";
@@ -983,6 +1327,25 @@ async function ensureKycDocsSchema(pool) {
   await pool.query(
     "CREATE INDEX IF NOT EXISTS ix_kyc_docs_user ON kyc_documents(user_id)"
   );
+}
+
+async function backfillChatParticipants(pool) {
+  await pool.query(`
+    INSERT INTO chat_participants (thread_id, user_id)
+    SELECT t.id, r.driver_id
+      FROM chat_threads t
+      JOIN recurring_routes r ON r.id = t.route_id
+     WHERE r.driver_id IS NOT NULL
+    ON CONFLICT ON CONSTRAINT uq_chat_participant DO NOTHING
+  `);
+  await pool.query(`
+    INSERT INTO chat_participants (thread_id, user_id)
+    SELECT t.id, s.rider_id
+      FROM chat_threads t
+      JOIN route_subscriptions s ON s.route_id = t.route_id
+     WHERE s.rider_id IS NOT NULL
+    ON CONFLICT ON CONSTRAINT uq_chat_participant DO NOTHING
+  `);
 }
 
 start().catch((error) => {

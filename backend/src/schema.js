@@ -101,6 +101,11 @@ async function initSchema(pool) {
   await pool.query(
     "ALTER TABLE route_subscriptions ADD COLUMN IF NOT EXISTS rider_name TEXT NOT NULL DEFAULT ''"
   );
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS uq_active_subscription_rider_route
+     ON route_subscriptions(route_id, rider_id)
+     WHERE status = 'ACTIVE'`
+  );
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS commute_ride_instances (
@@ -154,6 +159,19 @@ async function initSchema(pool) {
   );
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_participants (
+      thread_id UUID NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      unread_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_chat_participant UNIQUE (thread_id, user_id)
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_chat_participants_user ON chat_participants(user_id)"
+  );
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS chat_messages (
       id UUID PRIMARY KEY,
       thread_id UUID NOT NULL REFERENCES chat_threads(id) ON DELETE CASCADE,
@@ -168,6 +186,24 @@ async function initSchema(pool) {
   );
   await pool.query(
     "CREATE INDEX IF NOT EXISTS ix_chat_messages_timestamp_ms ON chat_messages(timestamp_ms)"
+  );
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id UUID PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      route_id TEXT NULL,
+      subscription_id TEXT NULL,
+      ride_instance_id TEXT NULL,
+      read_at TIMESTAMPTZ NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_notifications_user ON notifications(user_id, created_at DESC)"
   );
 }
 

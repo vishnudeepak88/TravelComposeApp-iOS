@@ -19,7 +19,7 @@ async function seedDefaultChatThread(pool) {
   }
 
   const routeRes = await pool.query(
-    `SELECT id, driver_name
+    `SELECT id, driver_id, driver_name
      FROM recurring_routes
      ORDER BY created_at ASC
      LIMIT 1`
@@ -42,6 +42,20 @@ async function seedDefaultChatThread(pool) {
     `INSERT INTO chat_threads (id, route_id, title, last_message, unread_count)
      VALUES ($1, $2, $3, $4, 0)`,
     [threadId, route.id, title, initialMessages[2].text]
+  );
+  await pool.query(
+    `INSERT INTO chat_participants (thread_id, user_id)
+     VALUES ($1, $2)
+     ON CONFLICT ON CONSTRAINT uq_chat_participant DO NOTHING`,
+    [threadId, route.driver_id]
+  );
+  await pool.query(
+    `INSERT INTO chat_participants (thread_id, user_id)
+     SELECT $1, rider_id
+       FROM route_subscriptions
+      WHERE route_id = $2
+     ON CONFLICT ON CONSTRAINT uq_chat_participant DO NOTHING`,
+    [threadId, route.id]
   );
   for (let i = 0; i < initialMessages.length; i += 1) {
     const message = initialMessages[i];
