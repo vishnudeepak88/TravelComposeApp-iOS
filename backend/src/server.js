@@ -196,9 +196,12 @@ app.post(
        VALUES ($1, $2, $3, $4, $5)`,
       [crypto.randomUUID(), phone, codeHash, salt, expiresAt]
     );
-    // Hand the code to the SMS provider. In production we REQUIRE it to be
-    // configured — otherwise this endpoint is a silent no-op that breaks
-    // every new-user signup. In dev we log + echo the code.
+    // Three-way OTP delivery path:
+    //   1. SMS configured        → send via Twilio (any deploy tier)
+    //   2. Production w/o SMS    → 503 (refuse the silent no-op)
+    //   3. Dev/staging w/o SMS   → log + echo `devCode` so testers can
+    //      sign in. Staging path is loudly marked so a deploy never
+    //      runs in this state by accident.
     if (smsConfigured()) {
       const result = await sendSms({
         to: phone,
@@ -218,17 +221,18 @@ app.post(
       console.error("[auth] OTP requested in production but SMS is unconfigured — refusing");
       res.status(503).json({ detail: "sms_unconfigured" });
       return;
-    } else if (config.authDevMode) {
-      // Dev-only: log the code so the engineer running the local server
-      // can grab it without an SMS account. Hard-gated behind both the
-      // dev-mode flag AND a non-production NODE_ENV so it can never
-      // leak from a real deploy.
+    } else if (config.isStaging) {
+      console.warn(
+        `[auth] STAGING devCode for ${phone}: ${code} (expires ${expiresAt.toISOString()}) — SMS unconfigured`
+      );
+    } else {
       console.log(`[auth] OTP for ${phone}: ${code} (expires ${expiresAt.toISOString()})`);
     }
     const response = { sent: true, expiresAt: expiresAt.toISOString() };
-    // devCode is returned only when explicitly in dev-mode AND not in
-    // production — never echo verification codes to a real client.
-    if (config.authDevMode && !config.isProduction && !smsConfigured()) {
+    // Echo `devCode` whenever SMS is unconfigured AND we're not in
+    // production. Covers both local dev and staging — production never
+    // echoes, regardless of any other flag.
+    if (!smsConfigured() && !config.isProduction) {
       response.devCode = code;
     }
     res.json(response);
