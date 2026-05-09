@@ -188,12 +188,36 @@ struct AuthPhoneView: View {
         Task {
             isLoading = true
             let result = await store.requestOtp(phone: phone)
-            isLoading = false
             switch result {
             case .success:
                 error = nil
+                // Staging fast-path: when SMS / email aren't configured
+                // the backend echoes the OTP back as `devCode`. Skip
+                // the manual code-entry screen and verify immediately
+                // so signing in is one tap, not three. The OTP screen
+                // is still presented if devCode is missing (i.e. real
+                // SMS/email is wired up).
+                if let dev = store.devOtpCode, !dev.isEmpty {
+                    let verifyResult = await store.verifyOtp(code: dev)
+                    isLoading = false
+                    switch verifyResult {
+                    case .success:
+                        // RootView swaps to MainTabView automatically
+                        // when isAuthenticated flips. Nothing to push.
+                        return
+                    case .failure(let err):
+                        // Something went wrong with auto-verify — fall
+                        // back to the manual OTP screen so the user
+                        // can read the dev code + retype it.
+                        error = err
+                        onSent(phone)
+                        return
+                    }
+                }
+                isLoading = false
                 onSent(phone)
             case .failure(let err):
+                isLoading = false
                 error = err
             }
         }
@@ -314,7 +338,20 @@ struct AuthOtpView: View {
             }
         }
         .onAppear {
-            if let dev = store.devOtpCode, otp.isEmpty { otp = dev }
+            if let dev = store.devOtpCode, otp.isEmpty {
+                otp = dev
+                // Belt-and-braces auto-verify: AuthPhoneView.sendOtp()
+                // already short-circuits straight to verifyOtp when
+                // devCode is set, but if a user arrives here via Resend
+                // (devCode arrives later via Resend OTP screen flow)
+                // or refreshes the OTP, kick off verify automatically.
+                Task {
+                    let result = await store.verifyOtp(code: dev)
+                    if case .failure(let err) = result {
+                        error = err
+                    }
+                }
+            }
             startCountdown()
         }
         .onDisappear {
