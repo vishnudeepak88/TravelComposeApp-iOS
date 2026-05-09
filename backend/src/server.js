@@ -45,6 +45,8 @@ const {
 } = require("./middleware");
 
 const app = express();
+const logSuccessfulRequests =
+  String(process.env.LOG_SUCCESS_REQUESTS || "").toLowerCase() === "true";
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
@@ -53,7 +55,7 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const isRoutineProbe =
       (req.path === "/health" || req.path === "/") && res.statusCode < 400;
-    if (isRoutineProbe) {
+    if (res.statusCode < 400 && (!logSuccessfulRequests || isRoutineProbe)) {
       return;
     }
     const durationMs = Date.now() - startedAt;
