@@ -617,6 +617,34 @@ final class AppStore {
         }
     }
 
+    /// Sets the rider's display name. Optimistically updates the local
+    /// `currentUser` so the Profile + Home greeting refresh instantly,
+    /// rolls back on server error so a failed save doesn't show a name
+    /// the backend never accepted.
+    func updateDisplayName(_ name: String) async -> Result<Void, AppError> {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .failure(.message("Name can't be empty")) }
+        guard trimmed.count <= 60 else { return .failure(.message("Name is too long")) }
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        let previous = currentUser.name
+        currentUser = User(id: currentUser.id, name: trimmed, rating: currentUser.rating)
+        UserDefaults.standard.set(trimmed, forKey: SessionKeys.displayName)
+        do {
+            try await VoygoAPIClient.updateDisplayName(trimmed)
+            return .success(())
+        } catch APIError.unauthorized {
+            // Rollback so the UI doesn't lie about a saved name.
+            currentUser = User(id: currentUser.id, name: previous, rating: currentUser.rating)
+            UserDefaults.standard.set(previous, forKey: SessionKeys.displayName)
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            currentUser = User(id: currentUser.id, name: previous, rating: currentUser.rating)
+            UserDefaults.standard.set(previous, forKey: SessionKeys.displayName)
+            return .failure(.from(error))
+        }
+    }
+
     /// Submits the user's uploaded documents for trust-and-safety review.
     /// Server unconditionally moves the user to PENDING (or rejects with
     /// `no_documents_uploaded`) — APPROVED and REJECTED are admin-only,

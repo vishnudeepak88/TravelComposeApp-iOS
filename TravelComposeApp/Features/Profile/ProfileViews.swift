@@ -26,6 +26,10 @@ struct ProfileView: View {
     /// Throttles the logout alert primary button so a double-tap can't
     /// queue two logout calls (low-stakes but ugly when it happens).
     @State private var isLoggingOut = false
+    /// Edit-name sheet state. The Profile identity row is tappable so
+    /// a fresh signup who lands on the auto-generated "User 6789"
+    /// fallback can replace it with their real name in two taps.
+    @State private var showEditName = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -83,18 +87,45 @@ struct ProfileView: View {
                 }
                 Button("Cancel", role: .cancel, action: {})
             } message: { Text("You'll need to sign in again.") }
+            .sheet(isPresented: $showEditName) {
+                EditDisplayNameSheet(
+                    initialName: store.currentUser.name,
+                    onCancel: { showEditName = false },
+                    onSave:   { newName in
+                        let result = await store.updateDisplayName(newName)
+                        if case .success = result { showEditName = false }
+                        return result
+                    }
+                )
+                .presentationDetents([.height(280)])
+            }
             .task { await store.refreshMe() }
             .enableSwipeBack()
         }
     }
 
     private var identityRow: some View {
+        Button {
+            showEditName = true
+        } label: {
+            identityRowContent
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Tap to edit your display name")
+    }
+
+    private var identityRowContent: some View {
         HStack(spacing: 14) {
             VAvatar(initial: store.currentUser.initial.isEmpty ? "?" : store.currentUser.initial, size: 72)
             VStack(alignment: .leading, spacing: 4) {
-                Text(store.currentUser.name.isEmpty ? "Welcome" : store.currentUser.name)
-                    .font(.system(size: 20, weight: .heavy)).tracking(-0.4)
-                    .foregroundColor(VPalette.text)
+                HStack(spacing: 6) {
+                    Text(store.currentUser.name.isEmpty ? "Welcome" : store.currentUser.name)
+                        .font(.system(size: 20, weight: .heavy)).tracking(-0.4)
+                        .foregroundColor(VPalette.text)
+                    Image(systemName: "pencil")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundColor(VPalette.textHint)
+                }
                 HStack(spacing: 6) {
                     Image(systemName: "shield.lefthalf.filled")
                         .font(.system(size: 13)).foregroundColor(VPalette.primary)
@@ -1117,4 +1148,105 @@ private struct _LiveTripDeprecatedHelpers: View {
     var body: some View {
         EmptyView()
     }
+}
+
+// MARK: - Edit display name sheet
+//
+// Two-tap edit-name flow surfaced from the Profile identity row.
+// Replaces the auto-generated "User 6789" fallback (derived from
+// the last 4 phone digits) with the rider's real name. The sheet's
+// `onSave` returns a Result so the caller can render an inline
+// error and keep the sheet open until the server accepts.
+
+struct EditDisplayNameSheet: View {
+    let initialName: String
+    let onCancel: () -> Void
+    let onSave:   (String) async -> Result<Void, AppError>
+
+    @State private var name: String = ""
+    @State private var isSaving: Bool = false
+    @State private var errorMessage: String? = nil
+    @FocusState private var nameFocused: Bool
+
+    private var canSave: Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !isSaving && !trimmed.isEmpty && trimmed.count <= 60 && trimmed != initialName
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Your name")
+                    .font(.system(size: 18, weight: .black))
+                    .tracking(-0.3)
+                    .foregroundColor(VPalette.text)
+                Spacer()
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundColor(VPalette.textSec)
+                        .frame(width: 32, height: 32)
+                        .background(VPalette.surfaceHigh)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cancel")
+            }
+
+            Text("This is how drivers and riders see you on receipts, chat threads and ride confirmations.")
+                .font(.system(size: 12))
+                .foregroundColor(VPalette.textSec)
+
+            TextField("e.g. Vishnu Kumar", text: $name)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(VPalette.text)
+                .tint(VPalette.primary)
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                .background(VPalette.surfaceHigh)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .focused($nameFocused)
+                .onSubmit { Task { await save() } }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(VPalette.danger)
+            }
+
+            VPrimaryButton("Save", isLoading: isSaving, isEnabled: canSave) {
+                Task { await save() }
+            }
+        }
+        .padding(20)
+        .onAppear {
+            // Pre-fill the auto-generated fallback so the user doesn't
+            // have to delete it first. Empty string is fine — the
+            // textfield placeholder already gives a visual hint.
+            name = initialName.hasPrefix("User ") ? "" : initialName
+            nameFocused = true
+        }
+    }
+
+    private func save() async {
+        guard canSave else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        isSaving = true
+        errorMessage = nil
+        let result = await onSave(trimmed)
+        isSaving = false
+        if case .failure(let err) = result {
+            errorMessage = err.localizedDescription
+        }
+    }
+}
+
+#Preview("EditDisplayNameSheet") {
+    EditDisplayNameSheet(
+        initialName: "User 1234",
+        onCancel: {},
+        onSave: { _ in .success(()) }
+    )
 }
