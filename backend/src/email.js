@@ -47,9 +47,9 @@ function transporter() {
     // activated yet, firewall) will hang the whole HTTP request the
     // OTP endpoint is trying to satisfy. We'd rather fall through
     // to dev-echo / 502 in seconds than block the user.
-    connectionTimeout: 5000,   // TCP connect
-    greetingTimeout:   5000,   // SMTP banner
-    socketTimeout:     10000   // any single socket op
+    connectionTimeout: 3000,   // TCP connect — Gmail typically <500ms
+    greetingTimeout:   3000,   // SMTP banner
+    socketTimeout:     8000    // any single socket op (auth + send)
   });
   return _transporter;
 }
@@ -103,9 +103,9 @@ async function sendOtpEmail({ phone, code, expiresAt }) {
       </p>`
   }).then(() => ({ ok: true }));
 
-  // 12s outer cap — covers the worst-case SMTP handshake + send.
+  // 8s outer cap — covers the worst-case SMTP handshake + send.
   // If we exceed this, give up and let the caller decide what's next.
-  const result = await withTimeout(sendPromise, 12_000, "smtp_send");
+  const result = await withTimeout(sendPromise, 8_000, "smtp_send");
   if (!result.ok) {
     console.warn(`[email] sendOtpEmail ${result.reason}: ${result.error || ""}`);
   }

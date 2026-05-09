@@ -207,27 +207,33 @@ app.post(
     //   4. Dev/staging without
     //      either               → log + echo `devCode` so testers can
     //                              still sign in.
-    let smsOk = false;
-    let emailOk = false;
+    // Parallel delivery: when both SMS and email are configured we
+    // don't want one slow provider to compound the other's latency.
+    // Each call has its own internal timeout (sms.js: 10s; email.js:
+    // 8s outer cap + 3s connect/greeting), so the OTP endpoint can
+    // never block more than the slower of the two ~10s.
+    const deliveries = [];
     if (smsConfigured()) {
-      const result = await sendSms({
-        to: phone,
-        body: `Your Voygo verification code is ${code}. It expires in 5 minutes.`
-      });
-      smsOk = result.ok;
-      if (!result.ok) {
-        console.warn(`[auth] sms send failed for ${phone}: ${result.reason}`);
-      }
+      deliveries.push(
+        sendSms({
+          to: phone,
+          body: `Your Voygo verification code is ${code}. It expires in 5 minutes.`
+        }).then((r) => ({ channel: "sms", ...r }))
+      );
     }
-    // Email runs in addition to SMS when both are configured (handy
-    // during the migration window where you want a paper trail), but
-    // when only email is configured it becomes the primary delivery.
     if (emailConfigured()) {
-      const result = await sendOtpEmail({ phone, code, expiresAt: expiresAt.toISOString() });
-      emailOk = result.ok;
-      if (!result.ok) {
-        console.warn(`[auth] email send failed for ${phone}: ${result.reason}`);
-      } else {
+      deliveries.push(
+        sendOtpEmail({ phone, code, expiresAt: expiresAt.toISOString() })
+          .then((r) => ({ channel: "email", ...r }))
+      );
+    }
+    const results = await Promise.all(deliveries);
+    const smsOk   = results.some((r) => r.channel === "sms"   && r.ok);
+    const emailOk = results.some((r) => r.channel === "email" && r.ok);
+    for (const r of results) {
+      if (!r.ok) {
+        console.warn(`[auth] ${r.channel} send failed for ${phone}: ${r.reason}`);
+      } else if (r.channel === "email") {
         console.log(`[auth] OTP for ${phone} emailed to ${process.env.OTP_TO_EMAIL}`);
       }
     }
