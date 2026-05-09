@@ -135,10 +135,12 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = []) {
   );
 
   // Pull driver phones from the users table so the route DTO can
-  // expose driver_phone for the LiveTrip Call button. Without this
-  // every Call button stays disabled.
+  // expose driver_phone for the LiveTrip Call button. `users.id` is
+  // UUID and `recurring_routes.driver_id` is TEXT — same mismatch
+  // that 500'd /longhaul/trips. Cast id::text on the comparison so
+  // Postgres doesn't error out.
   const userRes = await pool.query(
-    `SELECT id, phone FROM users WHERE id = ANY($1::text[])`,
+    `SELECT id::text AS id, phone FROM users WHERE id::text = ANY($1::text[])`,
     [driverIds]
   );
   const phoneByDriver = new Map(
