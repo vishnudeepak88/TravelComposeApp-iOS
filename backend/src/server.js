@@ -14,6 +14,7 @@ const {
   normalizePhone
 } = require("./auth");
 const { sendSms, smsConfigured } = require("./sms");
+const { sendOtpEmail, emailConfigured } = require("./email");
 const { generateRideInstances } = require("./generation");
 const { autocompletePlaces } = require("./places");
 const {
@@ -196,43 +197,63 @@ app.post(
        VALUES ($1, $2, $3, $4, $5)`,
       [crypto.randomUUID(), phone, codeHash, salt, expiresAt]
     );
-    // Three-way OTP delivery path:
-    //   1. SMS configured        → send via Twilio (any deploy tier)
-    //   2. Production w/o SMS    → 503 (refuse the silent no-op)
-    //   3. Dev/staging w/o SMS   → log + echo `devCode` so testers can
-    //      sign in. Staging path is loudly marked so a deploy never
-    //      runs in this state by accident.
+    // OTP delivery, in priority order:
+    //   1. SMS configured       → send via Twilio (any deploy tier).
+    //   2. Email configured     → send via SMTP (Gmail) to OTP_TO_EMAIL.
+    //                              Useful for staging when Twilio isn't
+    //                              wired but the team has Gmail.
+    //   3. Production without
+    //      either               → 503 (refuse the silent no-op).
+    //   4. Dev/staging without
+    //      either               → log + echo `devCode` so testers can
+    //                              still sign in.
+    let smsOk = false;
+    let emailOk = false;
     if (smsConfigured()) {
       const result = await sendSms({
         to: phone,
         body: `Your Voygo verification code is ${code}. It expires in 5 minutes.`
       });
+      smsOk = result.ok;
       if (!result.ok) {
         console.warn(`[auth] sms send failed for ${phone}: ${result.reason}`);
-        if (config.isProduction) {
-          res.status(502).json({ detail: "sms_provider_error" });
-          return;
-        }
       }
-    } else if (config.isProduction) {
-      // Refuse to silently fall through to dev-mode in production. Better
-      // to return 503 and have ops notice than to issue an OTP only the
-      // server log can see.
-      console.error("[auth] OTP requested in production but SMS is unconfigured — refusing");
-      res.status(503).json({ detail: "sms_unconfigured" });
-      return;
-    } else if (config.isStaging) {
-      console.warn(
-        `[auth] STAGING devCode for ${phone}: ${code} (expires ${expiresAt.toISOString()}) — SMS unconfigured`
-      );
-    } else {
-      console.log(`[auth] OTP for ${phone}: ${code} (expires ${expiresAt.toISOString()})`);
+    }
+    // Email runs in addition to SMS when both are configured (handy
+    // during the migration window where you want a paper trail), but
+    // when only email is configured it becomes the primary delivery.
+    if (emailConfigured()) {
+      const result = await sendOtpEmail({ phone, code, expiresAt: expiresAt.toISOString() });
+      emailOk = result.ok;
+      if (!result.ok) {
+        console.warn(`[auth] email send failed for ${phone}: ${result.reason}`);
+      } else {
+        console.log(`[auth] OTP for ${phone} emailed to ${process.env.OTP_TO_EMAIL}`);
+      }
+    }
+    // No delivery channel succeeded.
+    if (!smsOk && !emailOk) {
+      if (config.isProduction) {
+        // Production is required to have at least SMS configured (config.js
+        // guards block boot otherwise). Reaching here means SMS errored at
+        // send time and email isn't a backup. Surface the failure honestly.
+        console.error(`[auth] all OTP channels failed for ${phone} in production`);
+        res.status(502).json({ detail: "otp_delivery_failed" });
+        return;
+      }
+      if (config.isStaging) {
+        console.warn(
+          `[auth] STAGING devCode for ${phone}: ${code} (expires ${expiresAt.toISOString()}) — no delivery channel configured`
+        );
+      } else {
+        console.log(`[auth] OTP for ${phone}: ${code} (expires ${expiresAt.toISOString()})`);
+      }
     }
     const response = { sent: true, expiresAt: expiresAt.toISOString() };
-    // Echo `devCode` whenever SMS is unconfigured AND we're not in
-    // production. Covers both local dev and staging — production never
-    // echoes, regardless of any other flag.
-    if (!smsConfigured() && !config.isProduction) {
+    // Echo `devCode` only when no real delivery happened AND we're not
+    // in production. Covers local dev and staging-without-providers.
+    // Once email or SMS is configured, the code stops being echoed.
+    if (!smsOk && !emailOk && !config.isProduction) {
       response.devCode = code;
     }
     res.json(response);

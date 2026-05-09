@@ -32,6 +32,26 @@ services:
       - key: NOMINATIM_BASE_URL
         value: https://nominatim.openstreetmap.org
 
+      # ── OTP delivery (staging / pilot) ────────────────────────────
+      # Set these in the Render dashboard (Environment → Add Environment
+      # Variable). They are NOT in this file because SMTP_PASS is a
+      # secret. Once any delivery channel is wired, /auth/request-otp
+      # stops echoing `devCode` in its response automatically.
+      #
+      # Twilio (SMS, recommended for production):
+      #   TWILIO_ACCOUNT_SID
+      #   TWILIO_AUTH_TOKEN
+      #   TWILIO_FROM_NUMBER       (or TWILIO_MESSAGING_SID)
+      #
+      # Gmail SMTP (cheaper for pilot — needs 2FA + app password):
+      #   SMTP_HOST=smtp.gmail.com
+      #   SMTP_PORT=587
+      #   SMTP_USER=youraccount@gmail.com
+      #   SMTP_PASS=<16-char app password>
+      #   OTP_FROM_EMAIL=Voygo <youraccount@gmail.com>
+      #   OTP_TO_EMAIL=tester@gmail.com
+      # ─────────────────────────────────────────────────────────────
+
 databases:
   - name: voygo-postgres
     databaseName: voygo
