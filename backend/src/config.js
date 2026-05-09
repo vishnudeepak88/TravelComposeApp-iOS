@@ -11,28 +11,34 @@ function normalizeDatabaseUrl(value) {
 }
 
 const isProduction = process.env.NODE_ENV === "production";
+const isStaging    = process.env.NODE_ENV === "staging";
+// `isHardened` is the security tier — both production and staging
+// run with real JWT secrets, no dev OTP echo, and SMS required for
+// auth. The difference is the payments + KYC strictness: full
+// production refuses to mock anything; staging allows pre-launch
+// testing without Billplz / S3 wired up yet (each with a loud WARN).
+const isHardened = isProduction || isStaging;
 
 // ---------------------------------------------------------------------------
-// Production fail-fast guards.
+// Hardened-deploy fail-fast guards.
 //
-// In production we refuse to start with insecure or ambiguous config. Better
+// In production OR staging we refuse to start with insecure config — better
 // to crash at boot with a clear error than to silently run with a default
-// JWT secret, dev OTP echo, or the Billplz mock-mode that auto-marks every
-// payment PAID. Each guard collects errors first so a misconfigured deploy
-// gets the full punch list in one log line, not one fix per restart.
+// JWT secret. Errors collect into a single punch list so a misconfigured
+// deploy gets the whole story in one log line, not one fix per restart.
 // ---------------------------------------------------------------------------
 const productionErrors = [];
 
-if (isProduction && !process.env.AUTH_JWT_SECRET) {
+if (isHardened && !process.env.AUTH_JWT_SECRET) {
   productionErrors.push(
-    "AUTH_JWT_SECRET must be set in production (refusing to use the dev default)"
+    "AUTH_JWT_SECRET must be set in production/staging (refusing to use the dev default)"
   );
 }
 
 const rawAuthDevMode = String(process.env.AUTH_DEV_MODE || "").toLowerCase() === "true";
-if (isProduction && rawAuthDevMode) {
+if (isHardened && rawAuthDevMode) {
   productionErrors.push(
-    "AUTH_DEV_MODE=true is forbidden in production"
+    "AUTH_DEV_MODE=true is forbidden in production/staging"
   );
 }
 
@@ -40,6 +46,10 @@ const billplzApiKey = process.env.BILLPLZ_API_KEY || "";
 const billplzCollectionId = process.env.BILLPLZ_COLLECTION_ID || "";
 const billplzXSignatureKey = process.env.BILLPLZ_X_SIGNATURE_KEY || "";
 
+// Billplz strictness applies only to true production. Staging boots
+// without keys and routes charges through mock-mode (with a loud
+// warning at every charge) so the team can exercise pilot flows
+// before payments are wired up.
 if (isProduction) {
   if (!billplzApiKey) {
     productionErrors.push("BILLPLZ_API_KEY must be set in production");
@@ -55,14 +65,20 @@ if (isProduction) {
 }
 
 if (productionErrors.length > 0) {
-  console.error("[config] Refusing to start in production:");
+  console.error("[config] Refusing to start:");
   for (const err of productionErrors) {
     console.error(`  - ${err}`);
   }
   // Throwing here makes `node src/server.js` exit with a non-zero status
   // before binding the port, so a bad deploy fails the health check
   // immediately instead of serving traffic with unsafe defaults.
-  throw new Error("invalid production configuration: " + productionErrors.join("; "));
+  throw new Error("invalid configuration: " + productionErrors.join("; "));
+}
+
+if (isStaging) {
+  console.warn(
+    "[config] Running in STAGING mode — Billplz keys optional, mock charges allowed. Flip NODE_ENV to production once payments are wired."
+  );
 }
 
 // Dev-only fallback for the JWT secret. Reachable only when NODE_ENV !==
@@ -71,19 +87,21 @@ const authJwtSecret =
   process.env.AUTH_JWT_SECRET ||
   "voygo-dev-only-change-me-in-production-32bytes-minimum";
 
-// authDevMode is the gate that controls dev OTP echo, console-logged OTP
-// codes, and any other developer affordance. We OR it with !isProduction
-// so local `node src/server.js` keeps the convenient dev flow, but in
-// production it is hard-pinned false regardless of the env var.
-const authDevMode = isProduction ? false : (rawAuthDevMode || true);
+// authDevMode controls dev OTP echo + console logging of codes. Hard-
+// pinned false in production OR staging — both deploys must use the
+// real SMS provider; only local `node src/server.js` keeps the
+// convenient dev flow.
+const authDevMode = isHardened ? false : (rawAuthDevMode || true);
 
-// Billplz mock-mode is similarly hard-pinned off in production. The
-// production guards above already require the keys to be set, so this
-// is a defense-in-depth check the payments code can rely on.
+// Billplz mock-mode is hard-pinned off in production but allowed in
+// staging. The production guards above already require the keys to
+// be set, so the production branch of this is defense-in-depth.
 const billplzIsMockMode = isProduction ? false : !(billplzApiKey && billplzCollectionId);
 
 const config = {
   isProduction,
+  isStaging,
+  isHardened,
   port: Number(process.env.PORT || 8000),
   databaseUrl: normalizeDatabaseUrl(process.env.DATABASE_URL),
   openAiApiKey: process.env.OPENAI_API_KEY || "",

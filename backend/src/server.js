@@ -685,11 +685,16 @@ app.post(
   express.raw({ type: ["image/*", "application/octet-stream"], limit: "8mb" }),
   asyncHandler(async (req, res) => {
     // Production storage gate — never silently write PII to a local
-    // disk that will evaporate on the next deploy.
+    // disk that will evaporate on the next deploy. Staging is allowed
+    // to use local disk for pre-launch testing, but we log every
+    // upload so the team can audit what landed where.
     if (config.isProduction && !KYC_S3_BUCKET) {
       console.error("[kyc] upload refused: KYC_S3_BUCKET unset in production");
       res.status(503).json({ detail: "kyc_storage_unconfigured" });
       return;
+    }
+    if (config.isStaging && !KYC_S3_BUCKET) {
+      console.warn("[kyc] STAGING: writing PII to local disk (KYC_S3_BUCKET unset)");
     }
 
     const kind = String(req.query.kind || req.body?.kind || "").trim();

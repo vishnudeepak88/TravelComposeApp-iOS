@@ -229,6 +229,14 @@ async function chargeSubscription(pool, { userId, subscriptionId, routeId, amoun
       err.statusCode = 503;
       throw err;
     }
+    if (config.isStaging) {
+      // Staging is allowed to mock-pay so pre-launch flows work, but
+      // we log every charge so the audit trail is unambiguous about
+      // which payments were never actually billed.
+      console.warn(
+        `[payments] STAGING mock-charge: payment ${paymentId} marked PAID without contacting Billplz`
+      );
+    }
     // Dev only: resolve the payment immediately so the rest of the flow
     // (subscription activation, receipts) works without external IO.
     console.warn(
