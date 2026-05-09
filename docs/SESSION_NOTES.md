@@ -250,3 +250,42 @@ xcrun devicectl list devices
 ```
 
 — First entry generated 2026-05-09 against commit `60adbfb`.
+
+---
+
+## 2026-05-09 (later) · session checkpoint after `599dd5b` + skills
+
+### What just shipped
+- `.claude/skills/` library — 7 reusable skill markdowns + README
+  index. Captures every pattern from this build-out so a future
+  session (this repo or another) can pull a playbook off the shelf.
+
+### Skills shipped
+
+| Skill | Captures |
+|---|---|
+| `ios-swiftui-bootstrap` | iOS 26 + Swift 6 + @Observable scaffold, AppRoute, AppStore, custom nav |
+| `ios-design-system-port` | Palette enum, atom set, VErrorBanner, semantic Dynamic-Type fonts, Strings.swift + lproj |
+| `ios-ux-audit-and-fix` | Per-screen audit methodology + phased fake-data sweep |
+| `ios-real-device-deploy` | xcodebuild + devicectl recipe + xattr/codesign troubleshooting |
+| `xcode-ci-setup` | GitHub Actions for Xcode projects, SDK-mismatch overrides |
+| `ios-system-integrations` | PHPicker, MFMessageComposeVC, ActivityVC, swipe-back, tel://, deep links — all Swift 6 strict-concurrency safe |
+| `backend-ios-pairing` | DTO + APIClient method + AppStore optimistic-write + typed AppError pattern |
+| `session-handoff-ledger` | This file's own protocol. Meta-skill. |
+
+Index lives at `.claude/skills/README.md` with a one-line trigger
+for each skill so fresh sessions can match request → skill quickly.
+
+### Open work items (carry-forward)
+
+Same as the previous checkpoint — the skills work doesn't change
+what's in-flight on the product. The top item is still:
+
+1. **AppError UI surface across remaining call sites** — `VErrorBanner`
+   exists, replace `Text(err.localizedDescription)` in
+   RouteDetailsView, MySubscriptionsView, KycVerificationView,
+   CreateRouteView. ~15 call sites.
+2. Dynamic Type sweep across feature views.
+3. Scroll-to-top opt-in for Search/Trips/Inbox/Profile.
+4. Cross-tab Inbox deep-link to specific thread.
+5. Remaining items per `docs/ROADMAP.md`.
