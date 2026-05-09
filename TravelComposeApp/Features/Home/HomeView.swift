@@ -624,9 +624,18 @@ struct HomeView: View {
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 14) {
             ForEach(tiles) { tile in
                 Button {
-                    if tile.isPrimary { onCarpoolTapped() }
-                    else if tile.isLongHaul { onLongHaulTapped() }
-                    else { showComingSoonFor = tile.label }
+                    // Defense in depth: route by both the explicit flag
+                    // AND the label. If a future edit drops `isLongHaul`
+                    // off the literal, the label check still gets us to
+                    // the right destination instead of falling through
+                    // to the coming-soon alert.
+                    if tile.isPrimary || tile.label == "Carpool" {
+                        onCarpoolTapped()
+                    } else if tile.isLongHaul || tile.label == "Long-haul" {
+                        onLongHaulTapped()
+                    } else {
+                        showComingSoonFor = tile.label
+                    }
                 } label: {
                     serviceTileBody(tile)
                 }
