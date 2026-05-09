@@ -231,12 +231,65 @@ struct ChatThread: Codable, Equatable, Identifiable {
     var unreadCount: Int
 }
 
+/// Local-only status for a chat message. Server payloads omit it
+/// (defaults to `.sent`); the iOS optimistic-send path uses `.sending`
+/// while the network call is in flight and `.failed` when it errors,
+/// so the bubble can render a clock / red retry indicator instead
+/// of silently disappearing on the next refresh.
+enum ChatMessageDeliveryState: String, Codable, Equatable {
+    case sending, sent, failed
+}
+
 struct ChatMessage: Codable, Equatable, Identifiable {
     var id: String
     var threadId: String
     var sender: ChatSender
     var text: String
     var timestamp: Date
+    /// Local-only status; defaults to `.sent`. Skipped during
+    /// (de)serialization because the server doesn't carry it.
+    var deliveryState: ChatMessageDeliveryState = .sent
+
+    init(id: String, threadId: String, sender: ChatSender, text: String,
+         timestamp: Date, deliveryState: ChatMessageDeliveryState = .sent) {
+        self.id = id
+        self.threadId = threadId
+        self.sender = sender
+        self.text = text
+        self.timestamp = timestamp
+        self.deliveryState = deliveryState
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, threadId, sender, text, timestamp
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.threadId = try c.decode(String.self, forKey: .threadId)
+        self.sender = try c.decode(ChatSender.self, forKey: .sender)
+        self.text = try c.decode(String.self, forKey: .text)
+        // Backend serialises chat timestamps as `timestamp_ms` (Number)
+        // rather than the ISO string the global decoder expects. Try
+        // ms-since-epoch first, fall back to a Date decoded via the
+        // outer decoder's strategy so legacy payloads still parse.
+        if let ms = try? c.decode(Double.self, forKey: .timestamp) {
+            self.timestamp = Date(timeIntervalSince1970: ms / 1000.0)
+        } else {
+            self.timestamp = try c.decode(Date.self, forKey: .timestamp)
+        }
+        self.deliveryState = .sent
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(threadId, forKey: .threadId)
+        try c.encode(sender, forKey: .sender)
+        try c.encode(text, forKey: .text)
+        try c.encode(timestamp, forKey: .timestamp)
+    }
 }
 
 struct User: Equatable {

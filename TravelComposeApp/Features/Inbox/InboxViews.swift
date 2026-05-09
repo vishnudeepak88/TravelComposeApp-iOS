@@ -127,6 +127,7 @@ struct ChatThreadView: View {
     /// its own NavigationStack path, not the system back chevron.
     var onBack: () -> Void = {}
     @Environment(AppStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
     @State private var newMessage = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
 
@@ -142,8 +143,10 @@ struct ChatThreadView: View {
                     ScrollView {
                         LazyVStack(spacing: 6) {
                             ForEach(messages) { msg in
-                                ChatBubble(message: msg)
-                                    .id(msg.id)
+                                ChatBubble(message: msg, onRetry: {
+                                    Task { await store.retryFailedMessage(msg.id) }
+                                })
+                                .id(msg.id)
                             }
                         }
                         .padding(.horizontal, 16)
@@ -155,7 +158,8 @@ struct ChatThreadView: View {
 
                 // Input bar
                 HStack(spacing: 10) {
-                    TextField("Message...", text: $newMessage)
+                    TextField("Message...", text: $newMessage, axis: .vertical)
+                        .lineLimit(1...4)
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(VPalette.surfaceHigh)
                         .cornerRadius(22)
@@ -176,8 +180,27 @@ struct ChatThreadView: View {
             }
         }
         .task(id: threadId) {
+            // Initial fetch + flip the read-state so the inbox kicker
+            // and per-row badge clear. Then poll every 4s while the
+            // view is on screen — chat is poll-only today; without
+            // this the rider doesn't see replies until they leave
+            // and re-enter the thread.
             await store.refreshMessages(threadId: threadId)
+            await store.markThreadRead(threadId: threadId)
             scrollToBottom()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                if Task.isCancelled { break }
+                await store.refreshMessages(threadId: threadId)
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Re-mark-read on foreground so a notification-tap that
+            // opens the app directly to this thread also clears the
+            // badge that fired the push.
+            if phase == .active {
+                Task { await store.markThreadRead(threadId: threadId) }
+            }
         }
     }
 
@@ -195,6 +218,10 @@ struct ChatThreadView: View {
 
 struct ChatBubble: View {
     let message: ChatMessage
+    /// Tap handler for the failed-state retry indicator. No-op when
+    /// the message is sent / from another user.
+    var onRetry: (() -> Void)? = nil
+
     var isMe: Bool { message.sender == .me }
 
     var body: some View {
@@ -210,21 +237,46 @@ struct ChatBubble: View {
                     .textSelection(.enabled)
                     .padding(.horizontal, 14).padding(.vertical, 9)
                     .background(
-                        // Outgoing: gradient that matches the rest of the
-                        // polished hero cards. Incoming: a flat surface tone
-                        // (the previous LinearGradient with a single color
-                        // stop rendered indistinguishably from a plain fill,
-                        // so swap to a real Color and drop the fake gradient).
                         Group {
                             if isMe {
                                 VPalette.primaryGradient
+                                    .opacity(message.deliveryState == .failed ? 0.55 : 1.0)
                             } else {
                                 VPalette.surfaceHigh
                             }
                         }
                     )
                     .cornerRadius(18, corners: isMe ? [.topLeft, .topRight, .bottomLeft] : [.topLeft, .topRight, .bottomRight])
-                Text(formatTime(message.timestamp)).font(.caption2).foregroundColor(VoygoTheme.textHint)
+
+                // Delivery indicator on outgoing rows. Incoming bubbles
+                // stay bare — the timestamp alone is enough.
+                HStack(spacing: 4) {
+                    Text(formatTime(message.timestamp))
+                        .font(.caption2)
+                        .foregroundColor(VoygoTheme.textHint)
+                    if isMe {
+                        switch message.deliveryState {
+                        case .sending:
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                                .foregroundColor(VPalette.textHint)
+                                .accessibilityLabel("Sending")
+                        case .failed:
+                            Button(action: { onRetry?() }) {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                    Text("Tap to retry")
+                                }
+                                .font(.caption2.weight(.bold))
+                                .foregroundColor(VPalette.danger)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Send failed. Tap to retry.")
+                        case .sent:
+                            EmptyView()
+                        }
+                    }
+                }
             }
             if !isMe { Spacer() }
         }

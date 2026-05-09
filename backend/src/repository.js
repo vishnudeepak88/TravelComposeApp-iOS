@@ -700,11 +700,23 @@ async function listChatMessages(pool, threadId, requesterId = null) {
   }));
 }
 
+// Hard cap on chat message length. 4000 chars is well above any
+// realistic ride-coordination message ("I'm at the kopitiam, blue
+// Myvi, 5 min") and well below anything that could slow the Postgres
+// path or DoS the response. Enforced before DB write so the row never
+// lands oversize.
+const MAX_CHAT_MESSAGE_CHARS = 4000;
+
 async function appendChatMessage(pool, threadId, text, sender = "ME") {
   const trimmedText = String(text || "").trim();
   if (!trimmedText) {
     const error = new Error("text is required");
     error.status = 400;
+    throw error;
+  }
+  if (trimmedText.length > MAX_CHAT_MESSAGE_CHARS) {
+    const error = new Error("message_too_long");
+    error.status = 413;
     throw error;
   }
 
@@ -733,7 +745,29 @@ async function appendChatMessage(pool, threadId, text, sender = "ME") {
     [threadId, String(sender)]
   );
 
-  return messageId;
+  // Return the DTO shape the iOS client expects so callers can
+  // reconcile their optimistic local row with the server-assigned id.
+  return {
+    id: String(messageId),
+    threadId: String(threadId),
+    sender: "ME",
+    text: trimmedText,
+    timestamp: Number(timestampMs)
+  };
+}
+
+/// Marks a thread as read for a single participant. Used when a user
+/// opens the chat — without it, `unread_count` only ever resets for
+/// senders, so the inbox kicker keeps growing.
+async function markChatThreadRead(pool, threadId, userId) {
+  await assertChatParticipant(pool, threadId, userId);
+  const result = await pool.query(
+    `UPDATE chat_participants
+        SET unread_count = 0
+      WHERE thread_id = $1 AND user_id = $2`,
+    [threadId, String(userId)]
+  );
+  return result.rowCount;
 }
 
 module.exports = {
@@ -748,6 +782,7 @@ module.exports = {
   listRouteRides,
   listSubscriptions,
   loadRouteContexts,
+  markChatThreadRead,
   assertChatParticipant,
   normalizeDaysOfWeek,
   normalizeActiveStatus

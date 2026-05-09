@@ -28,6 +28,7 @@ const {
   listRouteRides,
   listSubscriptions,
   loadRouteContexts,
+  markChatThreadRead,
   normalizeActiveStatus,
   normalizeDaysOfWeek
 } = require("./repository");
@@ -1950,8 +1951,31 @@ app.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const text = String(req.body?.text || "");
-    await appendChatMessage(pool, req.params.threadId, text, req.user.id);
-    res.status(204).send();
+    // Pre-validate length so the client gets a clean 413 rather than the
+    // generic 500 handler. The repo layer enforces the same cap as a
+    // defense-in-depth check.
+    if (text.length > 4000) {
+      res.status(413).json({ detail: "message_too_long" });
+      return;
+    }
+    const message = await appendChatMessage(pool, req.params.threadId, text, req.user.id);
+    // Returning the persisted DTO (id + timestamp) lets the iOS
+    // client reconcile its optimistic local row with the
+    // server-assigned id, instead of clobbering the optimistic
+    // bubble on the next refresh.
+    res.status(201).json(message);
+  })
+);
+
+// Marks a thread read for the current user — flips their
+// participant `unread_count` to 0. Without this the inbox
+// kicker grew forever; only the sender was previously zeroed.
+app.post(
+  "/chats/:threadId/read",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const updated = await markChatThreadRead(pool, req.params.threadId, req.user.id);
+    res.json({ ok: updated > 0 });
   })
 );
 

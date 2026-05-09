@@ -227,10 +227,20 @@ struct VoygoAPIClient {
         try await get(baseURL.appendingPathComponent("chats/\(threadId)"), as: [ChatMessage].self)
     }
 
-    // POST /chats/{threadId}/send
-    static func sendMessage(threadId: String, text: String) async throws {
+    // POST /chats/{threadId}/send. Server now returns the persisted
+    // ChatMessage so callers can reconcile their optimistic local row
+    // with the server-assigned id and timestamp.
+    static func sendMessage(threadId: String, text: String) async throws -> ChatMessage {
         let body = SendMessageRequest(text: text)
-        _ = try await postVoid(body, to: baseURL.appendingPathComponent("chats/\(threadId)/send"))
+        return try await post(body, to: baseURL.appendingPathComponent("chats/\(threadId)/send"), as: ChatMessage.self)
+    }
+
+    // POST /chats/{threadId}/read — flips the caller's unread_count
+    // for this thread to 0. Called when the user opens a chat so the
+    // inbox kicker and per-row badge actually clear.
+    static func markChatThreadRead(threadId: String) async throws {
+        let body = EmptyRequest()
+        _ = try await postVoid(body, to: baseURL.appendingPathComponent("chats/\(threadId)/read"))
     }
 
     // MARK: - Notifications

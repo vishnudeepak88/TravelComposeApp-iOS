@@ -1118,8 +1118,18 @@ final class AppStore {
         guard useOnline, isAuthenticated else { return }
         do {
             let remote = try await VoygoAPIClient.getMessages(threadId: threadId)
+            // Preserve any local-only rows that haven't reached the
+            // server yet (`.sending` / `.failed`) — refreshing while a
+            // message is in-flight or the user is staring at a retry
+            // affordance shouldn't blow them away. Anything in `.sent`
+            // is replaced by server truth.
+            let pendingLocal = messages.filter {
+                $0.threadId == threadId &&
+                ($0.deliveryState == .sending || $0.deliveryState == .failed)
+            }
             messages.removeAll { $0.threadId == threadId }
             messages.append(contentsOf: remote)
+            messages.append(contentsOf: pendingLocal)
             messages.sort { $0.timestamp < $1.timestamp }
             connectionState = .online
         } catch APIError.unauthorized {
@@ -1132,21 +1142,83 @@ final class AppStore {
     func sendMessage(threadId: String, text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        messages.append(ChatMessage(id: "m-\(UUID())", threadId: threadId, sender: .me, text: trimmed, timestamp: Date()))
+
+        // Optimistic insert with `.sending` so the bubble can render a
+        // clock indicator while the network call is in flight.
+        let localId = "m-\(UUID())"
+        let optimistic = ChatMessage(id: localId, threadId: threadId, sender: .me,
+                                     text: trimmed, timestamp: Date(),
+                                     deliveryState: .sending)
+        messages.append(optimistic)
         if let i = threads.firstIndex(where: { $0.id == threadId }) {
             threads[i].lastMessage = trimmed
             threads[i].unreadCount = 0
         }
-        guard useOnline, isAuthenticated else { return }
+
+        guard useOnline, isAuthenticated else {
+            // Offline — flag the local row so it doesn't pretend to be
+            // delivered. Until we ship a real outbox, the rider gets
+            // an honest red retry indicator instead of a phantom send.
+            markMessageFailed(localId: localId)
+            return
+        }
+
         do {
-            try await VoygoAPIClient.sendMessage(threadId: threadId, text: trimmed)
+            let server = try await VoygoAPIClient.sendMessage(threadId: threadId, text: trimmed)
+            // Reconcile optimistic row with the server-assigned id so a
+            // subsequent `refreshMessages` (which replaces the array
+            // wholesale) doesn't drop the bubble or duplicate it.
+            if let i = messages.firstIndex(where: { $0.id == localId }) {
+                messages[i] = ChatMessage(
+                    id: server.id, threadId: server.threadId, sender: .me,
+                    text: server.text, timestamp: server.timestamp,
+                    deliveryState: .sent
+                )
+            }
             lastSyncError = nil
             connectionState = .online
         } catch APIError.unauthorized {
             clearSession()
         } catch {
-            lastSyncError = "Message queued locally."
-            connectionState = .offline("Message queued locally.")
+            markMessageFailed(localId: localId)
+        }
+    }
+
+    /// Flips an optimistic row to `.failed` so the UI can render a
+    /// retry affordance. Called from both the offline guard and the
+    /// network-error catch in `sendMessage`.
+    private func markMessageFailed(localId: String) {
+        if let i = messages.firstIndex(where: { $0.id == localId }) {
+            messages[i].deliveryState = .failed
+        }
+        lastSyncError = "Message couldn't be sent. Tap to retry."
+    }
+
+    /// Resends a previously failed message in place. Removes the
+    /// failed local row, re-runs the optimistic-send pipeline so the
+    /// new attempt gets its own state machine.
+    func retryFailedMessage(_ messageId: String) async {
+        guard let idx = messages.firstIndex(where: { $0.id == messageId && $0.deliveryState == .failed })
+        else { return }
+        let stale = messages.remove(at: idx)
+        await sendMessage(threadId: stale.threadId, text: stale.text)
+    }
+
+    /// Marks a thread read for the current user — clears the inbox
+    /// kicker and the per-thread unread badge. Best-effort: failure
+    /// just leaves the local count where it was.
+    func markThreadRead(threadId: String) async {
+        // Optimistic local clear first so the badge disappears immediately.
+        if let i = threads.firstIndex(where: { $0.id == threadId }) {
+            threads[i].unreadCount = 0
+        }
+        guard useOnline, isAuthenticated else { return }
+        do {
+            try await VoygoAPIClient.markChatThreadRead(threadId: threadId)
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal; the next refresh will reconcile.
         }
     }
 
