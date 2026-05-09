@@ -1,31 +1,61 @@
 const nodemailer = require("nodemailer");
+const https = require("https");
 
-// Email-based OTP delivery for staging / pilot testing.
+// Email-based OTP delivery.
 //
-// Useful when Twilio isn't set up but the team needs the OTP to land
-// somewhere reachable (a Gmail inbox they all share, or the
-// developer's own). Production should still use SMS — this is a
-// staging convenience, gated by config.isProduction in server.js.
+// Two transport options:
+//   1. RESEND (HTTPS API) — preferred. Works on Render's free plan
+//      because outbound port 443 isn't blocked. Sign up at resend.com,
+//      grab the API key, set:
+//          RESEND_API_KEY=re_xxxxxxxx
+//          OTP_FROM_EMAIL=Voygo <onboarding@resend.dev>   (sandbox sender)
+//          OTP_TO_EMAIL=tester@gmail.com
+//      The sandbox sender works without DNS verification but the
+//      "to" address must be the verified Resend account email.
+//      For production, verify your own domain in Resend and use a
+//      from address on that domain.
 //
-// Configure via env (Gmail SMTP example):
-//   SMTP_HOST=smtp.gmail.com
-//   SMTP_PORT=587
-//   SMTP_USER=youraccount@gmail.com
-//   SMTP_PASS=app-specific-password   # NOT your real Gmail password
-//   OTP_FROM_EMAIL="Voygo <youraccount@gmail.com>"
-//   OTP_TO_EMAIL=tester@gmail.com     # where the OTP gets sent
+//   2. SMTP (Gmail / etc.) — only works if outbound port 587 isn't
+//      blocked by your host. Render's free plan blocks SMTP, so this
+//      path is for local dev or paid Render plans. Set:
+//          SMTP_HOST=smtp.gmail.com
+//          SMTP_PORT=587
+//          SMTP_USER=youraccount@gmail.com
+//          SMTP_PASS=app-specific-password
+//          OTP_FROM_EMAIL=Voygo <youraccount@gmail.com>
+//          OTP_TO_EMAIL=tester@gmail.com
+//      Gmail SMTP requires 2FA + an app password
+//      (https://myaccount.google.com/apppasswords). Regular passwords
+//      are rejected.
 //
-// Gmail's SMTP requires 2FA on the account + an app-specific
-// password (https://myaccount.google.com/apppasswords). The regular
-// password won't work.
+// When both are configured, Resend wins. The OTP route only tries one;
+// no point burning 8s on SMTP if the API call already worked.
 
-function emailConfigured() {
+function resendConfigured() {
+  return Boolean(
+    process.env.RESEND_API_KEY &&
+    process.env.OTP_FROM_EMAIL &&
+    process.env.OTP_TO_EMAIL
+  );
+}
+
+function smtpConfigured() {
   return Boolean(
     process.env.SMTP_HOST &&
     process.env.SMTP_USER &&
     process.env.SMTP_PASS &&
     process.env.OTP_TO_EMAIL
   );
+}
+
+function emailConfigured() {
+  return resendConfigured() || smtpConfigured();
+}
+
+function activeProvider() {
+  if (resendConfigured()) return "resend";
+  if (smtpConfigured())   return "smtp";
+  return null;
 }
 
 let _transporter = null;
@@ -83,18 +113,13 @@ function withTimeout(promise, ms, label) {
   });
 }
 
-// Diagnostic state — last verify + last send result with full error
-// detail. Surfaced via the admin endpoint /admin/email-status so we
-// can debug "why is OTP email not arriving?" without grepping logs.
 const _diag = {
-  lastVerify: null, // { ok, code, message, at }
-  lastSend:   null  // { ok, code, message, at }
+  provider:   null,
+  lastVerify: null,
+  lastSend:   null
 };
 
 function _captureError(err) {
-  // nodemailer/SMTP errors carry useful structured fields. Capture
-  // the ones that distinguish auth-vs-network-vs-config without
-  // dumping the entire stack to the API response.
   if (!err) return { code: "UNKNOWN", message: "unknown error" };
   return {
     code:         err.code         || "UNKNOWN",
@@ -104,76 +129,177 @@ function _captureError(err) {
   };
 }
 
+// ─── Resend HTTPS path ─────────────────────────────────────────────────
+//
+// Single POST to api.resend.com/emails. We use Node's built-in https
+// rather than the @resend/node SDK to keep the dep surface lean —
+// the request shape is small enough to inline.
+
+function resendSend({ from, to, subject, text, html }) {
+  return new Promise((resolve) => {
+    const payload = JSON.stringify({ from, to, subject, text, html });
+    const req = https.request(
+      {
+        hostname: "api.resend.com",
+        path: "/emails",
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+          "Content-Type":  "application/json",
+          "Content-Length": Buffer.byteLength(payload)
+        },
+        timeout: 8000
+      },
+      (resp) => {
+        let chunks = "";
+        resp.on("data", (c) => { chunks += c; });
+        resp.on("end", () => {
+          if (resp.statusCode && resp.statusCode >= 200 && resp.statusCode < 300) {
+            resolve({ ok: true });
+            return;
+          }
+          let err = { name: "ResendError", message: chunks.slice(0, 300) };
+          try { err = { ...err, ...JSON.parse(chunks) }; } catch (_e) { /* keep raw */ }
+          resolve({
+            ok: false,
+            reason: "send_failed",
+            code: err.name || `HTTP_${resp.statusCode}`,
+            responseCode: resp.statusCode,
+            command: "POST /emails",
+            message: err.message
+          });
+        });
+      }
+    );
+    req.on("error", (err) => {
+      resolve({ ok: false, reason: "send_failed", ..._captureError(err) });
+    });
+    req.on("timeout", () => req.destroy(new Error("resend_timeout")));
+    req.write(payload);
+    req.end();
+  });
+}
+
 async function sendOtpEmail({ phone, code, expiresAt }) {
   if (!emailConfigured()) {
     return { ok: false, reason: "unconfigured" };
   }
   const expiresMin = Math.max(1, Math.round((new Date(expiresAt).getTime() - Date.now()) / 60_000));
-  const sendPromise = transporter().sendMail({
-    from: process.env.OTP_FROM_EMAIL || process.env.SMTP_USER,
-    to: process.env.OTP_TO_EMAIL,
-    subject: `Voygo verification code: ${code}`,
-    // Plain text + minimal HTML — keeps the message out of spam
-    // filters that flag image-heavy or boilerplate-laden bodies.
-    text: `Voygo verification code: ${code}\nExpires in ${expiresMin} minutes.\nRequested for ${phone}.`,
-    html: `
+  const subject = `Voygo verification code: ${code}`;
+  const text = `Voygo verification code: ${code}\nExpires in ${expiresMin} minutes.\nRequested for ${phone}.`;
+  const html = `
       <p style="font-family:-apple-system,system-ui,sans-serif;font-size:14px">
         <strong>Voygo verification code</strong><br/>
         <span style="font-size:28px;letter-spacing:4px;font-family:Menlo,monospace">${code}</span><br/>
         <span style="color:#666">Expires in ${expiresMin} minutes. Requested for ${phone}.</span>
-      </p>`
-  }).then(
-    ()  => ({ ok: true }),
-    (err) => ({ ok: false, reason: "send_failed", ..._captureError(err) })
-  );
+      </p>`;
+  const from = process.env.OTP_FROM_EMAIL || process.env.SMTP_USER;
+  const to   = process.env.OTP_TO_EMAIL;
 
-  // 8s outer cap — covers the worst-case SMTP handshake + send.
-  // If we exceed this, give up and let the caller decide what's next.
-  const result = await withTimeout(sendPromise, 8_000, "smtp_send");
-  if (!result.ok) {
-    console.warn(`[email] sendOtpEmail ${result.reason}: ${result.error || ""}`);
-    _diag.lastSend = { ok: false, ...result, at: new Date().toISOString() };
+  let result;
+  if (resendConfigured()) {
+    _diag.provider = "resend";
+    result = await resendSend({ from, to, subject, text, html });
   } else {
-    _diag.lastSend = { ok: true, at: new Date().toISOString() };
+    _diag.provider = "smtp";
+    const sendPromise = transporter().sendMail({ from, to, subject, text, html }).then(
+      ()  => ({ ok: true }),
+      (err) => ({ ok: false, reason: "send_failed", ..._captureError(err) })
+    );
+    result = await withTimeout(sendPromise, 8_000, "smtp_send");
+  }
+
+  if (!result.ok) {
+    console.warn(`[email] sendOtpEmail (${_diag.provider}) ${result.reason}: ${result.message || result.error || ""}`);
+    _diag.lastSend = { ok: false, provider: _diag.provider, ...result, at: new Date().toISOString() };
+  } else {
+    _diag.lastSend = { ok: true, provider: _diag.provider, at: new Date().toISOString() };
   }
   return result;
 }
 
-/// Connect + authenticate against the SMTP host without sending an
-/// email. Used at boot to surface auth/connection errors clearly,
-/// so you don't have to wait until the first OTP attempt to learn
-/// the credentials are wrong.
+/// Verify the active provider is reachable + authenticated. Resend's
+/// API has no formal verify endpoint, so we send a HEAD-equivalent
+/// (an unauthenticated GET to /domains, which 401s on bad keys and
+/// 200s on good ones) — confirms the API key works without sending
+/// a real email.
 async function verifyEmailTransport() {
   if (!emailConfigured()) {
     const result = { ok: false, reason: "unconfigured" };
     _diag.lastVerify = { ...result, at: new Date().toISOString() };
     return result;
   }
-  // Wrap the verify call so we capture nodemailer's structured error
-  // fields (code, responseCode, command) before withTimeout flattens
-  // them. Pre-baking the structured failure into the resolved value
-  // means the diag snapshot can report exactly which step broke.
-  const verifyPromise = transporter().verify().then(
-    ()  => ({ ok: true }),
-    (err) => ({ ok: false, reason: "verify_failed", ..._captureError(err) })
-  );
-  const result = await withTimeout(verifyPromise, 6_000, "smtp_verify");
-  _diag.lastVerify = { ...result, at: new Date().toISOString() };
+  let result;
+  if (resendConfigured()) {
+    _diag.provider = "resend";
+    result = await resendVerifyApiKey();
+  } else {
+    _diag.provider = "smtp";
+    const verifyPromise = transporter().verify().then(
+      ()  => ({ ok: true }),
+      (err) => ({ ok: false, reason: "verify_failed", ..._captureError(err) })
+    );
+    result = await withTimeout(verifyPromise, 6_000, "smtp_verify");
+  }
+  _diag.lastVerify = { ...result, provider: _diag.provider, at: new Date().toISOString() };
   return result;
 }
 
-/// Snapshot of which env vars are present (boolean only — never echo
-/// the values themselves) plus the most recent verify + send result.
-/// Consumed by /admin/email-status.
+function resendVerifyApiKey() {
+  return new Promise((resolve) => {
+    const req = https.request(
+      {
+        hostname: "api.resend.com",
+        path: "/domains",
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${process.env.RESEND_API_KEY}`
+        },
+        timeout: 5000
+      },
+      (resp) => {
+        // Drain so Node frees the socket; we only care about status.
+        resp.on("data", () => {});
+        resp.on("end", () => {
+          if (resp.statusCode === 200) {
+            resolve({ ok: true });
+          } else {
+            resolve({
+              ok: false,
+              reason: "verify_failed",
+              code: `HTTP_${resp.statusCode}`,
+              responseCode: resp.statusCode,
+              command: "GET /domains",
+              message: resp.statusCode === 401
+                ? "Invalid Resend API key"
+                : `Resend returned ${resp.statusCode}`
+            });
+          }
+        });
+      }
+    );
+    req.on("error", (err) => {
+      resolve({ ok: false, reason: "verify_failed", ..._captureError(err) });
+    });
+    req.on("timeout", () => req.destroy(new Error("resend_timeout")));
+    req.end();
+  });
+}
+
 function emailDiagnostics() {
   return {
     configured: emailConfigured(),
+    activeProvider: activeProvider(),
     env: {
+      // Resend
+      RESEND_API_KEY: Boolean(process.env.RESEND_API_KEY),
+      // SMTP
       SMTP_HOST:      Boolean(process.env.SMTP_HOST),
       SMTP_PORT:      process.env.SMTP_PORT || null,
       SMTP_SECURE:    process.env.SMTP_SECURE || null,
       SMTP_USER:      process.env.SMTP_USER ? maskEmail(process.env.SMTP_USER) : null,
       SMTP_PASS:      Boolean(process.env.SMTP_PASS),
+      // Shared
       OTP_FROM_EMAIL: process.env.OTP_FROM_EMAIL ? maskEmail(process.env.OTP_FROM_EMAIL) : null,
       OTP_TO_EMAIL:   process.env.OTP_TO_EMAIL   ? maskEmail(process.env.OTP_TO_EMAIL)   : null
     },
@@ -183,8 +309,6 @@ function emailDiagnostics() {
 }
 
 function maskEmail(value) {
-  // Show the local-part's first letter + domain so we can confirm
-  // the env is set without echoing the address itself.
   const m = String(value).match(/<?([^@<>\s]+)@([^>\s]+)>?/);
   if (!m) return "<set>";
   const [, local, domain] = m;
@@ -194,6 +318,7 @@ function maskEmail(value) {
 module.exports = {
   sendOtpEmail,
   emailConfigured,
+  activeProvider,
   verifyEmailTransport,
   emailDiagnostics
 };

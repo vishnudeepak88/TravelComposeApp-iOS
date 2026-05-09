@@ -14,7 +14,7 @@ const {
   normalizePhone
 } = require("./auth");
 const { sendSms, smsConfigured } = require("./sms");
-const { sendOtpEmail, emailConfigured, verifyEmailTransport, emailDiagnostics } = require("./email");
+const { sendOtpEmail, emailConfigured, activeProvider, verifyEmailTransport, emailDiagnostics } = require("./email");
 const { generateRideInstances } = require("./generation");
 const { autocompletePlaces } = require("./places");
 const {
@@ -2748,12 +2748,13 @@ async function start() {
   // surfaced both in stdout and via /admin/email-status so ops sees
   // EAUTH / ETIMEDOUT immediately instead of waiting for first OTP.
   if (emailConfigured()) {
+    const provider = activeProvider();
     verifyEmailTransport().then((result) => {
       if (result.ok) {
-        console.log(`[email] SMTP verify OK (host=${process.env.SMTP_HOST}, user=${process.env.SMTP_USER})`);
+        console.log(`[email] ${provider} verify OK`);
       } else {
         console.warn(
-          `[email] SMTP verify FAILED: code=${result.code || "?"} ` +
+          `[email] ${provider} verify FAILED: code=${result.code || "?"} ` +
           `responseCode=${result.responseCode || "?"} ` +
           `command=${result.command || "?"} reason=${result.reason} ` +
           `message="${result.message || result.error || ""}"`
@@ -2761,7 +2762,7 @@ async function start() {
       }
     });
   } else {
-    console.log("[email] SMTP not configured — OTP will fall back to dev-echo");
+    console.log("[email] no provider configured — OTP will fall back to dev-echo");
   }
 
   app.listen(config.port, "0.0.0.0", () => {

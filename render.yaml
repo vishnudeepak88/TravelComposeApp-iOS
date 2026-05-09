@@ -34,20 +34,33 @@ services:
 
       # ── OTP delivery (staging / pilot) ────────────────────────────
       # Set these in the Render dashboard (Environment → Add Environment
-      # Variable). They are NOT in this file because SMTP_PASS is a
-      # secret. Once any delivery channel is wired, /auth/request-otp
-      # stops echoing `devCode` in its response automatically.
+      # Variable). They are NOT in this file because the keys + tokens
+      # are secrets. Once any delivery channel is wired,
+      # /auth/request-otp stops echoing `devCode` in its response
+      # automatically.
       #
-      # Twilio (SMS, recommended for production):
+      # ▼ RECOMMENDED FOR RENDER FREE PLAN ▼
+      # Resend (HTTPS API — works on Render free, port 443 not blocked):
+      #   RESEND_API_KEY=re_xxxxxxxx
+      #   OTP_FROM_EMAIL=Voygo <onboarding@resend.dev>
+      #   OTP_TO_EMAIL=tester@gmail.com
+      # Sign up at https://resend.com (free tier 3k emails/month).
+      # `onboarding@resend.dev` is a sandbox sender that works without
+      # DNS verification — but only delivers to the email tied to your
+      # Resend account. For production, verify your own domain in
+      # Resend and switch OTP_FROM_EMAIL to a sender on that domain.
+      #
+      # Twilio SMS (best for production once paying for it):
       #   TWILIO_ACCOUNT_SID
       #   TWILIO_AUTH_TOKEN
       #   TWILIO_FROM_NUMBER       (or TWILIO_MESSAGING_SID)
       #
-      # Gmail SMTP (cheaper for pilot — needs 2FA + app password):
+      # Gmail SMTP (only on paid Render plans — free plan blocks
+      # outbound port 587 for spam prevention):
       #   SMTP_HOST=smtp.gmail.com
       #   SMTP_PORT=587
       #   SMTP_USER=youraccount@gmail.com
-      #   SMTP_PASS=<16-char app password>
+      #   SMTP_PASS=<16-char app password>   # NOT regular password
       #   OTP_FROM_EMAIL=Voygo <youraccount@gmail.com>
       #   OTP_TO_EMAIL=tester@gmail.com
       # ─────────────────────────────────────────────────────────────
