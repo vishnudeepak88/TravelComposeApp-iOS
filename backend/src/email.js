@@ -41,36 +41,75 @@ function transporter() {
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
-    }
+    },
+    // Tight timeouts — nodemailer's defaults are 2+ minutes which
+    // means a misconfigured SMTP host (wrong port, app password not
+    // activated yet, firewall) will hang the whole HTTP request the
+    // OTP endpoint is trying to satisfy. We'd rather fall through
+    // to dev-echo / 502 in seconds than block the user.
+    connectionTimeout: 5000,   // TCP connect
+    greetingTimeout:   5000,   // SMTP banner
+    socketTimeout:     10000   // any single socket op
   });
   return _transporter;
+}
+
+/// Race a promise against a hard wall-clock timeout. The underlying
+/// SMTP work may keep running in the background, but the caller
+/// returns immediately with a clear `timeout` reason so the OTP
+/// endpoint can fall through to its next delivery channel.
+function withTimeout(promise, ms, label) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve({ ok: false, reason: "timeout", label });
+    }, ms);
+    promise.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve({ ok: false, reason: "send_failed", error: err?.message || String(err) });
+      }
+    );
+  });
 }
 
 async function sendOtpEmail({ phone, code, expiresAt }) {
   if (!emailConfigured()) {
     return { ok: false, reason: "unconfigured" };
   }
-  try {
-    const expiresMin = Math.max(1, Math.round((new Date(expiresAt).getTime() - Date.now()) / 60_000));
-    await transporter().sendMail({
-      from: process.env.OTP_FROM_EMAIL || process.env.SMTP_USER,
-      to: process.env.OTP_TO_EMAIL,
-      subject: `Voygo verification code: ${code}`,
-      // Plain text + minimal HTML — keeps the message out of spam
-      // filters that flag image-heavy or boilerplate-laden bodies.
-      text: `Voygo verification code: ${code}\nExpires in ${expiresMin} minutes.\nRequested for ${phone}.`,
-      html: `
-        <p style="font-family:-apple-system,system-ui,sans-serif;font-size:14px">
-          <strong>Voygo verification code</strong><br/>
-          <span style="font-size:28px;letter-spacing:4px;font-family:Menlo,monospace">${code}</span><br/>
-          <span style="color:#666">Expires in ${expiresMin} minutes. Requested for ${phone}.</span>
-        </p>`
-    });
-    return { ok: true };
-  } catch (err) {
-    console.warn(`[email] sendOtpEmail failed: ${err.message}`);
-    return { ok: false, reason: "send_failed", error: err.message };
+  const expiresMin = Math.max(1, Math.round((new Date(expiresAt).getTime() - Date.now()) / 60_000));
+  const sendPromise = transporter().sendMail({
+    from: process.env.OTP_FROM_EMAIL || process.env.SMTP_USER,
+    to: process.env.OTP_TO_EMAIL,
+    subject: `Voygo verification code: ${code}`,
+    // Plain text + minimal HTML — keeps the message out of spam
+    // filters that flag image-heavy or boilerplate-laden bodies.
+    text: `Voygo verification code: ${code}\nExpires in ${expiresMin} minutes.\nRequested for ${phone}.`,
+    html: `
+      <p style="font-family:-apple-system,system-ui,sans-serif;font-size:14px">
+        <strong>Voygo verification code</strong><br/>
+        <span style="font-size:28px;letter-spacing:4px;font-family:Menlo,monospace">${code}</span><br/>
+        <span style="color:#666">Expires in ${expiresMin} minutes. Requested for ${phone}.</span>
+      </p>`
+  }).then(() => ({ ok: true }));
+
+  // 12s outer cap — covers the worst-case SMTP handshake + send.
+  // If we exceed this, give up and let the caller decide what's next.
+  const result = await withTimeout(sendPromise, 12_000, "smtp_send");
+  if (!result.ok) {
+    console.warn(`[email] sendOtpEmail ${result.reason}: ${result.error || ""}`);
   }
+  return result;
 }
 
 module.exports = { sendOtpEmail, emailConfigured };
