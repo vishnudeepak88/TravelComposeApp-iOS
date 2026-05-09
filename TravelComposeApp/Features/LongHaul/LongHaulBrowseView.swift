@@ -15,10 +15,23 @@ struct LongHaulBrowseView: View {
 
     @State private var origin: String = ""
     @State private var destination: String = ""
-    @State private var fromDate: Date = Date()
+    /// Anchored to start-of-day so the DatePicker's lower bound
+    /// (`fromDateLowerBound`) stays stable across renders. Using a
+    /// raw `Date()` here would drift fractions of a second on every
+    /// re-render, sliding the closed range past the @State value
+    /// and forcing SwiftUI to clamp / bounce — which on entry
+    /// looked like the navigation push had failed.
+    @State private var fromDate: Date = Calendar.current.startOfDay(for: Date())
     @State private var isSearching: Bool = false
     @State private var hasLoaded: Bool = false
     @State private var error: String? = nil
+
+    /// Stable midnight anchor for the DatePicker's `in:` range. Computed
+    /// once per body evaluation but the value only changes at midnight,
+    /// not every frame.
+    private var fromDateLowerBound: Date {
+        Calendar.current.startOfDay(for: Date())
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -65,7 +78,7 @@ struct LongHaulBrowseView: View {
                 fieldChip(icon: "mappin.circle.fill", placeholder: "To", text: $destination)
             }
             HStack(spacing: 10) {
-                DatePicker("Departing on", selection: $fromDate, in: Date()..., displayedComponents: [.date])
+                DatePicker("Departing on", selection: $fromDate, in: fromDateLowerBound..., displayedComponents: [.date])
                     .datePickerStyle(.compact)
                     .labelsHidden()
                     .tint(VPalette.primary)
