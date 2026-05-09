@@ -50,6 +50,7 @@ final class AppStore {
     var rideInstances: [CommuteRideInstance] = []
     var threads: [ChatThread] = []
     var messages: [ChatMessage] = []
+    var bookings: [RideBooking] = []
 
     /// Backend-backed notifications feed. Populated from
     /// `GET /notifications/me`. `unreadNotificationsCount` is derived
@@ -239,6 +240,19 @@ final class AppStore {
         threads = [
             ChatThread(id: "thr-dev-1", tripId: route.id, title: "\(currentUser.name) · Subang → KLCC",
                        lastMessage: "See you at USJ 9 in 4 min", unreadCount: 0)
+        ]
+        notifications = [
+            NotificationDTO(
+                id: "nt-dev-1",
+                type: "RIDE_REMINDER",
+                title: "Commute ready",
+                body: "Your Subang Jaya to KLCC ride is on the calendar.",
+                routeId: route.id,
+                subscriptionId: "sub-dev-1",
+                rideInstanceId: nil,
+                readAt: nil,
+                createdAt: Date()
+            )
         ]
         regenerateRides()
     }
@@ -561,6 +575,7 @@ final class AppStore {
             await refreshPayout()
             await refreshKycDocuments()
             await refreshNotifications()
+            await refreshBookings()
             lastSyncError = nil
             connectionState = .online
         } catch APIError.unauthorized {
@@ -621,6 +636,17 @@ final class AppStore {
         }
     }
 
+    func refreshBookings() async {
+        guard useOnline, isAuthenticated else { return }
+        do {
+            bookings = try await VoygoAPIClient.listMyBookings()
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal side data.
+        }
+    }
+
     // MARK: - Derived selectors
 
     func mySubscriptions() -> [RouteSubscriptionWithRoute] {
@@ -634,6 +660,24 @@ final class AppStore {
                     .first?.date
                 return RouteSubscriptionWithRoute(subscription: sub, route: route, nextRideDate: next)
             }
+    }
+
+    func nextCommute() -> NextCommute? {
+        let today = Calendar.current.startOfDay(for: Date())
+        return subscriptions
+            .filter { $0.riderId == riderId && $0.status == .active }
+            .compactMap { sub -> NextCommute? in
+                guard let route = routes.first(where: { $0.id == sub.routeId }) else { return nil }
+                guard let ride = rideInstances
+                    .filter({ $0.routeId == sub.routeId && $0.date >= today && $0.confirmedPassengers.contains(riderId) })
+                    .sorted(by: { $0.date < $1.date })
+                    .first
+                else { return nil }
+                let thread = threads.first { $0.tripId == route.id || $0.tripId == ride.id }
+                return NextCommute(subscription: sub, route: route, ride: ride, thread: thread)
+            }
+            .sorted { $0.ride.date < $1.ride.date }
+            .first
     }
 
     func driverDashboards() -> [DriverRouteDashboard] {
@@ -753,7 +797,61 @@ final class AppStore {
                 tier: tier.rawValue, totalDays: days
             ))
             regenerateRides()
+            await refreshNotifications()
             return .success(id)
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            return .failure(.from(error))
+        }
+    }
+
+    func bookRide(rideInstanceId: String) async -> Result<String, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            let booking = try await VoygoAPIClient.bookRide(rideInstanceId: rideInstanceId)
+            bookings.removeAll { $0.id == booking.id }
+            bookings.insert(booking, at: 0)
+            if let rideIndex = rideInstances.firstIndex(where: { $0.id == rideInstanceId }) {
+                if !rideInstances[rideIndex].confirmedPassengers.contains(riderId) {
+                    rideInstances[rideIndex].confirmedPassengers.append(riderId)
+                }
+                rideInstances[rideIndex].seatAvailability = max(0, rideInstances[rideIndex].seatAvailability - 1)
+            }
+            await refreshNotifications()
+            return .success(booking.id)
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            return .failure(.from(error))
+        }
+    }
+
+    func submitRideReview(
+        rideInstanceId: String?,
+        routeId: String?,
+        driverId: String?,
+        rating: Int,
+        tags: [String],
+        tipMyr: Int,
+        note: String?
+    ) async -> Result<Void, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        let request = RideReviewRequest(
+            rideInstanceId: rideInstanceId,
+            routeId: routeId,
+            driverId: driverId,
+            rating: rating,
+            tags: tags,
+            tipMyr: tipMyr,
+            note: note
+        )
+        do {
+            _ = try await VoygoAPIClient.submitReview(request)
+            await refreshNotifications()
+            return .success(())
         } catch APIError.unauthorized {
             clearSession()
             return .failure(.unauthorized)
@@ -959,6 +1057,8 @@ final class AppStore {
         rideInstances = []
         threads = []
         messages = []
+        notifications = []
+        bookings = []
         payments = []
         kycDocuments = []
         cancellationRecords = []

@@ -26,7 +26,8 @@ enum AppRoute: Hashable {
     case driverPayouts
     case liveTrip(tripId: String, isDriver: Bool)
     case bookingConfirmed(bookingId: String, pickup: String, driverName: String)
-    case rateRide(driverInitial: String, driverName: String, summary: String)
+    case rateRide(rideInstanceId: String?, routeId: String?, driverId: String?, driverInitial: String, driverName: String, summary: String)
+    case chatThread(threadId: String, title: String)
     case searchFilters
     // Profile-tab destinations — folded in here so all four tabs share
     // one destination vocabulary and a future deep link can route to
@@ -49,6 +50,7 @@ enum AppRoute: Hashable {
 // because `SearchFiltersView` mutates them through `@Binding`s).
 
 struct AppRouteDestinations: ViewModifier {
+    @Environment(AppStore.self) private var store
     @Binding var path: [AppRoute]
     @Binding var filtersQuery: String
     @Binding var filtersEarliest: String
@@ -140,11 +142,14 @@ struct AppRouteDestinations: ViewModifier {
                     isDriver: isDriver,
                     onBack: { if !path.isEmpty { path.removeLast() } },
                     onMessageDriver: nil,
-                    onEndTrip: { initial, name, summary in
+                    onEndTrip: { rideId, routeId, driverId, initial, name, summary in
                         // Real driver/route values from LiveTrip's
                         // store lookup — were previously hardcoded
                         // to "A / Aiman / Subang Jaya → KLCC".
                         path.append(.rateRide(
+                            rideInstanceId: rideId,
+                            routeId: routeId,
+                            driverId: driverId,
                             driverInitial: initial,
                             driverName: name,
                             summary: summary
@@ -170,16 +175,37 @@ struct AppRouteDestinations: ViewModifier {
                 )
                 .navigationBarHidden(true)
 
-            case .rateRide(let init_, let name, let summary):
+            case .rateRide(let rideId, let routeId, let driverId, let init_, let name, let summary):
                 RateRideView(
                     driverInitial: init_,
                     driverName: name,
                     routeSummary: summary,
                     dateLabel: dateLabelToday(),
                     durationLabel: "52 min",
-                    onSubmit: { _, _, _ in path = [] },
+                    onSubmit: { rating, tags, tip in
+                        Task {
+                            _ = await store.submitRideReview(
+                                rideInstanceId: rideId,
+                                routeId: routeId,
+                                driverId: driverId,
+                                rating: rating,
+                                tags: tags,
+                                tipMyr: tip,
+                                note: nil
+                            )
+                            path = []
+                        }
+                    },
                     onBack:   { if !path.isEmpty { path.removeLast() } },
                     onSkip:   { path = [] }
+                )
+                .navigationBarHidden(true)
+
+            case .chatThread(let threadId, let title):
+                ChatThreadView(
+                    threadId: threadId,
+                    title: title,
+                    onBack: { if !path.isEmpty { path.removeLast() } }
                 )
                 .navigationBarHidden(true)
 

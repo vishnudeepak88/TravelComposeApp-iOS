@@ -163,11 +163,30 @@ struct CommuteRideInstance: Codable, Equatable, Identifiable {
     var rideStatus: CommuteRideStatus
 }
 
+struct RideBooking: Codable, Equatable, Identifiable {
+    var id: String
+    var rideInstanceId: String
+    var routeId: String
+    var date: Date?
+    var rideStatus: CommuteRideStatus?
+    var driverName: String?
+    var startLocation: String?
+    var endLocation: String?
+}
+
 struct RouteSubscriptionWithRoute: Identifiable {
     var id: String { subscription.id }
     var subscription: RouteSubscription
     var route: RecurringRoute
     var nextRideDate: Date?
+}
+
+struct NextCommute: Identifiable {
+    var id: String { ride.id }
+    var subscription: RouteSubscription
+    var route: RecurringRoute
+    var ride: CommuteRideInstance
+    var thread: ChatThread?
 }
 
 struct CommuteRouteMatchResult: Identifiable {

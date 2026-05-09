@@ -51,6 +51,11 @@ app.use(express.json({ limit: "1mb" }));
 app.use((req, res, next) => {
   const startedAt = Date.now();
   res.on("finish", () => {
+    const isRoutineProbe =
+      (req.path === "/health" || req.path === "/") && res.statusCode < 400;
+    if (isRoutineProbe) {
+      return;
+    }
     const durationMs = Date.now() - startedAt;
     const ip = req.ip || req.socket.remoteAddress || "unknown";
     console.log(
@@ -129,6 +134,10 @@ function normalizeCommuteSearchBody(body) {
     officeLng: bodyValue(body, "officeLng", "office_lng")
   };
 }
+
+app.get("/", (_req, res) => {
+  res.json({ status: "ok", service: "voygo-ios-api" });
+});
 
 app.get(
   "/health",
@@ -1063,6 +1072,134 @@ app.get(
     })));
   })
 );
+
+app.post(
+  "/reviews",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const rideInstanceId = bodyValue(body, "rideInstanceId", "ride_instance_id");
+    const routeId = bodyValue(body, "routeId", "route_id");
+    const providedDriverId = bodyValue(body, "driverId", "driver_id");
+    const rating = Number.parseInt(String(body.rating), 10);
+    const tags = Array.isArray(body.tags) ? body.tags.map(String).slice(0, 12) : [];
+    const tipMyr = toInt(bodyValue(body, "tipMyr", "tip_myr"), 0, 0, 200);
+    const note = String(body.note || "").trim().slice(0, 1000) || null;
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      res.status(400).json({ detail: "rating must be between 1 and 5" });
+      return;
+    }
+    if (!rideInstanceId && !routeId) {
+      res.status(400).json({ detail: "rideInstanceId or routeId is required" });
+      return;
+    }
+
+    let resolvedRouteId = routeId ? String(routeId) : null;
+    let resolvedDriverId = providedDriverId ? String(providedDriverId) : null;
+
+    if (rideInstanceId) {
+      const ride = await pool.query(
+        `SELECT i.id, i.route_id, r.driver_id
+           FROM commute_ride_instances i
+           JOIN recurring_routes r ON r.id = i.route_id
+          WHERE i.id = $1`,
+        [rideInstanceId]
+      );
+      if (ride.rowCount === 0) {
+        res.status(404).json({ detail: "Ride not found" });
+        return;
+      }
+      resolvedRouteId = String(ride.rows[0].route_id);
+      resolvedDriverId = String(ride.rows[0].driver_id);
+
+      const passenger = await pool.query(
+        `SELECT 1
+           FROM commute_ride_passengers
+          WHERE instance_id = $1
+            AND rider_id = $2
+          LIMIT 1`,
+        [rideInstanceId, req.user.id]
+      );
+      if (passenger.rowCount === 0 && resolvedDriverId !== req.user.id) {
+        res.status(403).json({ detail: "Only ride participants can review this trip" });
+        return;
+      }
+    } else if (resolvedRouteId) {
+      const route = await pool.query(
+        `SELECT driver_id
+           FROM recurring_routes
+          WHERE id = $1`,
+        [resolvedRouteId]
+      );
+      if (route.rowCount === 0) {
+        res.status(404).json({ detail: "Route not found" });
+        return;
+      }
+      resolvedDriverId = resolvedDriverId || String(route.rows[0].driver_id);
+
+      const participant = await pool.query(
+        `SELECT 1
+           FROM route_subscriptions
+          WHERE route_id = $1
+            AND rider_id = $2
+          LIMIT 1`,
+        [resolvedRouteId, req.user.id]
+      );
+      if (participant.rowCount === 0 && resolvedDriverId !== req.user.id) {
+        res.status(403).json({ detail: "Only route participants can review this trip" });
+        return;
+      }
+    }
+    if (resolvedDriverId === req.user.id) {
+      res.status(409).json({ detail: "Drivers cannot review their own ride" });
+      return;
+    }
+
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO ride_reviews
+         (id, reviewer_id, ride_instance_id, route_id, driver_id, rating, tags, tip_myr, note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)`,
+      [
+        id,
+        req.user.id,
+        rideInstanceId ? String(rideInstanceId) : null,
+        resolvedRouteId,
+        resolvedDriverId,
+        rating,
+        JSON.stringify(tags),
+        tipMyr,
+        note
+      ]
+    );
+
+    if (resolvedDriverId) {
+      await pool.query(
+        `INSERT INTO driver_reliability (driver_id, average_rating)
+         VALUES ($1, $2)
+         ON CONFLICT (driver_id) DO UPDATE
+            SET average_rating = (
+                  SELECT AVG(rating)::DOUBLE PRECISION
+                    FROM ride_reviews
+                   WHERE driver_id = $1
+                ),
+                updated_at = NOW()`,
+        [resolvedDriverId, rating]
+      );
+      await createNotification({
+        userId: resolvedDriverId,
+        type: "RIDE_REVIEWED",
+        title: "New ride review",
+        body: `A rider rated your ride ${rating}/5.`,
+        routeId: resolvedRouteId,
+        rideInstanceId: rideInstanceId ? String(rideInstanceId) : null
+      });
+    }
+
+    res.status(201).json({ id });
+  })
+);
 app.get(
   "/chats/threads",
   requireAuth,
@@ -1278,6 +1415,7 @@ async function start() {
   await ensurePaymentsSchema(pool);
   await ensureCancellationSchema(pool);
   await ensureKycDocsSchema(pool);
+  await ensureReviewsSchema(pool);
   await seedIfEmpty(pool);
   await backfillChatParticipants(pool);
 
@@ -1326,6 +1464,32 @@ async function ensureKycDocsSchema(pool) {
   `);
   await pool.query(
     "CREATE INDEX IF NOT EXISTS ix_kyc_docs_user ON kyc_documents(user_id)"
+  );
+}
+
+async function ensureReviewsSchema(pool) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ride_reviews (
+      id UUID PRIMARY KEY,
+      reviewer_id TEXT NOT NULL,
+      ride_instance_id TEXT NULL,
+      route_id TEXT NULL,
+      driver_id TEXT NULL,
+      rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+      tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+      tip_myr INTEGER NOT NULL DEFAULT 0,
+      note TEXT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_reviews_driver ON ride_reviews(driver_id, created_at)"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_reviews_route ON ride_reviews(route_id, created_at)"
+  );
+  await pool.query(
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_reviews_rider_ride ON ride_reviews(reviewer_id, ride_instance_id) WHERE ride_instance_id IS NOT NULL"
   );
 }
 

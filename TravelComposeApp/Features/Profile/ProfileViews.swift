@@ -487,7 +487,7 @@ struct LiveTripView: View {
     /// Receives the real driver/route context so the next screen
     /// (RateRide) can render with actual values instead of hardcoded
     /// "Aiman / Subang Jaya → KLCC".
-    var onEndTrip: ((_ driverInitial: String, _ driverName: String, _ summary: String) -> Void)? = nil
+    var onEndTrip: ((_ rideInstanceId: String?, _ routeId: String?, _ driverId: String?, _ driverInitial: String, _ driverName: String, _ summary: String) -> Void)? = nil
     @Environment(AppStore.self) private var store
 
     @State private var pickupConfirmed = false
@@ -830,7 +830,7 @@ struct LiveTripView: View {
             // the action.
             if let onEndTrip {
                 VPrimaryButton("End trip → rate") {
-                    onEndTrip(driverInitial, driverDisplayName, routeSummary)
+                    onEndTrip(ride?.id, route?.id, route?.driverId, driverInitial, driverDisplayName, routeSummary)
                 }
                 .padding(.top, 10)
             }

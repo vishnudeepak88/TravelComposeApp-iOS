@@ -88,6 +88,20 @@ struct VoygoAPIClient {
         try await post(payload, to: baseURL.appendingPathComponent("cancellations"), as: CancellationReportResponse.self)
     }
 
+    // MARK: - Bookings, reviews
+
+    static func bookRide(rideInstanceId: String) async throws -> RideBooking {
+        try await post(EmptyRequest(), to: baseURL.appendingPathComponent("trips/\(rideInstanceId)/book"), as: RideBooking.self)
+    }
+
+    static func listMyBookings() async throws -> [RideBooking] {
+        try await get(baseURL.appendingPathComponent("bookings/me"), as: [RideBooking].self)
+    }
+
+    static func submitReview(_ request: RideReviewRequest) async throws -> IdResponse {
+        try await post(request, to: baseURL.appendingPathComponent("reviews"), as: IdResponse.self)
+    }
+
     // GET /places/autocomplete
     static func autocompletePlaces(query: String, lat: Double?, lon: Double?) async throws -> [PlaceSuggestion] {
         var components = URLComponents(url: baseURL.appendingPathComponent("places/autocomplete"), resolvingAgainstBaseURL: false)!
@@ -366,6 +380,7 @@ struct AuthUserDTO: Decodable {
 struct UpdateKycRequest: Encodable { var status: String }
 struct KycResponse: Decodable { var kycStatus: String }
 struct UpdateDisplayNameRequest: Encodable { var displayName: String }
+struct EmptyRequest: Encodable {}
 
 // MARK: - API DTOs (mirrors Android DTOs)
 
@@ -604,4 +619,14 @@ struct CancellationReportResponse: Decodable {
     var id: String
     var penaltyMyr: Int
     var driverId: String?
+}
+
+struct RideReviewRequest: Encodable {
+    var rideInstanceId: String?
+    var routeId: String?
+    var driverId: String?
+    var rating: Int
+    var tags: [String]
+    var tipMyr: Int
+    var note: String?
 }
