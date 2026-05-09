@@ -73,6 +73,7 @@ struct ProfileView: View {
                 Button("Cancel", role: .cancel, action: {})
             } message: { Text("You'll need to sign in again.") }
             .task { await store.refreshMe() }
+            .enableSwipeBack()
         }
     }
 
@@ -493,6 +494,8 @@ struct LiveTripView: View {
     @State private var dropoffConfirmed = false
     @State private var sosPressed = false
     @State private var showSOSAlert = false
+    @State private var showShareSheet = false
+    @State private var showSOSMessageComposer = false
     /// Live ETA in minutes — counts down. Real implementation would pull
     /// from a route + GPS + ETA service; the demo just decrements every
     /// minute so the screen visibly works.
@@ -552,6 +555,11 @@ struct LiveTripView: View {
     private var driverCarLabel: String {
         guard let r = route else { return "—" }
         return "\(r.carType.label) · plate on file"
+    }
+
+    private var canCallDriver: Bool {
+        if let p = route?.driverPhone { return !p.isEmpty }
+        return false
     }
 
     var body: some View {
@@ -633,16 +641,78 @@ struct LiveTripView: View {
         .onAppear { startEtaCountdown() }
         .onDisappear { etaTask?.cancel(); etaTask = nil }
         .alert("Send SOS?", isPresented: $showSOSAlert) {
-            Button("Send SOS", role: .destructive) {
+            Button("Compose SMS", role: .destructive) {
                 sosPressed = true
-                // Real implementation: notify safety contacts + emergency
-                // services via the backend. The toggle is preserved for
-                // local UI feedback.
+                // Open the system SMS composer pre-filled with the
+                // emergency message + share-my-ride URL. Backend
+                // safety ping is a follow-up; this is the
+                // device-side, no-backend-required first version
+                // that gets help moving fast.
+                showSOSMessageComposer = true
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This alerts your trusted contacts and Voygo's safety team with your live location. Use in emergencies only.")
+            Text("Opens Messages with your live trip details so you can send to your emergency contacts.")
         }
+        .sheet(isPresented: $showShareSheet) {
+            // Share-my-ride: ActivityViewController with a deep link.
+            // Until the backend exposes a public `/share/{token}`
+            // page, the URL points to the canonical app scheme so a
+            // recipient with Voygo installed lands on this trip.
+            ActivityShareSheet(items: [shareMessage, shareURL])
+                .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $showSOSMessageComposer) {
+            if MessageComposerView.canSendText {
+                MessageComposerView(body: sosMessageBody)
+            } else {
+                // Fallback: device can't send SMS (e.g. iPad without
+                // a paired iPhone). Tell the user honestly instead
+                // of presenting an empty sheet.
+                VStack(spacing: 16) {
+                    Image(systemName: "iphone.slash")
+                        .font(.system(size: 40))
+                        .foregroundColor(VPalette.textHint)
+                    Text("This device can't send SMS")
+                        .font(.system(size: 15, weight: .heavy))
+                    Text("Use another device with cellular service to send the SOS message.")
+                        .font(.system(size: 13))
+                        .foregroundColor(VPalette.textSec)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                    VPrimaryButton("OK") { showSOSMessageComposer = false }
+                        .padding(.horizontal, 32)
+                }
+                .padding(32)
+                .presentationDetents([.medium])
+            }
+        }
+    }
+
+    // MARK: - Sharing & SOS message bodies
+
+    private var shareMessage: String {
+        "I'm on a Voygo ride: \(routeSummary). Driver: \(driverDisplayName). ETA \(etaMinutes) min."
+    }
+
+    private var shareURL: URL {
+        URL(string: "voygo://rides/\(tripId)") ?? URL(string: "https://voygo.app")!
+    }
+
+    private var sosMessageBody: String {
+        """
+        🚨 I need help — I'm on a Voygo carpool ride.
+
+        Driver: \(driverDisplayName)
+        Route: \(routeSummary)
+        Pickup: \(pickupLabel)
+        Drop: \(dropoffLabel)
+        ETA: \(etaMinutes) min
+
+        Track me here: \(shareURL.absoluteString)
+
+        Sent automatically from Voygo SOS.
+        """
     }
 
     private var bottomSheet: some View {
@@ -666,8 +736,14 @@ struct LiveTripView: View {
                 }
                 Spacer()
                 HStack(spacing: 6) {
-                    iconButton("flag.fill",            color: VPalette.danger,  bg: VPalette.dangerContainer)
-                    iconButton("square.and.arrow.up",  color: VPalette.primary, bg: VPalette.primaryContainer)
+                    iconButton("flag.fill",
+                               color: VPalette.danger,
+                               bg: VPalette.dangerContainer,
+                               action: { showSOSAlert = true })
+                    iconButton("square.and.arrow.up",
+                               color: VPalette.primary,
+                               bg: VPalette.primaryContainer,
+                               action: { showShareSheet = true })
                 }
             }
 
@@ -702,19 +778,24 @@ struct LiveTripView: View {
                 }
                 Spacer()
                 Button {
-                    // No driver phone on the model yet — once added,
-                    // open `tel://\(phone)`. For now still a no-op
-                    // but accessible.
+                    // Open `tel://` when the route has a driver phone
+                    // on file. Stays disabled (with a real a11y label)
+                    // when the backend hasn't threaded the phone in.
+                    if let phone = route?.driverPhone, !phone.isEmpty,
+                       let url = URL(string: "tel://\(phone.filter { $0.isNumber || $0 == "+" })") {
+                        UIApplication.shared.open(url)
+                    }
                 } label: {
                     Image(systemName: "phone.fill")
                         .font(.system(size: 14, weight: .bold)).foregroundColor(.white)
                         .frame(width: 38, height: 38)
-                        .background(VPalette.success).clipShape(Circle())
-                        .shadow(color: VPalette.success.opacity(0.5), radius: 8, y: 3)
+                        .background(canCallDriver ? VPalette.success : VPalette.textHint)
+                        .clipShape(Circle())
+                        .shadow(color: canCallDriver ? VPalette.success.opacity(0.5) : .clear, radius: 8, y: 3)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Call driver")
-                .disabled(true)
+                .accessibilityLabel(canCallDriver ? "Call driver" : "Driver phone unavailable")
+                .disabled(!canCallDriver)
                 Button { onMessageDriver?() } label: {
                     Image(systemName: "bubble.left.fill")
                         .font(.system(size: 14, weight: .bold)).foregroundColor(.white)
@@ -761,8 +842,8 @@ struct LiveTripView: View {
         .shadow(color: .black.opacity(0.12), radius: 30, y: -10)
     }
 
-    private func iconButton(_ system: String, color: Color, bg: Color) -> some View {
-        Button {} label: {
+    private func iconButton(_ system: String, color: Color, bg: Color, action: @escaping () -> Void = {}) -> some View {
+        Button(action: action) {
             Image(systemName: system).font(.system(size: 14, weight: .bold)).foregroundColor(color)
                 // 38pt is below 44pt tap-target spec — pad the surrounding
                 // hit area without changing the visual size.

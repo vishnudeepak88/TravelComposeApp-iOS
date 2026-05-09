@@ -173,7 +173,11 @@ struct RouteDetailsView: View {
                 VPolishedNavBar(title: "Route Details", onBack: onBack)
 
                 if vm.isLoading {
-                    LoadingView()
+                    // Page-shaped skeleton while the route loads.
+                    // Replaces the bare `LoadingView()` spinner so a
+                    // slow network feels like the screen is filling
+                    // in rather than blank.
+                    routeDetailsSkeleton
                 } else if let route = vm.route {
                     ScrollView {
                         VStack(spacing: 16) {
@@ -421,6 +425,38 @@ struct RouteDetailsView: View {
         case .loading:   return "Creating subscription…"
         case .charging:  return "Charging payment…"
         default:         return "Subscribe & pay RM \(vm.subscriptionTotalMyr)"
+        }
+    }
+
+    /// Page-shaped skeleton matching the real layout so the user
+    /// sees the screen filling in rather than a centered spinner.
+    private var routeDetailsSkeleton: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                VSkeleton(height: 180, corner: 18)
+                    .padding(.horizontal, 16)
+                VStack(spacing: 12) {
+                    VSkeleton(height: 24)
+                    VSkeleton(height: 14)
+                    VSkeleton(height: 14)
+                    VSkeleton(height: 14)
+                    VSkeleton(height: 60, corner: 12)
+                }
+                .padding(16)
+                .background(VPalette.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 16)
+                VStack(spacing: 10) {
+                    VSkeleton(height: 18)
+                    VSkeleton(height: 18)
+                    VSkeleton(height: 18)
+                }
+                .padding(16)
+                .background(VPalette.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(.horizontal, 16)
+            }
+            .padding(.vertical, 16)
         }
     }
 

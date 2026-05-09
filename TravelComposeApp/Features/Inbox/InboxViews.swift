@@ -57,6 +57,7 @@ struct InboxView: View {
                     .navigationBarHidden(true)
                 }
             }
+            .enableSwipeBack()
         }
         .task {
             await store.refreshAll()

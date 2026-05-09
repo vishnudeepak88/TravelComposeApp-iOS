@@ -118,6 +118,11 @@ struct RecurringRoute: Codable, Equatable, Identifiable {
     var id: String
     var driverId: String
     var driverName: String
+    /// Optional E.164 phone number for the in-trip call button. Nil
+    /// until the backend exposes it on the route DTO; when nil, the
+    /// LiveTrip phone affordance stays disabled (with a real
+    /// accessibility label) instead of opening a bad `tel:` URL.
+    var driverPhone: String? = nil
     var startLocation: String
     var endLocation: String
     var pickupPoints: [RoutePoint]

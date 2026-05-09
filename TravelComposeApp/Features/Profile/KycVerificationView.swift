@@ -17,6 +17,10 @@ struct KycVerificationView: View {
     @State private var inFlightKind: KycDocumentKind? = nil
     @State private var error: String? = nil
     @State private var info: String? = nil
+    /// The document the picker is currently feeding. When non-nil
+    /// the PHPicker sheet is presented; the closure handler hands
+    /// the picked image bytes to `upload(_:imageData:)`.
+    @State private var pickerKind: KycDocumentKind? = nil
 
     private var requiredKinds: [KycDocumentKind] {
         role == .driver ? KycDocumentKind.driverRequired : KycDocumentKind.riderRequired
@@ -56,6 +60,24 @@ struct KycVerificationView: View {
             await store.refreshKycDocuments()
             await store.refreshMe()
         }
+        .sheet(item: Binding(
+            get: { pickerKind.map(KycPickKind.init) },
+            set: { if $0 == nil { pickerKind = nil } }
+        )) { wrapper in
+            PhotoPicker { data in
+                let kind = wrapper.kind
+                pickerKind = nil
+                guard data != nil else { return } // user cancelled
+                Task { await upload(kind) }
+            }
+        }
+    }
+
+    /// Sheet identifier wrapper — `pickerKind` doubles as both the
+    /// upload target and the sheet trigger.
+    private struct KycPickKind: Identifiable {
+        let kind: KycDocumentKind
+        var id: String { kind.rawValue }
     }
 
     // MARK: - Sections
@@ -162,7 +184,13 @@ struct KycVerificationView: View {
             }
             Spacer()
             Button {
-                Task { await upload(kind) }
+                // Open the system photo picker — caller-side
+                // confirms the image, system handles permission +
+                // crop. On result we pass the bytes through the
+                // existing upload pipeline (the backend's S3 path
+                // isn't wired yet so the bytes are observed only
+                // for `submitKycDocument(kind:storageUrl:nil)`).
+                pickerKind = kind
             } label: {
                 ZStack {
                     if isLoading {

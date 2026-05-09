@@ -202,6 +202,7 @@ struct CommuteTab: View {
                 filtersDays: $filtersDays
             )
             .navigationBarHidden(true)
+            .enableSwipeBack()
         }
     }
 }

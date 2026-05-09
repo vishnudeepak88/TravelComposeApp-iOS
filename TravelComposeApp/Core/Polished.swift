@@ -466,3 +466,41 @@ extension View {
         self.padding(.bottom, VTabBarLayout.clearance)
     }
 }
+
+// MARK: - Skeleton placeholder
+//
+// Page-shaped grey shimmer for primary loading states. SwiftUI alone
+// can't do a moving gradient on a single view at consistent speed, so
+// we phase a `.repeatForever(autoreverses: true)` mask on top of a
+// solid grey rectangle.
+
+struct VSkeleton: View {
+    var height: CGFloat = 14
+    var corner: CGFloat = 8
+    @State private var phase: Double = 0
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(VPalette.surfaceHigh)
+            .frame(height: height)
+            .overlay(
+                LinearGradient(
+                    colors: [
+                        VPalette.surfaceHigh.opacity(0.0),
+                        VPalette.text.opacity(0.04),
+                        VPalette.surfaceHigh.opacity(0.0)
+                    ],
+                    startPoint: UnitPoint(x: phase - 0.4, y: 0.5),
+                    endPoint:   UnitPoint(x: phase + 0.4, y: 0.5)
+                )
+                .blendMode(.plusDarker)
+                .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+            )
+            .onAppear {
+                withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
+                    phase = 1.4
+                }
+            }
+            .accessibilityHidden(true)
+    }
+}

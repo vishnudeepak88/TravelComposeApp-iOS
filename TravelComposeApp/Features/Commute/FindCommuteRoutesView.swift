@@ -299,14 +299,30 @@ struct FindCommuteRoutesView: View {
                         .clipShape(Circle())
                     }
                 }
+                // Real counts (was hardcoded "12 routes / N / RM
+                // local fares"). Reads `store.routes` for the catalog
+                // size and the rider's active subs for the middle
+                // pill. Average price comes from active routes; "—"
+                // when we have nothing to average.
                 HStack(spacing: 8) {
-                    heroStat("12", label: "routes")
-                    heroStat("\(store.subscriptions.count)", label: "active rides")
-                    heroStat("RM", label: "local fares")
+                    heroStat("\(store.routes.count)",                  label: "routes")
+                    heroStat("\(activeSubscriptionsCount)",            label: "active rides")
+                    heroStat(averageFareLabel,                          label: "avg fare")
                 }
             }
             .padding(20)
         }
+    }
+
+    private var activeSubscriptionsCount: Int {
+        store.subscriptions.filter { $0.status == .active }.count
+    }
+
+    private var averageFareLabel: String {
+        let prices = store.routes.map(\.pricePerSeat).filter { $0 > 0 }
+        guard !prices.isEmpty else { return "—" }
+        let avg = prices.reduce(0, +) / prices.count
+        return "RM \(avg)"
     }
 
     /// Time-of-day greeting in MYT (the device's current time zone). A

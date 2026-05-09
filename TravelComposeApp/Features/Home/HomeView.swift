@@ -40,6 +40,7 @@ struct HomeTab: View {
                 filtersDays: $filtersDays
             )
             .navigationBarHidden(true)
+            .enableSwipeBack()
         }
     }
 }
@@ -79,9 +80,11 @@ struct HomeView: View {
     var body: some View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 0) {
-                    hero
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: 0).id("top")
+                        hero
                     // No overlap: the search card sits flush below
                     // the hero. Two earlier fixes (overlay+offset,
                     // then negative padding+zIndex) chased a "lifted
@@ -96,10 +99,21 @@ struct HomeView: View {
                     promoBanner
                     suggestedRides
                     Spacer().frame(height: VTabBarLayout.clearance)
+                    }
+                }
+                .scrollIndicators(.hidden)
+                .ignoresSafeArea(edges: .top)
+                // iOS convention: tap the active tab again to scroll
+                // to top. Wave 4 wired the notification but no root
+                // subscribed; Home is now the first opt-in.
+                .onReceive(NotificationCenter.default.publisher(for: .voygoTabReselected)) { note in
+                    if (note.userInfo?["index"] as? Int) == 0 {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            proxy.scrollTo("top", anchor: .top)
+                        }
+                    }
                 }
             }
-            .scrollIndicators(.hidden)
-            .ignoresSafeArea(edges: .top)
         }
         .alert(
             "Coming soon",
