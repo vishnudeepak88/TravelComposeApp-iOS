@@ -9,18 +9,28 @@ struct RootView: View {
     enum AuthStep: Equatable { case phone, otp(phone: String) }
 
     var body: some View {
-        if store.isAuthenticated {
-            MainTabView()
-        } else {
-            switch authStep {
-            case .phone:
-                AuthPhoneView { _ in
-                    authStep = .otp(phone: store.phoneNumber)
+        Group {
+            if store.isAuthenticated {
+                MainTabView()
+            } else {
+                switch authStep {
+                case .phone:
+                    AuthPhoneView { _ in
+                        authStep = .otp(phone: store.phoneNumber)
+                    }
+                case .otp(let phone):
+                    AuthOtpView(phoneNumber: phone, onBack: {
+                        authStep = .phone
+                    })
                 }
-            case .otp(let phone):
-                AuthOtpView(phoneNumber: phone, onBack: {
-                    authStep = .phone
-                })
+            }
+        }
+        // Ask for push permission the first time the user lands
+        // signed-in, then re-register on every subsequent
+        // authenticated launch so token rotations get picked up.
+        .task(id: store.isAuthenticated) {
+            if store.isAuthenticated {
+                await requestPushAuthorizationIfNeeded()
             }
         }
     }

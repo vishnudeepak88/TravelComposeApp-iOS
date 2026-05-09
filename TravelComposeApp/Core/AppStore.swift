@@ -489,6 +489,32 @@ final class AppStore {
         }
     }
 
+    /// Surface a 401 that came from a screen calling APIClient
+    /// directly (e.g. KYC upload) — the helper centralizes the
+    /// session-clear so each screen doesn't have to repeat it.
+    func handleUnauthorizedFromExternalCall() {
+        clearSession()
+    }
+
+    /// Forwards a freshly-registered APNs token to the backend. The
+    /// AppDelegate calls this when iOS hands the device token back.
+    /// We re-register on every authenticated launch so a rotated
+    /// token gets the next push delivery.
+    func submitApnsToken(_ hexToken: String) async {
+        guard useOnline, isAuthenticated, !hexToken.isEmpty else { return }
+        do {
+            try await VoygoAPIClient.registerDevice(
+                apnsToken: hexToken,
+                locale: Locale.current.identifier,
+                appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+            )
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // non-fatal — device will retry on next auth
+        }
+    }
+
     /// Driver-side breadcrumb push. Best-effort — failures are
     /// swallowed because dropping a single sample isn't worth a
     /// user-visible error; the next sample (5–10s later) will get

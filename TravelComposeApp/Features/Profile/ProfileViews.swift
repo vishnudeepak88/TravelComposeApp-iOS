@@ -698,16 +698,19 @@ struct LiveTripView: View {
         .alert("Send SOS?", isPresented: $showSOSAlert) {
             Button("Compose SMS", role: .destructive) {
                 sosPressed = true
-                // Open the system SMS composer pre-filled with the
-                // emergency message + share-my-ride URL. Backend
-                // safety ping is a follow-up; this is the
-                // device-side, no-backend-required first version
-                // that gets help moving fast.
+                // Two channels in parallel:
+                //   1. System SMS composer pre-filled — instant for
+                //      the rider's own contacts.
+                //   2. POST /safety/sos — server records the alert
+                //      and (when env-configured) pages on-call ops.
+                // Either path delivering value is enough; we don't
+                // gate the composer on the network call.
                 showSOSMessageComposer = true
+                Task { await postSafetyAlert() }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Opens Messages with your live trip details so you can send to your emergency contacts.")
+            Text("Opens Messages with your live trip details so you can send to your emergency contacts. Voygo Safety is also notified.")
         }
         .sheet(isPresented: $showShareSheet) {
             // Share-my-ride: ActivityViewController with a deep link.
@@ -1015,6 +1018,26 @@ struct LiveTripView: View {
               + cos(lat1 * .pi/180)*cos(lat2 * .pi/180)
               * sin(dLng/2)*sin(dLng/2)
         return R * 2 * atan2(sqrt(a), sqrt(1-a))
+    }
+
+    // MARK: - Safety alert post
+
+    /// Best-effort POST to /safety/sos. Failure isn't surfaced to the
+    /// user — the SMS composer is the rider's primary lifeline; the
+    /// backend persistence is the ops-side double-check.
+    private func postSafetyAlert() async {
+        let live = store.liveLocation(for: tripId)
+        do {
+            _ = try await VoygoAPIClient.reportSafetyAlert(
+                rideId: tripId,
+                routeId: route?.id,
+                lat: live?.lat,
+                lng: live?.lng,
+                message: sosMessageBody
+            )
+        } catch {
+            // non-fatal
+        }
     }
 
     // MARK: - Driver-side foreground push

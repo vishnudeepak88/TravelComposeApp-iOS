@@ -39,6 +39,7 @@
 		F1A2B3D4E5F607182939A005 /* SwipeBack.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A105 /* SwipeBack.swift */; };
 		F1A2B3D4E5F607182939A006 /* SharePresenters.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A106 /* SharePresenters.swift */; };
 		F1A2B3D4E5F607182939A007 /* PhotoPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A107 /* PhotoPicker.swift */; };
+		F1A2B3D4E5F607182939A009 /* PushRegistration.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A109 /* PushRegistration.swift */; };
 		F1A2B3D4E5F607182939A008 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = F1A2B3D4E5F607182939A200 /* Localizable.strings */; };
 		8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC7DA9910E6D4CA595C6D018 /* AppStore.swift */; };
 		7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA646ED2A14D74B6F1D3F3 /* AuthViews.swift */; };
@@ -86,6 +87,7 @@
 		F1A2B3D4E5F607182939A105 /* SwipeBack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeBack.swift; sourceTree = "<group>"; };
 		F1A2B3D4E5F607182939A106 /* SharePresenters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharePresenters.swift; sourceTree = "<group>"; };
 		F1A2B3D4E5F607182939A107 /* PhotoPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPicker.swift; sourceTree = "<group>"; };
+		F1A2B3D4E5F607182939A109 /* PushRegistration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushRegistration.swift; sourceTree = "<group>"; };
 		F1A2B3D4E5F607182939A301 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = "Resources/en.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		F1A2B3D4E5F607182939A302 /* ms */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ms; path = "Resources/ms.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		AC7DA9910E6D4CA595C6D018 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
@@ -160,6 +162,7 @@
 				F1A2B3D4E5F607182939A105 /* SwipeBack.swift */,
 				F1A2B3D4E5F607182939A106 /* SharePresenters.swift */,
 				F1A2B3D4E5F607182939A107 /* PhotoPicker.swift */,
+				F1A2B3D4E5F607182939A109 /* PushRegistration.swift */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -400,6 +403,7 @@
 				F1A2B3D4E5F607182939A005 /* SwipeBack.swift in Sources */,
 				F1A2B3D4E5F607182939A006 /* SharePresenters.swift in Sources */,
 				F1A2B3D4E5F607182939A007 /* PhotoPicker.swift in Sources */,
+				F1A2B3D4E5F607182939A009 /* PushRegistration.swift in Sources */,
 				8C72B5DB38434FC7B1D2AACF /* AppStore.swift in Sources */,
 				7835DE983BEB46AEAD50F593 /* AuthViews.swift in Sources */,
 				87F1C5DB4A68483A85FCE63E /* FindCommuteRoutesView.swift in Sources */,

@@ -229,6 +229,59 @@ struct VoygoAPIClient {
         try validate(response)
     }
 
+    // MARK: - Pilot-blocker plumbing
+
+    /// POST /users/me/kyc-documents/upload — uploads raw image bytes
+    /// to durable storage. Returns the `storageUri` the existing
+    /// `uploadKycDocument(kind:storageUrl:)` should be called with so
+    /// the kyc_documents row is linked to the actual file. The two-
+    /// step is intentional: we want a chance to surface upload
+    /// failures distinctly from kyc-row failures.
+    static func uploadKycDocument(kind: KycDocumentKind, imageData: Data) async throws -> KycUploadResponse {
+        var comps = URLComponents(url: baseURL.appendingPathComponent("users/me/kyc-documents/upload"),
+                                  resolvingAgainstBaseURL: false)!
+        comps.queryItems = [URLQueryItem(name: "kind", value: kind.rawValue)]
+        var req = authedRequest(comps.url!, method: "POST")
+        req.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        req.httpBody = imageData
+        let (data, response) = try await session.data(for: req)
+        try validate(response)
+        return try decode(KycUploadResponse.self, from: data)
+    }
+
+    /// POST /safety/sos — persists the alert to the on-call queue.
+    /// Real dispatchers (Twilio / PagerDuty) are env-gated; the
+    /// response always includes the alert id so the iOS side can
+    /// reference it in support flows.
+    static func reportSafetyAlert(rideId: String?, routeId: String?,
+                                   lat: Double?, lng: Double?,
+                                   message: String) async throws -> SafetyAlertResponse {
+        let body = SafetyAlertRequest(
+            rideId: rideId, routeId: routeId,
+            lat: lat, lng: lng, message: message
+        )
+        return try await post(body, to: baseURL.appendingPathComponent("safety/sos"),
+                              as: SafetyAlertResponse.self)
+    }
+
+    /// POST /devices — registers an APNs token for the signed-in
+    /// user. Idempotent on (user, token) so repeat calls are safe.
+    static func registerDevice(apnsToken: String, locale: String?, appVersion: String?) async throws {
+        let body = RegisterDeviceRequest(
+            apnsToken: apnsToken, platform: "iOS",
+            locale: locale, appVersion: appVersion
+        )
+        try await postVoid(body, to: baseURL.appendingPathComponent("devices"))
+    }
+
+    /// GET /drivers/me/connect-account — returns the Stripe Connect
+    /// onboarding URL when payouts aren't enabled yet, or
+    /// `state: "READY"` once the account is verified.
+    static func driverConnectAccount() async throws -> DriverConnectAccountResponse {
+        try await get(baseURL.appendingPathComponent("drivers/me/connect-account"),
+                      as: DriverConnectAccountResponse.self)
+    }
+
     /// GET /rides/{rideId}/stream — SSE feed of live driver
     /// breadcrumbs. Yields the latest cached location first, then
     /// each subsequent push from the driver. Cancellation of the
@@ -655,6 +708,45 @@ struct RideLocationPushBody: Encodable {
     var lng: Double
     var heading: Double?
     var speedMps: Double?
+}
+
+// MARK: - Pilot-blocker DTOs
+
+struct KycUploadResponse: Decodable, Equatable {
+    var id: String
+    var storageUri: String
+    var byteSize: Int
+}
+
+struct SafetyAlertRequest: Encodable {
+    var rideId: String?
+    var routeId: String?
+    var lat: Double?
+    var lng: Double?
+    var message: String
+}
+
+struct SafetyAlertResponse: Decodable, Equatable {
+    var alertId: String
+    var status: String
+    var dispatchedTo: [String]
+}
+
+struct RegisterDeviceRequest: Encodable {
+    var apnsToken: String
+    var platform: String
+    var locale: String?
+    var appVersion: String?
+}
+
+/// `state` ∈ { "UNCONFIGURED", "PENDING", "READY" }. iOS branches
+/// on this — UNCONFIGURED shows a coming-soon banner; PENDING opens
+/// `onboardingUrl` in SFSafariViewController; READY hides the CTA.
+struct DriverConnectAccountResponse: Decodable, Equatable {
+    var state: String
+    var onboardingUrl: String?
+    var payoutsEnabled: Bool
+    var detailsSubmitted: Bool
 }
 
 struct CreateRecurringRouteRequest: Encodable {

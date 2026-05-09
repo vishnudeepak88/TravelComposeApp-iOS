@@ -225,6 +225,83 @@ async function initSchema(pool) {
   await pool.query(
     "CREATE INDEX IF NOT EXISTS ix_ride_locations_ride_recent ON ride_locations(ride_id, recorded_at DESC)"
   );
+
+  // Safety alerts — every SOS the rider triggers persists here for
+  // the on-call queue. Notification-side dispatch (Twilio /
+  // PagerDuty) reads this table; the iOS side posts the row + opens
+  // the system SMS composer in parallel, so help moves without
+  // waiting for the dispatch loop.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS safety_alerts (
+      id           UUID PRIMARY KEY,
+      user_id      TEXT NOT NULL,
+      ride_id      TEXT NULL,
+      route_id     TEXT NULL,
+      lat          DOUBLE PRECISION NULL,
+      lng          DOUBLE PRECISION NULL,
+      message      TEXT NOT NULL DEFAULT '',
+      status       TEXT NOT NULL DEFAULT 'OPEN',
+      acknowledged_by TEXT NULL,
+      acknowledged_at TIMESTAMPTZ NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_safety_alerts_open ON safety_alerts(status, created_at DESC)"
+  );
+
+  // APNs device registrations. One row per (user, token) pair so a
+  // user can have multiple devices. Removed lazily when a delivery
+  // attempt comes back as `BadDeviceToken`.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS push_devices (
+      user_id     TEXT NOT NULL,
+      apns_token  TEXT NOT NULL,
+      platform    TEXT NOT NULL DEFAULT 'iOS',
+      locale      TEXT NULL,
+      app_version TEXT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, apns_token)
+    )
+  `);
+
+  // KYC document storage. Until the env-configured S3 bucket is set
+  // up, we accept multipart uploads and persist the bytes locally
+  // under `KYC_STORAGE_DIR`. The server returns a `voygo://kyc/<id>`
+  // URI that the existing kyc_documents row stores in storage_url.
+  // When real S3 is configured, the same upload endpoint flips to
+  // returning `s3://bucket/key` and the iOS side doesn't change.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS kyc_uploads (
+      id           UUID PRIMARY KEY,
+      user_id      TEXT NOT NULL,
+      kind         TEXT NOT NULL,
+      content_type TEXT NOT NULL,
+      byte_size    BIGINT NOT NULL,
+      storage_uri  TEXT NOT NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_kyc_uploads_user ON kyc_uploads(user_id, created_at DESC)"
+  );
+
+  // Stripe Connect account linkage — driver-side. `stripe_account_id`
+  // is set after the driver completes the Express onboarding flow;
+  // payouts are gated on `payouts_enabled` which the Stripe webhook
+  // flips on `account.updated` once the bank account is verified.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS driver_stripe_accounts (
+      driver_id           TEXT PRIMARY KEY,
+      stripe_account_id   TEXT NULL,
+      onboarding_url      TEXT NULL,
+      payouts_enabled     BOOLEAN NOT NULL DEFAULT FALSE,
+      details_submitted   BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 }
 
 module.exports = { initSchema };

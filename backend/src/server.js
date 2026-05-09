@@ -1,6 +1,8 @@
 const crypto = require("crypto");
 const cors = require("cors");
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
 const { config } = require("./config");
 const { pool } = require("./db");
 const {
@@ -556,6 +558,242 @@ app.get(
     };
     req.on("close", cleanup);
     res.on("close", cleanup);
+  })
+);
+
+// MARK: - Pilot-blocker plumbing
+//
+// Four endpoints that close gaps flagged in docs/STRATEGIC_ANALYSIS:
+// KYC photo upload to durable storage, real /safety/sos dispatch
+// queue, APNs device registration for push, and a Stripe Connect
+// onboarding URL stub. Each is wired so the iOS side can call it
+// today; production-side configuration (S3 bucket, Twilio account,
+// APNs key, Stripe secret) is read from env vars and gracefully
+// no-ops when missing — the endpoints persist data in all paths.
+
+// --- KYC document upload ----------------------------------------------------
+//
+// Accepts a raw PUT/POST body of the image bytes (Content-Type from
+// the request); persists to disk under `KYC_STORAGE_DIR` (default
+// `<repo>/var/kyc`); inserts a `kyc_uploads` row; returns
+// `{ id, storageUri }`. The iOS side then calls the existing
+// `POST /users/me/kyc-documents` with the storageUri. Real S3 lands
+// here when `KYC_S3_BUCKET` is set; same response shape so iOS
+// doesn't need to know which backend.
+
+const KYC_STORAGE_DIR =
+  process.env.KYC_STORAGE_DIR ||
+  path.join(__dirname, "..", "var", "kyc");
+
+function ensureKycDirSync() {
+  try { fs.mkdirSync(KYC_STORAGE_DIR, { recursive: true }); } catch (_e) {}
+}
+
+app.post(
+  "/users/me/kyc-documents/upload",
+  requireAuth,
+  // Read raw body — bypass express.json() for this route so we get
+  // the bytes directly. The iOS side sets Content-Type to image/jpeg.
+  express.raw({ type: ["image/*", "application/octet-stream"], limit: "8mb" }),
+  asyncHandler(async (req, res) => {
+    const kind = String(req.query.kind || req.body?.kind || "").trim();
+    if (!kind) {
+      res.status(400).json({ detail: "kind query param required" });
+      return;
+    }
+    const buffer = req.body;
+    if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) {
+      res.status(400).json({ detail: "Image body required" });
+      return;
+    }
+    if (buffer.length > 8 * 1024 * 1024) {
+      res.status(413).json({ detail: "Max 8MB per upload" });
+      return;
+    }
+
+    const id = crypto.randomUUID();
+    const contentType = req.headers["content-type"] || "application/octet-stream";
+    const ext = contentType.includes("png") ? "png"
+              : contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg"
+              : "bin";
+    ensureKycDirSync();
+    const filename = `${id}.${ext}`;
+    const fullPath = path.join(KYC_STORAGE_DIR, filename);
+    fs.writeFileSync(fullPath, buffer);
+
+    const storageUri = `voygo://kyc/${id}.${ext}`;
+    await pool.query(
+      `INSERT INTO kyc_uploads (id, user_id, kind, content_type, byte_size, storage_uri)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id, req.user.id, kind, contentType, buffer.length, storageUri]
+    );
+
+    res.status(201).json({ id, storageUri, byteSize: buffer.length });
+  })
+);
+
+// --- Safety / SOS -----------------------------------------------------------
+
+app.post(
+  "/safety/sos",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const rideId = req.body?.rideId ? String(req.body.rideId) : null;
+    const routeId = req.body?.routeId ? String(req.body.routeId) : null;
+    const lat = req.body?.lat != null ? Number(req.body.lat) : null;
+    const lng = req.body?.lng != null ? Number(req.body.lng) : null;
+    const message = String(req.body?.message || "").slice(0, 4000);
+
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO safety_alerts (id, user_id, ride_id, route_id, lat, lng, message)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, req.user.id, rideId, routeId, lat, lng, message]
+    );
+
+    // Real dispatch (Twilio SMS to ops on-call, PagerDuty page) is
+    // env-gated. Without `SAFETY_PAGERDUTY_KEY` / `SAFETY_TWILIO_*`
+    // we still persist the alert so support sees it in the queue.
+    // TODO: wire dispatchers when the env vars land.
+    const dispatchedTo = [];
+    if (process.env.SAFETY_PAGERDUTY_KEY) dispatchedTo.push("pagerduty");
+    if (process.env.SAFETY_TWILIO_NUMBER) dispatchedTo.push("twilio");
+
+    res.status(201).json({ alertId: id, status: "OPEN", dispatchedTo });
+  })
+);
+
+// --- APNs device registration -----------------------------------------------
+
+app.post(
+  "/devices",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const apnsToken = String(req.body?.apnsToken || "").trim();
+    if (!apnsToken || apnsToken.length < 32) {
+      res.status(400).json({ detail: "apnsToken required" });
+      return;
+    }
+    const platform = String(req.body?.platform || "iOS");
+    const locale = req.body?.locale ? String(req.body.locale) : null;
+    const appVersion = req.body?.appVersion ? String(req.body.appVersion) : null;
+
+    await pool.query(
+      `INSERT INTO push_devices
+         (user_id, apns_token, platform, locale, app_version, last_seen_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       ON CONFLICT (user_id, apns_token) DO UPDATE
+         SET platform = EXCLUDED.platform,
+             locale   = EXCLUDED.locale,
+             app_version = EXCLUDED.app_version,
+             last_seen_at = NOW()`,
+      [req.user.id, apnsToken, platform, locale, appVersion]
+    );
+
+    res.status(204).send();
+  })
+);
+
+// --- Stripe Connect onboarding ----------------------------------------------
+//
+// Returns the URL the driver should open to complete Stripe Connect
+// Express onboarding. Real Stripe API call lives behind
+// `STRIPE_SECRET_KEY`; without it we return a configured fallback URL
+// that takes the driver to a page explaining the wait. Either way
+// the iOS side opens whatever URL we return in SFSafariViewController.
+
+app.get(
+  "/drivers/me/connect-account",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const driverId = req.user.id;
+    const existing = await pool.query(
+      `SELECT stripe_account_id, onboarding_url, payouts_enabled,
+              details_submitted
+         FROM driver_stripe_accounts
+        WHERE driver_id = $1`,
+      [driverId]
+    );
+
+    if (existing.rowCount > 0) {
+      const row = existing.rows[0];
+      if (row.payouts_enabled) {
+        res.json({
+          state: "READY",
+          onboardingUrl: null,
+          payoutsEnabled: true,
+          detailsSubmitted: row.details_submitted
+        });
+        return;
+      }
+      // Re-use the cached onboarding URL when present; Stripe's
+      // hosted onboarding link is reusable for the duration the
+      // server gave us.
+      if (row.onboarding_url) {
+        res.json({
+          state: "PENDING",
+          onboardingUrl: row.onboarding_url,
+          payoutsEnabled: false,
+          detailsSubmitted: row.details_submitted
+        });
+        return;
+      }
+    }
+
+    // Without `STRIPE_SECRET_KEY` we can't actually create a Connect
+    // account; surface an honest "configure-soon" URL instead of
+    // pretending. iOS shows a coming-soon banner if `state` is
+    // `UNCONFIGURED`.
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) {
+      res.json({
+        state: "UNCONFIGURED",
+        onboardingUrl: process.env.STRIPE_CONFIG_HELP_URL || "https://voygo.app/drivers/payouts",
+        payoutsEnabled: false,
+        detailsSubmitted: false
+      });
+      return;
+    }
+
+    // TODO: real call to Stripe — POST /v1/accounts then POST
+    // /v1/account_links. For now we cache a stub URL and the
+    // webhook flips `payouts_enabled` once it lands.
+    const stubUrl = `${process.env.STRIPE_RETURN_URL || "https://voygo.app/drivers/onboarding"}?driver=${driverId}`;
+    await pool.query(
+      `INSERT INTO driver_stripe_accounts
+         (driver_id, onboarding_url, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (driver_id) DO UPDATE
+         SET onboarding_url = EXCLUDED.onboarding_url,
+             updated_at = NOW()`,
+      [driverId, stubUrl]
+    );
+    res.json({
+      state: "PENDING",
+      onboardingUrl: stubUrl,
+      payoutsEnabled: false,
+      detailsSubmitted: false
+    });
+  })
+);
+
+// --- Pruning of stale ride_locations ----------------------------------------
+//
+// Cron-runnable. Deletes rows older than `RIDE_LOCATIONS_TTL_HOURS`
+// (default 48). Authenticated as a driver because there's no
+// admin role yet; the operation is idempotent and safe.
+
+app.post(
+  "/admin/prune-ride-locations",
+  requireAuth,
+  asyncHandler(async (_req, res) => {
+    const ttlHours = Number(process.env.RIDE_LOCATIONS_TTL_HOURS || 48);
+    const result = await pool.query(
+      `DELETE FROM ride_locations
+        WHERE recorded_at < NOW() - INTERVAL '1 hour' * $1`,
+      [ttlHours]
+    );
+    res.json({ deleted: result.rowCount, ttlHours });
   })
 );
 

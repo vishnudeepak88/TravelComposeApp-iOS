@@ -67,8 +67,12 @@ struct KycVerificationView: View {
             PhotoPicker { data in
                 let kind = wrapper.kind
                 pickerKind = nil
-                guard data != nil else { return } // user cancelled
-                Task { await upload(kind) }
+                // Real upload pipeline:
+                //   1. PHPicker → image bytes
+                //   2. POST /users/me/kyc-documents/upload → storageUri
+                //   3. POST /users/me/kyc-documents { kind, storageUri }
+                guard let imageData = data else { return } // cancelled
+                Task { await upload(kind, imageData: imageData) }
             }
         }
     }
@@ -266,20 +270,36 @@ struct KycVerificationView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func upload(_ kind: KycDocumentKind) async {
+    private func upload(_ kind: KycDocumentKind, imageData: Data) async {
         inFlightKind = kind
         defer { inFlightKind = nil }
-        // No real photo picker yet — pass nil so the backend creates a record
-        // without a storage URL. A real implementation would put up a
-        // PHPickerViewController, upload to S3, then call this with the URL.
-        let result = await store.submitKycDocument(kind: kind, storageUrl: nil)
+
+        // Two-step: upload bytes first to durable storage, then link
+        // the resulting `storageUri` into a kyc_documents row. Failing
+        // step 1 surfaces a "couldn't upload" error; failing step 2
+        // surfaces a "uploaded but didn't link" error so support can
+        // recover the orphan upload from `kyc_uploads` if needed.
+        let storageUri: String
+        do {
+            let upload = try await VoygoAPIClient.uploadKycDocument(kind: kind, imageData: imageData)
+            storageUri = upload.storageUri
+        } catch APIError.unauthorized {
+            await store.handleUnauthorizedFromExternalCall()
+            return
+        } catch {
+            info = nil
+            self.error = "Upload failed. \(error.localizedDescription)"
+            return
+        }
+
+        let result = await store.submitKycDocument(kind: kind, storageUrl: storageUri)
         switch result {
         case .success:
             error = nil
             info = "\(kind.label) uploaded — review pending"
         case .failure(let err):
             info = nil
-            error = err.localizedDescription
+            self.error = err.errorDescription ?? "Couldn't link upload"
         }
     }
 
