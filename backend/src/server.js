@@ -14,7 +14,7 @@ const {
   normalizePhone
 } = require("./auth");
 const { sendSms, smsConfigured } = require("./sms");
-const { sendOtpEmail, emailConfigured } = require("./email");
+const { sendOtpEmail, emailConfigured, verifyEmailTransport, emailDiagnostics } = require("./email");
 const { generateRideInstances } = require("./generation");
 const { autocompletePlaces } = require("./places");
 const {
@@ -1167,6 +1167,22 @@ app.post(
       [ttlHours]
     );
     res.json({ deleted: result.rowCount, ttlHours });
+  })
+);
+
+// Diagnostic: returns the SMTP env presence (boolean only — never echoes
+// values), the most recent verify result, and the most recent send
+// result. Hard-gated to admin-key so the test addresses + error
+// detail don't leak to anonymous callers. Re-runs verify when
+// `?verify=1` is passed so ops can re-test without restarting.
+app.get(
+  "/admin/email-status",
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (req.query.verify === "1") {
+      await verifyEmailTransport();
+    }
+    res.json(emailDiagnostics());
   })
 );
 
@@ -2726,6 +2742,27 @@ async function start() {
   await ensureReviewsSchema(pool);
   await seedIfEmpty(pool);
   await backfillChatParticipants(pool);
+
+  // Boot-time SMTP verify. Doesn't block listen() — runs async so a
+  // dead SMTP host doesn't delay the health check, but the result is
+  // surfaced both in stdout and via /admin/email-status so ops sees
+  // EAUTH / ETIMEDOUT immediately instead of waiting for first OTP.
+  if (emailConfigured()) {
+    verifyEmailTransport().then((result) => {
+      if (result.ok) {
+        console.log(`[email] SMTP verify OK (host=${process.env.SMTP_HOST}, user=${process.env.SMTP_USER})`);
+      } else {
+        console.warn(
+          `[email] SMTP verify FAILED: code=${result.code || "?"} ` +
+          `responseCode=${result.responseCode || "?"} ` +
+          `command=${result.command || "?"} reason=${result.reason} ` +
+          `message="${result.message || result.error || ""}"`
+        );
+      }
+    });
+  } else {
+    console.log("[email] SMTP not configured — OTP will fall back to dev-echo");
+  }
 
   app.listen(config.port, "0.0.0.0", () => {
     const billplzMode = config.billplz.isMockMode ? "MOCK" : "LIVE";

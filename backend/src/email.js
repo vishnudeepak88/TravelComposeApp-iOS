@@ -83,6 +83,27 @@ function withTimeout(promise, ms, label) {
   });
 }
 
+// Diagnostic state — last verify + last send result with full error
+// detail. Surfaced via the admin endpoint /admin/email-status so we
+// can debug "why is OTP email not arriving?" without grepping logs.
+const _diag = {
+  lastVerify: null, // { ok, code, message, at }
+  lastSend:   null  // { ok, code, message, at }
+};
+
+function _captureError(err) {
+  // nodemailer/SMTP errors carry useful structured fields. Capture
+  // the ones that distinguish auth-vs-network-vs-config without
+  // dumping the entire stack to the API response.
+  if (!err) return { code: "UNKNOWN", message: "unknown error" };
+  return {
+    code:         err.code         || "UNKNOWN",
+    responseCode: err.responseCode || null,
+    command:      err.command      || null,
+    message:      String(err.message || err).slice(0, 500)
+  };
+}
+
 async function sendOtpEmail({ phone, code, expiresAt }) {
   if (!emailConfigured()) {
     return { ok: false, reason: "unconfigured" };
@@ -101,15 +122,78 @@ async function sendOtpEmail({ phone, code, expiresAt }) {
         <span style="font-size:28px;letter-spacing:4px;font-family:Menlo,monospace">${code}</span><br/>
         <span style="color:#666">Expires in ${expiresMin} minutes. Requested for ${phone}.</span>
       </p>`
-  }).then(() => ({ ok: true }));
+  }).then(
+    ()  => ({ ok: true }),
+    (err) => ({ ok: false, reason: "send_failed", ..._captureError(err) })
+  );
 
   // 8s outer cap — covers the worst-case SMTP handshake + send.
   // If we exceed this, give up and let the caller decide what's next.
   const result = await withTimeout(sendPromise, 8_000, "smtp_send");
   if (!result.ok) {
     console.warn(`[email] sendOtpEmail ${result.reason}: ${result.error || ""}`);
+    _diag.lastSend = { ok: false, ...result, at: new Date().toISOString() };
+  } else {
+    _diag.lastSend = { ok: true, at: new Date().toISOString() };
   }
   return result;
 }
 
-module.exports = { sendOtpEmail, emailConfigured };
+/// Connect + authenticate against the SMTP host without sending an
+/// email. Used at boot to surface auth/connection errors clearly,
+/// so you don't have to wait until the first OTP attempt to learn
+/// the credentials are wrong.
+async function verifyEmailTransport() {
+  if (!emailConfigured()) {
+    const result = { ok: false, reason: "unconfigured" };
+    _diag.lastVerify = { ...result, at: new Date().toISOString() };
+    return result;
+  }
+  // Wrap the verify call so we capture nodemailer's structured error
+  // fields (code, responseCode, command) before withTimeout flattens
+  // them. Pre-baking the structured failure into the resolved value
+  // means the diag snapshot can report exactly which step broke.
+  const verifyPromise = transporter().verify().then(
+    ()  => ({ ok: true }),
+    (err) => ({ ok: false, reason: "verify_failed", ..._captureError(err) })
+  );
+  const result = await withTimeout(verifyPromise, 6_000, "smtp_verify");
+  _diag.lastVerify = { ...result, at: new Date().toISOString() };
+  return result;
+}
+
+/// Snapshot of which env vars are present (boolean only — never echo
+/// the values themselves) plus the most recent verify + send result.
+/// Consumed by /admin/email-status.
+function emailDiagnostics() {
+  return {
+    configured: emailConfigured(),
+    env: {
+      SMTP_HOST:      Boolean(process.env.SMTP_HOST),
+      SMTP_PORT:      process.env.SMTP_PORT || null,
+      SMTP_SECURE:    process.env.SMTP_SECURE || null,
+      SMTP_USER:      process.env.SMTP_USER ? maskEmail(process.env.SMTP_USER) : null,
+      SMTP_PASS:      Boolean(process.env.SMTP_PASS),
+      OTP_FROM_EMAIL: process.env.OTP_FROM_EMAIL ? maskEmail(process.env.OTP_FROM_EMAIL) : null,
+      OTP_TO_EMAIL:   process.env.OTP_TO_EMAIL   ? maskEmail(process.env.OTP_TO_EMAIL)   : null
+    },
+    lastVerify: _diag.lastVerify,
+    lastSend:   _diag.lastSend
+  };
+}
+
+function maskEmail(value) {
+  // Show the local-part's first letter + domain so we can confirm
+  // the env is set without echoing the address itself.
+  const m = String(value).match(/<?([^@<>\s]+)@([^>\s]+)>?/);
+  if (!m) return "<set>";
+  const [, local, domain] = m;
+  return `${local[0] || "?"}***@${domain}`;
+}
+
+module.exports = {
+  sendOtpEmail,
+  emailConfigured,
+  verifyEmailTransport,
+  emailDiagnostics
+};
