@@ -34,26 +34,36 @@ struct ProfileView: View {
                 VStack(spacing: 0) {
                     VPolishedNavBar(title: "Profile")
 
-                    ScrollView {
-                        VStack(spacing: 18) {
-                            identityRow
-                            kycCard
-                            quickStats
-                            walletStatsRow
-                            settingsCard
-                            // Driver mode card only when the user has at
-                            // least one published route. Riders who've
-                            // never offered seats don't need this CTA
-                            // taking up space; it'll appear automatically
-                            // after their first Create Route flow.
-                            if !store.driverDashboards().isEmpty {
-                                driverModeCard
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 18) {
+                                Color.clear.frame(height: 0).id("top")
+                                identityRow
+                                kycCard
+                                quickStats
+                                walletStatsRow
+                                settingsCard
+                                // Driver mode card only when the user has at
+                                // least one published route. Riders who've
+                                // never offered seats don't need this CTA
+                                // taking up space; it'll appear automatically
+                                // after their first Create Route flow.
+                                if !store.driverDashboards().isEmpty {
+                                    driverModeCard
+                                }
+                                logoutPill
                             }
-                            logoutPill
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                            .padding(.bottom, VTabBarLayout.clearance)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 4)
-                        .padding(.bottom, VTabBarLayout.clearance)
+                        .onReceive(NotificationCenter.default.publisher(for: .voygoTabReselected)) { note in
+                            if (note.userInfo?["index"] as? Int) == 4 {
+                                withAnimation(.easeOut(duration: 0.3)) {
+                                    proxy.scrollTo("top", anchor: .top)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1027,6 +1037,10 @@ struct LiveTripView: View {
     /// backend persistence is the ops-side double-check.
     private func postSafetyAlert() async {
         let live = store.liveLocation(for: tripId)
+        Telemetry.track(TelemetryEvents.liveTripSosTapped, [
+            "ride_id": .string(tripId),
+            "has_live_location": .bool(live != nil)
+        ])
         do {
             _ = try await VoygoAPIClient.reportSafetyAlert(
                 rideId: tripId,

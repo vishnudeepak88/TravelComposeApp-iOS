@@ -372,10 +372,7 @@ struct RouteDetailsView: View {
                                             Text("Charging payment…").font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
                                         }
                                     case .error(let msg):
-                                        HStack {
-                                            Image(systemName: "exclamationmark.circle.fill").foregroundColor(VoygoTheme.danger)
-                                            Text(msg).font(.subheadline).foregroundColor(VoygoTheme.danger)
-                                        }
+                                        VErrorBanner(message: msg, onRetry: vm.subscribe)
                                     default: EmptyView()
                                     }
                                 }

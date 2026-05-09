@@ -523,6 +523,31 @@ struct VErrorBanner: View {
     var onRetry: (() -> Void)? = nil
     var onSignIn: (() -> Void)? = nil
 
+    /// Convenience for legacy call sites that store the error as a
+    /// composed `String` (e.g. "Payment failed (X) and pause also
+    /// failed: Y. Try again."). Wraps the message into
+    /// `AppError.message(...)` so the typed branching still works:
+    /// these are always non-retryable composed strings, so the
+    /// banner renders icon + title + the message verbatim.
+    init(message: String,
+         onRetry: (() -> Void)? = nil,
+         onSignIn: (() -> Void)? = nil) {
+        self.error = .message(message)
+        self.onRetry = onRetry
+        self.onSignIn = onSignIn
+    }
+
+    /// Primary init taking a typed `AppError`. Default retry/sign-in
+    /// closures are nil so the banner just displays a non-actionable
+    /// alert; pass them when the view knows how to retry.
+    init(error: AppError,
+         onRetry: (() -> Void)? = nil,
+         onSignIn: (() -> Void)? = nil) {
+        self.error = error
+        self.onRetry = onRetry
+        self.onSignIn = onSignIn
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)

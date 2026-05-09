@@ -24,23 +24,34 @@ struct InboxView: View {
                         EmptyStateView(icon: "bubble.left.and.bubble.right",
                                        title: "No messages", subtitle: "Your commute chats will appear here").frame(maxHeight: .infinity)
                     } else {
-                        ScrollView {
-                            VStack(spacing: 10) {
-                                ForEach(store.threads) { thread in
-                                    Button {
-                                        path.append(.thread(id: thread.id, title: thread.title))
-                                    } label: {
-                                        ThreadRow(thread: thread)
-                                            .padding(.horizontal, 16)
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                VStack(spacing: 10) {
+                                    Color.clear.frame(height: 0).id("top")
+                                    ForEach(store.threads) { thread in
+                                        Button {
+                                            path.append(.thread(id: thread.id, title: thread.title))
+                                        } label: {
+                                            ThreadRow(thread: thread)
+                                                .padding(.horizontal, 16)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
-                                    .buttonStyle(.plain)
+                                }
+                                .padding(.vertical, 12)
+                                .padding(.bottom, VTabBarLayout.clearance)
+                            }
+                            .refreshable {
+                                await store.refreshAll()
+                            }
+                            // iOS convention: re-tap the active tab → top.
+                            .onReceive(NotificationCenter.default.publisher(for: .voygoTabReselected)) { note in
+                                if (note.userInfo?["index"] as? Int) == 3 {
+                                    withAnimation(.easeOut(duration: 0.3)) {
+                                        proxy.scrollTo("top", anchor: .top)
+                                    }
                                 }
                             }
-                            .padding(.vertical, 12)
-                            .padding(.bottom, VTabBarLayout.clearance)
-                        }
-                        .refreshable {
-                            await store.refreshAll()
                         }
                     }
                 }
@@ -61,6 +72,15 @@ struct InboxView: View {
         }
         .task {
             await store.refreshAll()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .voygoOpenThread)) { note in
+            guard let info = note.userInfo,
+                  let threadId = info["threadId"] as? String else { return }
+            let title = (info["title"] as? String) ?? "Conversation"
+            // Avoid stacking duplicate destinations if the user re-taps.
+            if path.last != .thread(id: threadId, title: title) {
+                path.append(.thread(id: threadId, title: title))
+            }
         }
     }
 

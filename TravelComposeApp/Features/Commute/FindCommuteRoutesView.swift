@@ -171,8 +171,10 @@ struct FindCommuteRoutesView: View {
             VPalette.bg.ignoresSafeArea()
 
             VStack(spacing: 0) {
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(spacing: 14) {
+                        Color.clear.frame(height: 0).id("top")
                         homeHero
                             .padding(.horizontal, 16)
                             .padding(.top, 16)
@@ -241,6 +243,14 @@ struct FindCommuteRoutesView: View {
                 .refreshable {
                     await store.refreshAll()
                     vm.searchRoutes()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .voygoTabReselected)) { note in
+                    if (note.userInfo?["index"] as? Int) == 1 {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            proxy.scrollTo("top", anchor: .top)
+                        }
+                    }
+                }
                 }
             }
         }

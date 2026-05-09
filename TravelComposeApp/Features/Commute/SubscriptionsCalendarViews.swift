@@ -15,6 +15,9 @@ struct MySubscriptionsView: View {
     /// Holds a paused subscription whose payment retry is in flight, so we
     /// can disable the retry button to avoid double charges.
     @State private var retryingId: String? = nil
+    /// Tracks whether the initial refresh has completed so we can
+    /// show a skeleton instead of the empty-state on first paint.
+    @State private var hasLoaded: Bool = false
 
     var items: [RouteSubscriptionWithRoute] { store.mySubscriptions() }
 
@@ -35,49 +38,72 @@ struct MySubscriptionsView: View {
                     .accessibilityLabel("Calendar")
                 }
 
-                if items.isEmpty {
-                    EmptyStateView(icon: "mappin.slash", title: "No subscriptions",
-                                   subtitle: "Search for commute routes and subscribe to start riding")
-                        .frame(maxHeight: .infinity)
-                } else {
+                if items.isEmpty && !hasLoaded {
+                    // First paint — show skeleton cards instead of an
+                    // empty-state that would lie about an empty list.
                     ScrollView {
                         VStack(spacing: 14) {
-                            if let err = actionError {
-                                HStack {
-                                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(VoygoTheme.warning)
-                                    Text(err).font(.caption).foregroundColor(VoygoTheme.warning)
-                                    Spacer()
-                                    Button("Dismiss") { actionError = nil }.font(.caption).foregroundColor(VoygoTheme.primary)
+                            ForEach(0..<3, id: \.self) { _ in
+                                VStack(alignment: .leading, spacing: 10) {
+                                    VSkeleton(height: 18)
+                                    VSkeleton(height: 12)
+                                    VSkeleton(height: 12)
                                 }
-                                .padding(12)
-                                .background(VoygoTheme.warning.opacity(0.1))
-                                .cornerRadius(10)
-                                .padding(.horizontal, 16)
-                            }
-
-                            ForEach(items) { item in
-                                SubscriptionCard(
-                                    item: item,
-                                    onOpen:   { onOpenRoute(item.route.id) },
-                                    onPause:  { updateSubscription(item.subscription.id, status: .paused) },
-                                    onResume: { updateSubscription(item.subscription.id, status: .active) },
-                                    onCancel: { pendingCancellation = item },
-                                    onRetryPayment: { retryPayment(item) },
-                                    isRetryingPayment: retryingId == item.subscription.id
-                                )
+                                .padding(16)
+                                .background(VPalette.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                                 .padding(.horizontal, 16)
                             }
                         }
                         .padding(.vertical, 16)
                     }
-                    .refreshable {
-                        await store.refreshAll()
+                } else if items.isEmpty {
+                    EmptyStateView(icon: "mappin.slash", title: "No subscriptions",
+                                   subtitle: "Search for commute routes and subscribe to start riding")
+                        .frame(maxHeight: .infinity)
+                } else {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 14) {
+                                Color.clear.frame(height: 0).id("top")
+                                if let err = actionError {
+                                    VErrorBanner(message: err)
+                                        .padding(.horizontal, 16)
+                                        .onTapGesture { actionError = nil }
+                                }
+
+                                ForEach(items) { item in
+                                    SubscriptionCard(
+                                        item: item,
+                                        onOpen:   { onOpenRoute(item.route.id) },
+                                        onPause:  { updateSubscription(item.subscription.id, status: .paused) },
+                                        onResume: { updateSubscription(item.subscription.id, status: .active) },
+                                        onCancel: { pendingCancellation = item },
+                                        onRetryPayment: { retryPayment(item) },
+                                        isRetryingPayment: retryingId == item.subscription.id
+                                    )
+                                    .padding(.horizontal, 16)
+                                }
+                            }
+                            .padding(.vertical, 16)
+                        }
+                        .refreshable {
+                            await store.refreshAll()
+                        }
+                        .onReceive(NotificationCenter.default.publisher(for: .voygoTabReselected)) { note in
+                            if (note.userInfo?["index"] as? Int) == 2 {
+                                withAnimation(.easeOut(duration: 0.3)) {
+                                    proxy.scrollTo("top", anchor: .top)
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
         .task {
             await store.refreshAll()
+            hasLoaded = true
         }
         .alert(
             "Cancel subscription?",

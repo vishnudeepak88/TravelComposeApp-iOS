@@ -8,6 +8,7 @@ const { pool } = require("./db");
 const {
   signJwt,
   requireAuth,
+  verifyJwt,
   generateOtp,
   hashOtp,
   normalizePhone
@@ -782,6 +783,94 @@ app.get(
 // Cron-runnable. Deletes rows older than `RIDE_LOCATIONS_TTL_HOURS`
 // (default 48). Authenticated as a driver because there's no
 // admin role yet; the operation is idempotent and safe.
+
+// Cron-runnable reminder dispatcher. Walks rides scheduled in the
+// next `RIDE_REMINDER_HOURS` (default 12) and sends one
+// `RIDE_REMINDER` notification per confirmed passenger that doesn't
+// already have one for the same ride. Idempotent so the cron can run
+// hourly without spamming. Ops calls `POST /admin/dispatch-ride-
+// reminders` from a scheduled job.
+app.post(
+  "/admin/dispatch-ride-reminders",
+  requireAuth,
+  asyncHandler(async (_req, res) => {
+    const lookaheadHours = Number(process.env.RIDE_REMINDER_HOURS || 12);
+    const result = await pool.query(
+      `SELECT i.id AS ride_id, i.route_id, i.scheduled_at,
+              r.start_location, r.end_location, r.departure_time,
+              p.user_id
+         FROM commute_ride_instances i
+         JOIN recurring_routes r ON r.id = i.route_id
+         JOIN commute_ride_passengers p ON p.instance_id = i.id
+        WHERE i.scheduled_at BETWEEN NOW()
+                                   AND NOW() + INTERVAL '1 hour' * $1
+          AND p.status = 'CONFIRMED'
+          AND NOT EXISTS (
+            SELECT 1 FROM notifications n
+             WHERE n.user_id = p.user_id
+               AND n.ride_instance_id = i.id
+               AND n.type = 'RIDE_REMINDER'
+          )`,
+      [lookaheadHours]
+    );
+
+    let dispatched = 0;
+    for (const row of result.rows) {
+      await createNotification({
+        userId: row.user_id,
+        type: "RIDE_REMINDER",
+        title: "Pickup tomorrow",
+        body: `${row.start_location} → ${row.end_location} at ${row.departure_time}`,
+        routeId: row.route_id,
+        rideInstanceId: row.ride_id
+      });
+      dispatched += 1;
+    }
+    res.json({ dispatched, lookaheadHours });
+  })
+);
+
+// Telemetry — best-effort funnel events. Auth is optional so the client can
+// send `app_opened` before sign-in. Always returns 204 so a flaky client
+// can't get stuck retrying. Caps payload size to avoid abuse.
+app.post(
+  "/telemetry/events",
+  express.json({ limit: "32kb" }),
+  asyncHandler(async (req, res) => {
+    let userId = null;
+    const header = req.get("Authorization") || "";
+    const match = header.match(/^Bearer\s+(.+)$/i);
+    if (match) {
+      const payload = verifyJwt(match[1].trim());
+      if (payload?.sub) userId = String(payload.sub);
+    }
+    const body = req.body || {};
+    const events = Array.isArray(body.events) ? body.events : [];
+    if (events.length === 0 || events.length > 50) {
+      res.status(204).end();
+      return;
+    }
+    const sessionId = typeof body.session_id === "string" ? body.session_id.slice(0, 64) : null;
+    const appVersion = typeof body.app_version === "string" ? body.app_version.slice(0, 32) : null;
+    const platform = typeof body.platform === "string" ? body.platform.slice(0, 16) : null;
+    for (const ev of events) {
+      const name = typeof ev?.name === "string" ? ev.name.slice(0, 64) : null;
+      if (!name) continue;
+      const props = ev?.props && typeof ev.props === "object" ? ev.props : {};
+      try {
+        await pool.query(
+          `INSERT INTO telemetry_events (user_id, session_id, name, props, app_version, platform)
+           VALUES ($1, $2, $3, $4::jsonb, $5, $6)`,
+          [userId, sessionId, name, JSON.stringify(props), appVersion, platform]
+        );
+      } catch (err) {
+        // Best-effort — never let one bad row poison the batch.
+        console.warn("telemetry insert failed", name, err?.message);
+      }
+    }
+    res.status(204).end();
+  })
+);
 
 app.post(
   "/admin/prune-ride-locations",
@@ -1656,8 +1745,48 @@ app.post(
       res.status(401).json({ detail: "invalid signature" });
       return;
     }
-    if (String(body.paid) === "true" && body.id) {
-      await markPaymentPaid(pool, { billId: String(body.id) });
+    const billId = body.id ? String(body.id) : null;
+    const paid = String(body.paid) === "true";
+
+    if (billId) {
+      // Look up the user this bill belongs to so we can land a real
+      // notification regardless of which path closes the loop. The
+      // payment row carries `user_id` even before `markPaymentPaid`
+      // runs.
+      const lookup = await pool.query(
+        `SELECT user_id, route_id, subscription_id, amount_myr
+           FROM payments
+          WHERE billplz_id = $1
+          LIMIT 1`,
+        [billId]
+      );
+      const row = lookup.rows[0];
+
+      if (paid) {
+        await markPaymentPaid(pool, { billId });
+        if (row?.user_id) {
+          await createNotification({
+            userId: row.user_id,
+            type: "PAYMENT_SUCCEEDED",
+            title: "Payment received",
+            body: `Your subscription is active. RM ${row.amount_myr} charged.`,
+            routeId: row.route_id,
+            subscriptionId: row.subscription_id
+          });
+        }
+      } else if (row?.user_id) {
+        // Treat any non-paid callback (cancelled, expired, refused)
+        // as a failed-payment signal so the rider sees an honest
+        // notification + can retry from the wallet.
+        await createNotification({
+          userId: row.user_id,
+          type: "PAYMENT_FAILED",
+          title: "Payment didn't go through",
+          body: "Your subscription is paused. Retry from My Subscriptions.",
+          routeId: row.route_id,
+          subscriptionId: row.subscription_id
+        });
+      }
     }
     res.status(204).send();
   })

@@ -22,6 +22,10 @@ struct DriverDashboardView: View {
     /// route cancels every scheduled pickup, which a colleague riding
     /// tomorrow morning shouldn't have happen on a fat-finger tap.
     @State private var pendingToggle: (routeId: String, currentlyActive: Bool)? = nil
+    /// First-paint flag — show skeletons before the empty-state ever
+    /// renders, so we don't briefly tell the driver "No routes yet"
+    /// while their data is still arriving.
+    @State private var hasLoaded: Bool = false
 
     var dashboards: [DriverRouteDashboard] { store.driverDashboards() }
 
@@ -44,7 +48,27 @@ struct DriverDashboardView: View {
                     }
                 }
 
-                if dashboards.isEmpty {
+                if dashboards.isEmpty && !hasLoaded {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            ForEach(0..<2, id: \.self) { _ in
+                                VStack(alignment: .leading, spacing: 12) {
+                                    VSkeleton(height: 18)
+                                    VSkeleton(height: 14)
+                                    HStack(spacing: 8) {
+                                        VSkeleton(height: 28, corner: 14)
+                                        VSkeleton(height: 28, corner: 14)
+                                    }
+                                }
+                                .padding(16)
+                                .background(VPalette.surface)
+                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .padding(.horizontal, 16)
+                            }
+                        }
+                        .padding(.vertical, 16)
+                    }
+                } else if dashboards.isEmpty {
                     EmptyStateView(icon: "car.badge.plus", title: "No routes yet",
                                    subtitle: "Create your first recurring route to start picking up riders")
                         .frame(maxHeight: .infinity)
@@ -94,6 +118,7 @@ struct DriverDashboardView: View {
         }
         .task {
             await store.refreshAll()
+            hasLoaded = true
         }
         .alert(
             "Pause this route?",
@@ -648,8 +673,7 @@ struct CreateRouteView: View {
                                 action: vm.createRoute
                             )
                             if case .error(let msg) = vm.createState {
-                                HStack { Image(systemName: "exclamationmark.circle.fill").foregroundColor(VoygoTheme.danger)
-                                    Text(msg).font(.caption).foregroundColor(VoygoTheme.danger) }
+                                VErrorBanner(message: msg, onRetry: vm.createRoute)
                             }
                         }
                     }

@@ -33,20 +33,30 @@ struct HomeTab: View {
     var body: some View {
         NavigationStack(path: $path) {
             HomeView(
-                onSearchTapped:       { path.append(.findRides) },
+                onSearchTapped:       {
+                    Telemetry.track(TelemetryEvents.homeBookARideTapped)
+                    path.append(.findRides)
+                },
                 onCarpoolTapped:      { path.append(.findRides) },
                 onOpenRoute:          { id in path.append(.routeDetails(routeId: id)) },
                 onOpenNotifications:  { path.append(.notifications) },
                 onOpenCalendar:       { path.append(.calendar()) },
-                onMessageDriver:      { _ in
-                    // Switch the user to the Inbox tab. Deep-linking
-                    // into a specific thread requires the Inbox tab's
-                    // path which we don't own here — so for now we
-                    // hand the user to the Inbox root.
-                    NotificationCenter.default.post(
-                        name: HomeTab.switchToInboxNotification,
-                        object: nil
-                    )
+                onMessageDriver:      { routeId in
+                    // Cross-tab deep-link: if we know the thread for this
+                    // route, switch to Inbox AND open it. Otherwise just
+                    // switch to the Inbox root.
+                    if let thread = store.threads.first(where: { $0.tripId == routeId }) {
+                        NotificationCenter.default.post(
+                            name: .voygoOpenThread,
+                            object: nil,
+                            userInfo: ["threadId": thread.id, "title": thread.title]
+                        )
+                    } else {
+                        NotificationCenter.default.post(
+                            name: HomeTab.switchToInboxNotification,
+                            object: nil
+                        )
+                    }
                 }
             )
             .appRouteDestinations(

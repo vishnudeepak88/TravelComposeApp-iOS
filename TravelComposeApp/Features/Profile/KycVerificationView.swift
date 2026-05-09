@@ -45,7 +45,7 @@ struct KycVerificationView: View {
                         statusCard
                         roleSwitcher
                         progressBar
-                        if let error { banner(error, color: VPalette.danger) }
+                        if let error { VErrorBanner(message: error) }
                         if let info { banner(info, color: VPalette.success) }
                         documentList
                         footer

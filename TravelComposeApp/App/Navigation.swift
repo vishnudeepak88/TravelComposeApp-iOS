@@ -80,6 +80,13 @@ struct MainTabView: View {
                 selectedTab = 3
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .voygoOpenThread)) { _ in
+            // Switch to Inbox; InboxView itself listens for the same
+            // notification and appends the thread to its path.
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                selectedTab = 3
+            }
+        }
     }
 }
 
@@ -121,6 +128,12 @@ private struct SyncStatusBanner: View {
 /// can disambiguate.
 extension Notification.Name {
     static let voygoTabReselected = Notification.Name("voygo.tabReselected")
+    /// Cross-tab deep-link to a specific chat thread. Posted with userInfo
+    /// `["threadId": String, "title": String]`. MainTabView switches to the
+    /// Inbox tab and InboxView appends the thread to its NavigationStack
+    /// path. Used by notification taps and Driver-dashboard "Message rider"
+    /// without giving every tab a shared NavigationPath.
+    static let voygoOpenThread = Notification.Name("voygo.openThread")
 }
 
 struct VoygoTabBar: View {

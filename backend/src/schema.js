@@ -302,6 +302,27 @@ async function initSchema(pool) {
       updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  // Telemetry — best-effort funnel events. Append-only, fire-and-forget
+  // from the client, so we tolerate missing user_id and free-form props.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS telemetry_events (
+      id           BIGSERIAL PRIMARY KEY,
+      user_id      TEXT NULL,
+      session_id   TEXT NULL,
+      name         TEXT NOT NULL,
+      props        JSONB NOT NULL DEFAULT '{}'::jsonb,
+      app_version  TEXT NULL,
+      platform     TEXT NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_telemetry_events_name ON telemetry_events(name, created_at DESC)"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_telemetry_events_user ON telemetry_events(user_id, created_at DESC)"
+  );
 }
 
 module.exports = { initSchema };

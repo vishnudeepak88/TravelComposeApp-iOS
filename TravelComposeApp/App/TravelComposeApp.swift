@@ -17,6 +17,7 @@ struct TravelComposeApp: App {
                     // Make the store available to the AppDelegate so
                     // its APNs callback can hand the token over.
                     VoygoAppDelegate.store = store
+                    Telemetry.track(TelemetryEvents.appOpened)
                 }
                 .onOpenURL { url in
                     // Closes the loop opened in `AppStore.startCharge`: when

@@ -134,6 +134,7 @@ final class AppStore {
     func requestOtp(phone: String) async -> Result<Void, AppError> {
         let normalized = normalizePhone(phone)
         guard !normalized.isEmpty else { return .failure(.message("Enter your phone number")) }
+        Telemetry.track(TelemetryEvents.signInStarted)
         phoneNumber = normalized
         UserDefaults.standard.set(normalized, forKey: SessionKeys.phone)
         do {
@@ -158,6 +159,8 @@ final class AppStore {
             persistSession()
             isAuthenticated = true
             devOtpCode = nil
+            Telemetry.shared.identify(userId: response.user.id, traits: [:])
+            Telemetry.track(TelemetryEvents.signInCompleted)
             await refreshAll()
             return .success(())
         } catch let error as APIError {
@@ -174,6 +177,8 @@ final class AppStore {
         useOnline = true
         UserDefaults.standard.removeObject(forKey: SessionKeys.isDevSession)
         clearSession()
+        Telemetry.track(TelemetryEvents.signedOut)
+        Telemetry.shared.reset()
     }
 
 #if DEBUG
@@ -559,6 +564,10 @@ final class AppStore {
                 kycStatus = status
             }
             await refreshKycDocuments()
+            Telemetry.track(TelemetryEvents.kycDocUploaded, [
+                "kind": .string(kind.rawValue),
+                "has_storage_url": .bool(storageUrl != nil)
+            ])
             return .success(())
         } catch APIError.unauthorized {
             clearSession()
@@ -788,6 +797,10 @@ final class AppStore {
 
     func findCommuteRoutes(homeLocation: String, officeLocation: String, earliestDeparture: String, latestDeparture: String,
                            homeLat: Double?, homeLng: Double?, officeLat: Double?, officeLng: Double?) async -> [CommuteRouteMatchResult] {
+        Telemetry.track(TelemetryEvents.routeSearched, [
+            "has_home_coords": .bool(homeLat != nil && homeLng != nil),
+            "has_office_coords": .bool(officeLat != nil && officeLng != nil)
+        ])
         if useOnline && isAuthenticated {
             do {
                 let request = CommuteRouteSearchRequest(
@@ -835,6 +848,11 @@ final class AppStore {
     }
 
     func subscribe(routeId: String, pickupId: String, dropId: String, days: Int, tier: SubscriptionTier = .monthly) async -> Result<String, AppError> {
+        Telemetry.track(TelemetryEvents.subscribeStarted, [
+            "route_id": .string(routeId),
+            "days": .int(days),
+            "tier": .string(tier.rawValue)
+        ])
         guard isAuthenticated else { return .failure(.message("Sign in first")) }
         guard let route = routes.first(where: { $0.id == routeId }) else { return .failure(.message("Route not found")) }
         guard let pickup = route.pickupPoints.first(where: { $0.id == pickupId }) else { return .failure(.message("Pickup not found")) }
@@ -870,6 +888,12 @@ final class AppStore {
             ))
             regenerateRides()
             await refreshNotifications()
+            Telemetry.track(TelemetryEvents.subscriptionCreated, [
+                "subscription_id": .string(id),
+                "route_id": .string(routeId),
+                "days": .int(days),
+                "tier": .string(tier.rawValue)
+            ])
             return .success(id)
         } catch APIError.unauthorized {
             clearSession()
