@@ -323,43 +323,9 @@ struct SectionHeader: View {
     }
 }
 
-/// Polished nav bar — single back chip, big title, optional trailing.
-/// Matches VPolishedNavBar's typography (22pt black, -0.4 tracking).
-struct VoygoNavBar: View {
-    let title: String
-    var showBack: Bool = false
-    var onBack: (() -> Void)? = nil
-    var trailingContent: AnyView? = nil
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if showBack, let back = onBack {
-                Button(action: back) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(VPalette.text)
-                        .frame(width: 40, height: 40)
-                        .background(VPalette.surface)
-                        .overlay(Circle().stroke(VPalette.border, lineWidth: 1))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            Text(title)
-                .font(.system(size: 22, weight: .black))
-                .tracking(-0.4)
-                .foregroundColor(VPalette.text)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            if let trailing = trailingContent {
-                trailing.frame(minWidth: 40, minHeight: 40)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(VPalette.bg)
-    }
-}
+// (Legacy `VoygoNavBar` removed — every callsite migrated to
+// `VPolishedNavBar` which has the same shape and a more refined
+// chevron/trailing slot.)
 
 struct ReliabilityBar: View {
     let value: Double // 0..1

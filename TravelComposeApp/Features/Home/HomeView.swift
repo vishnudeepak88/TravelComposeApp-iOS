@@ -27,9 +27,10 @@ struct HomeTab: View {
     var body: some View {
         NavigationStack(path: $path) {
             HomeView(
-                onSearchTapped:  { path.append(.findRides) },
-                onCarpoolTapped: { path.append(.findRides) },
-                onOpenRoute:     { id in path.append(.routeDetails(routeId: id)) }
+                onSearchTapped:       { path.append(.findRides) },
+                onCarpoolTapped:      { path.append(.findRides) },
+                onOpenRoute:          { id in path.append(.routeDetails(routeId: id)) },
+                onOpenNotifications:  { path.append(.notifications) }
             )
             .appRouteDestinations(
                 path: $path,
@@ -52,6 +53,10 @@ struct HomeView: View {
     /// the shared `AppRoute.routeDetails(...)` without HomeView needing
     /// to know what comes next.
     var onOpenRoute: (String) -> Void = { _ in }
+    /// Bell button → push notifications. Wired now that NotificationsView
+    /// lives in `AppRoute`; previously this fell through to the
+    /// "Coming soon" alert because there was no path to push.
+    var onOpenNotifications: () -> Void = {}
 
     @State private var showComingSoonFor: String? = nil
 
@@ -144,9 +149,7 @@ struct HomeView: View {
                         .foregroundColor(.white)
                     }
                     Spacer(minLength: 0)
-                    Button {
-                        showComingSoonFor = "Notifications"
-                    } label: {
+                    Button(action: onOpenNotifications) {
                         Image(systemName: "bell")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.white)

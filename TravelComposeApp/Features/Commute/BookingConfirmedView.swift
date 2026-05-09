@@ -196,11 +196,15 @@ struct BookingConfirmedView: View {
         let color: Color
     }
 
+    /// Generic CTAs anchored on the actual booking. Earlier copy
+    /// referenced specific times ("Daily 7:42 AM") and seats ("1 seat
+    /// left") that were aspirational; keeping the list cards but with
+    /// honest, action-shaped subtitles instead.
     private var items: [NextRow] {
         [
-            .init(icon: "📍", title: "Add a backup pickup", subtitle: "In case you miss the LRT — set SS15 as fallback", color: VPalette.accent),
-            .init(icon: "📅", title: "Sync to your calendar", subtitle: "Daily 7:42 AM events with the driver's number", color: VPalette.secondary),
-            .init(icon: "👥", title: "Invite a colleague", subtitle: "\(driverName) has 1 seat left — send a referral", color: VPalette.primary)
+            .init(icon: "📍", title: "Add a backup pickup", subtitle: "Set a fallback in case you miss \(pickup)", color: VPalette.accent),
+            .init(icon: "📅", title: "Sync to your calendar", subtitle: "Pickup events with the driver's contact info", color: VPalette.secondary),
+            .init(icon: "👥", title: "Invite a colleague", subtitle: "Refer someone to ride with \(driverName)", color: VPalette.primary)
         ]
     }
 

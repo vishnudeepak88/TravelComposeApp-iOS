@@ -346,79 +346,8 @@ struct VToggle: View {
     }
 }
 
-/// Faux map background with grid + diagonal road + pickup/drop pins.
-struct VMapPlaceholder: View {
-    enum Tone { case teal, indigo, cream, dark }
-    var tone: Tone = .teal
-    var label: String? = "Map"
-    var height: CGFloat = 180
-
-    private var palette: (bg: Color, line: Color, pin: Color, road: Color) {
-        switch tone {
-        case .teal:   return (Color(hex: 0xDBEAE3), Color(hex: 0xBCD1C8), VPalette.primary, Color(hex: 0x9BB5AB))
-        case .indigo: return (Color(hex: 0xE6E3F2), Color(hex: 0xCDC9E0), Color(hex: 0x3B2F73), Color(hex: 0xA89DC4))
-        case .cream:  return (Color(hex: 0xF1EDE4), Color(hex: 0xDFD9CB), Color(hex: 0x1A1A1A), Color(hex: 0xBDB6A4))
-        case .dark:   return (Color(hex: 0x1A2226), Color(hex: 0x293439), Color(hex: 0x7CE0D1), Color(hex: 0x384850))
-        }
-    }
-
-    var body: some View {
-        let p = palette
-        ZStack(alignment: .bottomTrailing) {
-            p.bg
-
-            // Grid
-            Canvas { ctx, size in
-                let step: CGFloat = 42
-                var gridPath = Path()
-                var x: CGFloat = 0
-                while x < size.width { gridPath.move(to: .init(x: x, y: 0)); gridPath.addLine(to: .init(x: x, y: size.height)); x += step }
-                var y: CGFloat = 0
-                while y < size.height { gridPath.move(to: .init(x: 0, y: y)); gridPath.addLine(to: .init(x: size.width, y: y)); y += step }
-                ctx.stroke(gridPath, with: .color(p.line), lineWidth: 1)
-
-                // Diagonal road (rough quadratic curve)
-                var road = Path()
-                let h = size.height
-                let w = size.width
-                road.move(to: .init(x: -10, y: h * 0.7))
-                road.addQuadCurve(to: .init(x: w * 0.5, y: h * 0.85), control: .init(x: w * 0.2, y: h * 0.5))
-                road.addQuadCurve(to: .init(x: w + 10, y: h * 0.45), control: .init(x: w * 0.8, y: h * 0.95))
-                ctx.stroke(road, with: .color(p.road.opacity(0.7)), style: StrokeStyle(lineWidth: 14, lineCap: .round))
-                ctx.stroke(road, with: .color(p.bg.opacity(0.9)), style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [6, 8]))
-            }
-
-            // Pickup pin (circle, lower-left)
-            GeometryReader { geo in
-                ZStack {
-                    Circle()
-                        .fill(p.pin)
-                        .frame(width: 16, height: 16)
-                        .overlay(Circle().stroke(.white, lineWidth: 3))
-                        .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-                        .position(x: geo.size.width * 0.18, y: geo.size.height * 0.55)
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(p.pin)
-                        .frame(width: 18, height: 18)
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(.white, lineWidth: 3))
-                        .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
-                        .position(x: geo.size.width * 0.78, y: geo.size.height * 0.32)
-                }
-            }
-
-            if let label {
-                Text(label.uppercased())
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .tracking(0.5)
-                    .foregroundColor(p.pin.opacity(0.55))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-            }
-        }
-        .frame(height: height)
-        .clipShape(Rectangle())
-    }
-}
+// (Legacy `VMapPlaceholder` removed — every callsite now uses
+// `VRouteDiagram` from `Core/RouteDiagram.swift`.)
 
 // MARK: - Tab bar (custom, replaces the native TabView pill design)
 

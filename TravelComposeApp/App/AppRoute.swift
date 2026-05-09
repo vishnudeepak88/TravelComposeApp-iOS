@@ -140,11 +140,14 @@ struct AppRouteDestinations: ViewModifier {
                     isDriver: isDriver,
                     onBack: { if !path.isEmpty { path.removeLast() } },
                     onMessageDriver: nil,
-                    onEndTrip: {
+                    onEndTrip: { initial, name, summary in
+                        // Real driver/route values from LiveTrip's
+                        // store lookup — were previously hardcoded
+                        // to "A / Aiman / Subang Jaya → KLCC".
                         path.append(.rateRide(
-                            driverInitial: "A",
-                            driverName: "Aiman",
-                            summary: "Subang Jaya → KLCC"
+                            driverInitial: initial,
+                            driverName: name,
+                            summary: summary
                         ))
                     }
                 )

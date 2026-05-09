@@ -1,13 +1,21 @@
 import SwiftUI
 
 // MARK: - Trip History (mirrors TripHistoryScreen.jsx)
+//
+// Reads from `store.payments` instead of the old hardcoded reel.
+// Each PaymentRecord row maps to a Trip; refunded payments display
+// as cancelled. Where the backend doesn't yet thread richer fields
+// (driver name, duration), we degrade to short placeholders rather
+// than inventing data — earlier deep audit flagged hardcoded data
+// as the single biggest user-facing risk.
 
 struct TripHistoryView: View {
+    @Environment(AppStore.self) private var store
     var onBack: () -> Void
     var onOpenReceipt: (String) -> Void
 
     private struct Trip: Identifiable {
-        let id = UUID()
+        let id: String
         let dow: String
         let day: String
         let mo: String
@@ -20,24 +28,49 @@ struct TripHistoryView: View {
         let receiptId: String?
     }
 
-    private let trips: [Trip] = [
-        .init(dow: "FRI", day: "14", mo: "JUN", route: "Subang → KLCC", driver: "Aiman Z.", price: "RM 14", dur: "52 min", rating: 5, cancelled: false, receiptId: "VG-412-0614"),
-        .init(dow: "THU", day: "13", mo: "JUN", route: "KLCC → Subang", driver: "Aiman Z.", price: "RM 14", dur: "1h 02m", rating: 5, cancelled: false, receiptId: "VG-412-0613"),
-        .init(dow: "WED", day: "12", mo: "JUN", route: "Subang → KLCC", driver: "Aiman Z.", price: "RM 0",  dur: "—",      rating: 0, cancelled: true,  receiptId: nil),
-        .init(dow: "TUE", day: "11", mo: "JUN", route: "Subang → KLCC", driver: "Aiman Z.", price: "RM 14", dur: "58 min", rating: 4, cancelled: false, receiptId: "VG-412-0611"),
-        .init(dow: "MON", day: "10", mo: "JUN", route: "Subang → MV",   driver: "Priya S.", price: "RM 11", dur: "36 min", rating: 5, cancelled: false, receiptId: "VG-204-0610")
-    ]
+    /// Map a `PaymentRecord` to a display row. Falls back gracefully
+    /// when the route lookup fails — we still show the date and amount
+    /// so the user has *some* context.
+    private var trips: [Trip] {
+        store.payments.map { p in
+            let route = p.routeId.flatMap { id in store.routes.first { $0.id == id } }
+            let routeLabel: String = {
+                if let r = route { return "\(shortStop(r.startLocation)) → \(shortStop(r.endLocation)) " }
+                return p.tier?.capitalized ?? "Voygo subscription"
+            }()
+            let driverLabel = route?.driverName.isEmpty == false
+                ? route!.driverName
+                : "Driver"
+            let dow = weekdayShort(p.createdAt).uppercased()
+            let day = String(Calendar.current.component(.day, from: p.createdAt))
+            let mo  = monthShort(p.createdAt).uppercased()
+            let amount = "RM \(p.amountMyr)"
+            let cancelled = p.status == .refunded || p.status == .failed
+            return Trip(
+                id:       p.id,
+                dow:      dow,
+                day:      day,
+                mo:       mo,
+                route:    routeLabel.trimmingCharacters(in: .whitespaces),
+                driver:   "\(driverLabel) · \(p.tier?.lowercased() ?? "ride")",
+                price:    cancelled ? "—" : amount,
+                dur:      "—",
+                rating:   0, // No rating storage on the payment row yet.
+                cancelled: cancelled,
+                receiptId: cancelled ? nil : p.id
+            )
+        }
+    }
 
-    // "Receipts" was identical to "Completed" because every completed
-    // row has a receipt — dropped to remove the redundant chip.
     private let filters = ["All", "Completed", "Cancelled"]
     @State private var filter = "All"
+    @State private var isRefreshing = false
 
     var body: some View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Trip History", kicker: "Last 30 days · 18 trips", onBack: onBack)
+                VPolishedNavBar(title: "Trip History", kicker: tripsKicker, onBack: onBack)
 
                 summary
                     .padding(.horizontal, 16).padding(.bottom, 12)
@@ -67,9 +100,16 @@ struct TripHistoryView: View {
                         if filteredTrips.isEmpty {
                             VStack(spacing: 8) {
                                 Image(systemName: "tray").font(.system(size: 32)).foregroundColor(VPalette.textHint)
-                                Text("No trips match this filter")
+                                Text(emptyStateTitle)
                                     .font(.system(size: 13, weight: .heavy))
                                     .foregroundColor(VPalette.textSec)
+                                if trips.isEmpty {
+                                    Text("Your completed and cancelled trips will appear here.")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(VPalette.textHint)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 40)
+                                }
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 40)
@@ -78,9 +118,25 @@ struct TripHistoryView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 40)
                 }
+                .refreshable {
+                    isRefreshing = true
+                    await store.refreshPayments()
+                    isRefreshing = false
+                }
             }
         }
         .navigationBarHidden(true)
+        .task {
+            // Pull payments on open so the user sees real data even
+            // if the global refresh hasn't fired yet (e.g. they jumped
+            // straight to TripHistory from a deep link).
+            await store.refreshPayments()
+        }
+    }
+
+    private var emptyStateTitle: String {
+        if trips.isEmpty { return "No trips yet" }
+        return "No trips match this filter"
     }
 
     /// Filter chip → predicate. "Receipts" used to live here but was
@@ -96,10 +152,60 @@ struct TripHistoryView: View {
 
     private var summary: some View {
         HStack(spacing: 8) {
-            stat("Total", value: "RM 252", color: VPalette.primary)
-            stat("Saved", value: "RM 168", color: VPalette.success)
-            stat("On-time", value: "94%", color: VPalette.accent)
+            stat("Total",   value: "RM \(totalCharged)",  color: VPalette.primary)
+            stat("Trips",   value: "\(completedCount)",     color: VPalette.success)
+            stat("Refunded", value: "RM \(totalRefunded)", color: VPalette.accent)
         }
+    }
+
+    /// Sum of paid + pending charges (i.e. money out of the rider's
+    /// wallet over the visible window).
+    private var totalCharged: Int {
+        store.payments
+            .filter { $0.status == .paid || $0.status == .pending }
+            .map(\.amountMyr)
+            .reduce(0, +)
+    }
+
+    private var totalRefunded: Int {
+        store.payments
+            .filter { $0.status == .refunded }
+            .map(\.amountMyr)
+            .reduce(0, +)
+    }
+
+    private var completedCount: Int {
+        store.payments.filter { $0.status == .paid }.count
+    }
+
+    /// Honest count for the kicker: actual rows the user is looking at.
+    /// Previously hardcoded to "18 trips" regardless of state.
+    private var tripsKicker: String {
+        let n = trips.count
+        switch n {
+        case 0: return "No trips yet"
+        case 1: return "1 trip"
+        default: return "\(n) trips"
+        }
+    }
+
+    private func shortStop(_ raw: String) -> String {
+        let trimmed = raw.split(separator: ",").first.map(String.init) ?? raw
+        return trimmed.trimmingCharacters(in: .whitespaces)
+    }
+
+    private func monthShort(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_MY")
+        f.dateFormat = "MMM"
+        return f.string(from: date)
+    }
+
+    private func weekdayShort(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_MY")
+        f.dateFormat = "EEE"
+        return f.string(from: date)
     }
 
     private func stat(_ label: String, value: String, color: Color) -> some View {

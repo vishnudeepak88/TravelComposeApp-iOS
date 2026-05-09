@@ -21,53 +21,65 @@ struct NotificationsView: View {
         let items: [Notif]
     }
 
-    private let groups: [Group] = [
-        Group(label: "Today", items: [
-            Notif(icon: "car.fill",      color: VPalette.primary,   title: "Aiman is on the way",         subtitle: "ETA 7:42 AM at USJ 9 LRT · Tesla VEC 4123",  time: "2m",  unread: true),
-            Notif(icon: "shield.fill",   color: VPalette.success,   title: "Ride completed",              subtitle: "Subang → KLCC · RM 11.50 charged",            time: "1h",  unread: true),
-            Notif(icon: "bubble.left.fill", color: VPalette.accent, title: "New message from Priya S.",   subtitle: "Thanks for the smooth ride yesterday!",        time: "4h",  unread: false)
-        ]),
-        Group(label: "Yesterday", items: [
-            Notif(icon: "clock.fill",    color: VPalette.warning,   title: "Pickup reminder",             subtitle: "Tomorrow 7:42 AM · USJ 9 LRT",                time: "10h", unread: false),
-            Notif(icon: "shield.fill",   color: VPalette.success,   title: "DuitNow payout received",     subtitle: "RM 312 credited to Maybank ··4221",            time: "1d",  unread: false)
-        ]),
-        Group(label: "This week", items: [
-            Notif(icon: "person.2.fill", color: VPalette.secondary, title: "Driver Aiman updated route",  subtitle: "New pickup added: Subang Mewah · 7:56",        time: "Tue", unread: false),
-            Notif(icon: "heart.fill",    color: VPalette.accent,    title: "Marcus referred you to Voygo", subtitle: "You both earned RM 15 in credits",            time: "Mon", unread: false)
-        ])
-    ]
+    /// Empty until the backend exposes `/users/me/notifications`.
+    /// The hardcoded reel ("Aiman is on the way", "Marcus referred
+    /// you to Voygo") looked real on a fresh install — including
+    /// fake driver names and amounts. Better to render an honest
+    /// empty state than show the wrong driver to a real user.
+    private let groups: [Group] = []
+    @State private var allRead: Bool = false
 
     var body: some View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
                 VPolishedNavBar(title: "Notifications", onBack: onBack) {
-                    Text("Mark all read")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(VPalette.primary)
+                    // Real Button (was a plain Text). No-ops while the
+                    // groups list is empty; flips local `allRead` state
+                    // and would call `/notifications/read-all` once the
+                    // backend lands.
+                    Button {
+                        allRead = true
+                    } label: {
+                        Text("Mark all read")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(groups.isEmpty ? VPalette.textHint : VPalette.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(groups.isEmpty)
+                    .accessibilityLabel("Mark all notifications as read")
                 }
 
-                ScrollView {
-                    VStack(spacing: 18) {
-                        ForEach(groups) { g in
-                            VStack(alignment: .leading, spacing: 8) {
-                                VKicker(text: g.label).padding(.horizontal, 4)
-                                VStack(spacing: 0) {
-                                    ForEach(Array(g.items.enumerated()), id: \.element.id) { idx, n in
-                                        notifRow(n)
-                                        if idx < g.items.count - 1 {
-                                            Rectangle().fill(VPalette.border).frame(height: 1)
+                if groups.isEmpty {
+                    EmptyStateView(
+                        icon: "bell.slash",
+                        title: "No notifications yet",
+                        subtitle: "Ride updates, pickup reminders, and chat alerts will appear here."
+                    )
+                    .frame(maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(spacing: 18) {
+                            ForEach(groups) { g in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    VKicker(text: g.label).padding(.horizontal, 4)
+                                    VStack(spacing: 0) {
+                                        ForEach(Array(g.items.enumerated()), id: \.element.id) { idx, n in
+                                            notifRow(n)
+                                            if idx < g.items.count - 1 {
+                                                Rectangle().fill(VPalette.border).frame(height: 1)
+                                            }
                                         }
                                     }
+                                    .background(VPalette.surface)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
                                 }
-                                .background(VPalette.surface)
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
                             }
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 40)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 40)
                 }
             }
         }

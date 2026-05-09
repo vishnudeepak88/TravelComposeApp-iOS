@@ -81,11 +81,15 @@ struct ReceiptView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         VStack(alignment: .leading, spacing: 1) {
                             VKicker(text: "Pickup · \(pickupTimeString)", color: VPalette.success, size: 10)
-                            Text("USJ 9 LRT, Subang Jaya").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                            // Real pickup label from the resolved route;
+                            // honest "—" placeholder when the backend
+                            // hasn't threaded the address into the
+                            // payment row yet.
+                            Text(pickupLabel).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
                         }
                         VStack(alignment: .leading, spacing: 1) {
                             VKicker(text: "Drop · \(dropTimeString)", color: VPalette.primary, size: 10)
-                            Text("KLCC Tower B, Kuala Lumpur").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                            Text(dropoffLabel).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
                         }
                     }
                     Spacer(minLength: 0)
@@ -95,15 +99,18 @@ struct ReceiptView: View {
                 DashedLine().padding(.vertical, 16)
 
                 HStack(spacing: 10) {
-                    VAvatar(initial: "A", size: 36)
+                    VAvatar(initial: driverInitial, size: 36)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("Aiman Z.").font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.text)
-                        Text("Tesla Model 3 · VEC 4123").font(.system(size: 10)).foregroundColor(VPalette.textSec)
+                        Text(driverDisplayName).font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.text)
+                        Text(vehicleLabel).font(.system(size: 10)).foregroundColor(VPalette.textSec)
                     }
                     Spacer()
-                    HStack(spacing: 3) {
-                        Image(systemName: "star.fill").foregroundColor(VPalette.starGold).font(.system(size: 12))
-                        Text("5.0").font(.system(size: 12, weight: .bold)).foregroundColor(VPalette.text)
+                    if let rating = driverRating {
+                        HStack(spacing: 3) {
+                            Image(systemName: "star.fill").foregroundColor(VPalette.starGold).font(.system(size: 12))
+                            Text(String(format: "%.1f", rating))
+                                .font(.system(size: 12, weight: .bold)).foregroundColor(VPalette.text)
+                        }
                     }
                 }
 
@@ -215,6 +222,45 @@ struct ReceiptView: View {
     private var totalChargedString: String {
         guard let p = payment else { return "—" }
         return "RM \(p.amountMyr).00"
+    }
+
+    /// Resolves the route from `payment.routeId`. Nil when the
+    /// payment isn't tied to a route (e.g. a cancellation refund) or
+    /// the route has been removed from the local store.
+    private var resolvedRoute: RecurringRoute? {
+        guard let routeId = payment?.routeId else { return nil }
+        return store.routes.first { $0.id == routeId }
+    }
+
+    private var pickupLabel: String {
+        resolvedRoute?.pickupPoints.first?.label ?? "—"
+    }
+
+    private var dropoffLabel: String {
+        resolvedRoute?.dropPoints.first?.label ?? "—"
+    }
+
+    private var driverDisplayName: String {
+        let n = resolvedRoute?.driverName.trimmingCharacters(in: .whitespaces) ?? ""
+        return n.isEmpty ? "Driver" : n
+    }
+
+    private var driverInitial: String {
+        String(driverDisplayName.prefix(1)).uppercased()
+    }
+
+    /// Vehicle line; reads `carType.label` until the model carries
+    /// plate info. Honest "—" when no route was found.
+    private var vehicleLabel: String {
+        guard let r = resolvedRoute else { return "—" }
+        return "\(r.carType.label) · plate on file"
+    }
+
+    /// Driver's average rating from the route's reliability bundle.
+    /// Nil when the route lookup failed; the star row is hidden.
+    private var driverRating: Double? {
+        let v = resolvedRoute?.reliability.averageRating ?? 0
+        return v > 0 ? v : nil
     }
 
     private var paymentMethodString: String {

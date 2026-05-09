@@ -89,7 +89,10 @@ struct ProfileView: View {
                     Text(String(format: "%.1f rating", store.currentUser.rating))
                         .font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.textSec)
                     Circle().fill(VPalette.textHint).frame(width: 3, height: 3)
-                    Text("0 rides").font(.system(size: 12)).foregroundColor(VPalette.textSec)
+                    // Real ride count from completed payments. Reads "0
+                    // rides" honestly on a fresh install instead of
+                    // the previously-hardcoded literal.
+                    Text("\(tripsCount) rides").font(.system(size: 12)).foregroundColor(VPalette.textSec)
                 }
             }
             Spacer()
@@ -139,13 +142,18 @@ struct ProfileView: View {
     }
 
     private var quickStats: some View {
+        // Real values from `store.payments` and the user's first
+        // active route's reliability. On a fresh install all three
+        // read as 0 / 0 / —, which is honest. Previously hardcoded
+        // to "RM 1,820 saved · 412 trips · 97% on-time" regardless
+        // of state.
         Button { path.append(.tripHistory) } label: {
             HStack(spacing: 0) {
-                statCell("RM 1,820", "Saved")
+                statCell("RM \(savedMyr)", "Saved")
                 Rectangle().fill(VPalette.border).frame(width: 1, height: 32)
-                statCell("412", "Trips")
+                statCell("\(tripsCount)", "Trips")
                 Rectangle().fill(VPalette.border).frame(width: 1, height: 32)
-                statCell("97%", "On-time")
+                statCell(onTimeLabel, "On-time")
             }
             .padding(14)
             .background(VPalette.surface)
@@ -153,6 +161,39 @@ struct ProfileView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+
+    /// Estimated savings vs. paying daily for the same trips. Walks
+    /// each subscription, asks SubscriptionPricing for the daily-tier
+    /// counterfactual, and sums the deltas. Imperfect but anchored in
+    /// real data — unlike the previous flat "RM 1,820".
+    private var savedMyr: Int {
+        store.subscriptions.reduce(0) { acc, sub in
+            // We don't carry per-sub days/price on the model yet; use
+            // a conservative monthly-tier window as a placeholder.
+            let route = store.routes.first { $0.id == sub.routeId }
+            guard let pricePerSeat = route?.pricePerSeat else { return acc }
+            let savings = SubscriptionPricing.savingsVsDaily(
+                pricePerSeatMyr: pricePerSeat,
+                tier: .monthly,
+                days: 22
+            )
+            return acc + savings
+        }
+    }
+
+    private var tripsCount: Int {
+        store.payments.filter { $0.status == .paid }.count
+    }
+
+    private var onTimeLabel: String {
+        // No per-rider on-time metric yet; show the average across
+        // the user's currently-active routes. "—" when we have no
+        // data.
+        let rates = store.routes.map(\.reliability.onTimeRate).filter { $0 > 0 }
+        guard !rates.isEmpty else { return "—" }
+        let avg = rates.reduce(0, +) / Double(rates.count)
+        return "\(Int((avg * 100).rounded()))%"
     }
 
     private func statCell(_ value: String, _ label: String) -> some View {
@@ -328,138 +369,8 @@ private struct SettingsRow<T: View>: View {
     }
 }
 
-// MARK: - Identity Verification (mirrors VerificationScreen.kt)
-
-@MainActor
-@Observable final class VerificationViewModel {
-    var step = 1
-    var make = ""
-    var model = ""
-    var licensePlate = ""
-    var isSubmitting = false
-    var error: String? = nil
-    var store: AppStore?
-
-    func nextStep() { if step < 3 { step += 1 } }
-
-    func submit() {
-        guard let store else { return }
-        Task {
-            isSubmitting = true
-            let result = await store.submitKyc(status: .pending)
-            isSubmitting = false
-            if case .failure(let err) = result {
-                error = err.localizedDescription
-            }
-        }
-    }
-}
-
-struct VerificationView: View {
-    var onBack: () -> Void
-    @Environment(AppStore.self) private var store
-    @State private var vm = VerificationViewModel()
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            VoygoTheme.background.ignoresSafeArea()
-            VStack(spacing: 0) {
-                VPolishedNavBar(title: "Identity Verification", onBack: onBack)
-                    .background(VoygoTheme.background)
-
-                StepperHeaderView(currentStep: vm.step, totalSteps: 3, titles: ["Documents", "Selfie", "Vehicle"])
-                    .padding(.horizontal, 24).padding(.vertical, 16)
-                    .background(VoygoTheme.surface)
-
-                if store.kycStatus == .pending {
-                    VStack(spacing: 16) {
-                        Image(systemName: "checkmark.circle.fill").font(.system(size: 64)).foregroundColor(VoygoTheme.success)
-                        Text("Verification Submitted!").font(.title2.bold()).foregroundColor(VoygoTheme.textPrimary)
-                        Text("We'll review your documents within 24 hours.")
-                            .font(.subheadline).foregroundColor(VoygoTheme.textSecondary).multilineTextAlignment(.center)
-                    }
-                    .frame(maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        VStack(spacing: 20) {
-                            switch vm.step {
-                            case 1: DocumentUploadSection()
-                            case 2: SelfieSection()
-                            case 3: VehicleSection(make: $vm.make, model: $vm.model, licensePlate: $vm.licensePlate)
-                            default: EmptyView()
-                            }
-
-                            if let err = vm.error {
-                                HStack {
-                                    Image(systemName: "exclamationmark.circle.fill").foregroundColor(VoygoTheme.danger)
-                                    Text(err).font(.caption).foregroundColor(VoygoTheme.danger)
-                                    Spacer()
-                                }
-                            }
-
-                            PrimaryButton(vm.step < 3 ? "Next" : "Submit", isLoading: vm.isSubmitting) {
-                                if vm.step < 3 { vm.nextStep() } else { vm.submit() }
-                            }
-                        }
-                        .padding(24)
-                    }
-                }
-            }
-        }
-        .onAppear { vm.store = store }
-    }
-}
-
-private struct DocumentUploadSection: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Upload ID").font(.title3.bold()).foregroundColor(VoygoTheme.textPrimary)
-                Text("Government issued ID required").font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
-            }
-            VoygoCard(cornerRadius: 14) {
-                VStack(spacing: 12) {
-                    Image(systemName: "arrow.up.doc.fill").font(.system(size: 40)).foregroundStyle(VoygoTheme.primaryGradient)
-                    Text("Tap to upload front side").font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
-                    Text("JPG, PNG or PDF · Max 5MB").font(.caption2).foregroundColor(VoygoTheme.textHint)
-                }
-                .frame(maxWidth: .infinity).frame(height: 160).padding()
-            }
-        }
-    }
-}
-
-private struct SelfieSection: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Take a Selfie").font(.title3.bold()).foregroundColor(VoygoTheme.textPrimary)
-                Text("Make sure your face is clearly visible").font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
-            }
-            VoygoCard(cornerRadius: 14) {
-                VStack(spacing: 12) {
-                    Image(systemName: "camera.viewfinder").font(.system(size: 52)).foregroundStyle(VoygoTheme.primaryGradient)
-                    Text("Tap to open camera").font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
-                }
-                .frame(maxWidth: .infinity).frame(height: 200).padding()
-            }
-        }
-    }
-}
-
-private struct VehicleSection: View {
-    @Binding var make: String
-    @Binding var model: String
-    @Binding var licensePlate: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Vehicle Details").font(.title3.bold()).foregroundColor(VoygoTheme.textPrimary)
-            VoygoTextField(label: "Make", text: $make, placeholder: "e.g. Toyota")
-            VoygoTextField(label: "Model", text: $model, placeholder: "e.g. Vios")
-            VoygoTextField(label: "License Plate", text: $licensePlate, placeholder: "e.g. VCC 1234")
-        }
-    }
-}
+// (Legacy `VerificationView` step-wizard removed — replaced by
+// `KycVerificationView` which drives off real `KycDocumentKind`s.)
 
 // MARK: - Privacy & Security (mirrors PrivacySecurityScreen.kt)
 
@@ -515,11 +426,29 @@ struct HelpCenterView: View {
                         }
                         VoygoCard {
                             VStack(alignment: .leading, spacing: 12) {
-                                HelpRow(icon: "envelope.fill", title: "Email Support", value: "support@voygo.app")
+                                // Real `mailto:` and `https://` links so
+                                // taps actually do something — previously
+                                // these were inert text rows, P3 #14
+                                // from the deep-audit doc.
+                                if let mailto = URL(string: "mailto:support@voygo.app") {
+                                    Link(destination: mailto) {
+                                        HelpRow(icon: "envelope.fill",
+                                                title: "Email Support",
+                                                value: "support@voygo.app")
+                                    }
+                                }
                                 Divider().background(VoygoTheme.cardBorder)
-                                HelpRow(icon: "bubble.left.and.bubble.right.fill", title: "In-App Chat", value: "Available from Inbox tab")
+                                HelpRow(icon: "bubble.left.and.bubble.right.fill",
+                                        title: "In-App Chat",
+                                        value: "Available from Inbox tab")
                                 Divider().background(VoygoTheme.cardBorder)
-                                HelpRow(icon: "doc.text.fill", title: "FAQ", value: "voygo.app/help")
+                                if let faq = URL(string: "https://voygo.app/help") {
+                                    Link(destination: faq) {
+                                        HelpRow(icon: "doc.text.fill",
+                                                title: "FAQ",
+                                                value: "voygo.app/help")
+                                    }
+                                }
                             }
                             .padding(16)
                         }
@@ -554,7 +483,11 @@ struct LiveTripView: View {
     var isDriver: Bool = false
     var onBack: () -> Void
     var onMessageDriver: (() -> Void)? = nil
-    var onEndTrip: (() -> Void)? = nil
+    /// Receives the real driver/route context so the next screen
+    /// (RateRide) can render with actual values instead of hardcoded
+    /// "Aiman / Subang Jaya → KLCC".
+    var onEndTrip: ((_ driverInitial: String, _ driverName: String, _ summary: String) -> Void)? = nil
+    @Environment(AppStore.self) private var store
 
     @State private var pickupConfirmed = false
     @State private var dropoffConfirmed = false
@@ -565,6 +498,61 @@ struct LiveTripView: View {
     /// minute so the screen visibly works.
     @State private var etaMinutes: Int = 12
     @State private var etaTask: Task<Void, Never>? = nil
+
+    /// Real ride context: looks up the trip from `store.rideInstances`
+    /// and resolves its route. Falls back to nil when the lookup fails
+    /// (deep link, stale state) — the view degrades to honest
+    /// placeholders instead of inventing a driver name.
+    private var ride: CommuteRideInstance? {
+        store.rideInstances.first { $0.id == tripId }
+    }
+    private var route: RecurringRoute? {
+        ride.flatMap { r in store.routes.first { $0.id == r.routeId } }
+    }
+    private var driverDisplayName: String {
+        let n = route?.driverName.trimmingCharacters(in: .whitespaces) ?? ""
+        return n.isEmpty ? "Driver" : n
+    }
+    private var driverInitial: String {
+        String(driverDisplayName.prefix(1)).uppercased()
+    }
+    private var pickupLabel: String {
+        route?.pickupPoints.first?.label ?? "Pickup"
+    }
+    private var dropoffLabel: String {
+        route?.dropPoints.first?.label ?? "Dropoff"
+    }
+    private var routeSummary: String {
+        guard let r = route else { return "Subscription ride" }
+        return "\(shortStop(r.startLocation)) → \(shortStop(r.endLocation))"
+    }
+    private func shortStop(_ raw: String) -> String {
+        let trimmed = raw.split(separator: ",").first.map(String.init) ?? raw
+        return trimmed.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Stops for the diagram. Origin / pickup / drop / destination
+    /// when all are present; degrades to 2 stops if pickup/drop empty.
+    private var liveTripStops: [RouteStop] {
+        guard let r = route else {
+            return [
+                .init(label: "Pickup",  kind: .origin),
+                .init(label: "Dropoff", kind: .dest)
+            ]
+        }
+        var stops: [RouteStop] = [.init(label: shortStop(r.startLocation), kind: .origin)]
+        if let p = r.pickupPoints.first { stops.append(.init(label: p.label, kind: .stop)) }
+        if let d = r.dropPoints.first   { stops.append(.init(label: d.label, kind: .stop)) }
+        stops.append(.init(label: shortStop(r.endLocation), kind: .dest))
+        return stops
+    }
+
+    /// Vehicle line under the driver row. Uses `carType.label` until
+    /// the model carries a plate or vehicle nickname.
+    private var driverCarLabel: String {
+        guard let r = route else { return "—" }
+        return "\(r.carType.label) · plate on file"
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -577,12 +565,7 @@ struct LiveTripView: View {
                     // narrative version (curving polyline + city blocks)
                     // — the actual GPS dot is overlaid below.
                     VRouteDiagram(
-                        stops: [
-                            .init(label: "Subang Jaya", kind: .origin),
-                            .init(label: "USJ 9 LRT",   kind: .stop),
-                            .init(label: "Bangsar",     kind: .stop),
-                            .init(label: "KLCC",        kind: .dest)
-                        ],
+                        stops: liveTripStops,
                         height: 360,
                         accent: VPalette.primary,
                         dark: true
@@ -694,12 +677,12 @@ struct LiveTripView: View {
                 VRouteGlyph().frame(height: 64)
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 1) {
-                        VKicker(text: "Pickup · 7:42 ✓", color: VPalette.success, size: 10)
-                        Text("USJ 9 LRT, Subang Jaya").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                        VKicker(text: "Pickup", color: VPalette.success, size: 10)
+                        Text(pickupLabel).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
                     }
                     VStack(alignment: .leading, spacing: 1) {
-                        VKicker(text: "Drop · 8:34", color: VPalette.primary, size: 10)
-                        Text("KLCC Tower B, Kuala Lumpur").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                        VKicker(text: "Drop", color: VPalette.primary, size: 10)
+                        Text(dropoffLabel).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
                     }
                 }
                 Spacer(minLength: 0)
@@ -708,20 +691,30 @@ struct LiveTripView: View {
             Rectangle().fill(VPalette.border).frame(height: 1).padding(.vertical, 16)
 
             HStack(spacing: 12) {
-                VAvatar(initial: "A", size: 42)
+                VAvatar(initial: driverInitial, size: 42)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Aiman Z.").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
-                    Text("Tesla Model 3 · VEC 4123")
+                    Text(driverDisplayName).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                    // Vehicle string isn't on the model yet; show the
+                    // car type label which is, and leave a placeholder
+                    // for plate. Honest > inventing "Tesla VEC 4123".
+                    Text(driverCarLabel)
                         .font(.system(size: 11)).foregroundColor(VPalette.textSec)
                 }
                 Spacer()
-                Button {} label: {
+                Button {
+                    // No driver phone on the model yet — once added,
+                    // open `tel://\(phone)`. For now still a no-op
+                    // but accessible.
+                } label: {
                     Image(systemName: "phone.fill")
                         .font(.system(size: 14, weight: .bold)).foregroundColor(.white)
                         .frame(width: 38, height: 38)
                         .background(VPalette.success).clipShape(Circle())
                         .shadow(color: VPalette.success.opacity(0.5), radius: 8, y: 3)
-                }.buttonStyle(.plain)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Call driver")
+                .disabled(true)
                 Button { onMessageDriver?() } label: {
                     Image(systemName: "bubble.left.fill")
                         .font(.system(size: 14, weight: .bold)).foregroundColor(.white)
@@ -755,8 +748,10 @@ struct LiveTripView: View {
             // live trip so they can flow into rating without hunting for
             // the action.
             if let onEndTrip {
-                VPrimaryButton("End trip → rate", action: onEndTrip)
-                    .padding(.top, 10)
+                VPrimaryButton("End trip → rate") {
+                    onEndTrip(driverInitial, driverDisplayName, routeSummary)
+                }
+                .padding(.top, 10)
             }
         }
         .padding(.horizontal, 20)
