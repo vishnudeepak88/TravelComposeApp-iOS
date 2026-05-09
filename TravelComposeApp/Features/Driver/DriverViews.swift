@@ -8,6 +8,9 @@ struct DriverDashboardView: View {
     var onBack: () -> Void
     var onOpenCalendar: (String) -> Void
     var onOpenPayouts: (() -> Void)? = nil
+    /// Empty-state CTA — drills the driver into the create-route flow
+    /// so "No routes yet" stops being a dead-end.
+    var onCreateRoute: (() -> Void)? = nil
 
     @State private var actionResult: String? = nil
     @State private var actionError: String? = nil
@@ -69,8 +72,10 @@ struct DriverDashboardView: View {
                         .padding(.vertical, 16)
                     }
                 } else if dashboards.isEmpty {
-                    EmptyStateView(icon: "car.badge.plus", title: "No routes yet",
-                                   subtitle: "Create your first recurring route to start picking up riders")
+                    EmptyStateView(icon: "car.badge.plus", title: S.driverEmptyTitle,
+                                   subtitle: S.driverEmptyBody,
+                                   ctaLabel: onCreateRoute != nil ? S.driverEmptyCTA : nil,
+                                   ctaAction: onCreateRoute)
                         .frame(maxHeight: .infinity)
                 } else {
                     ScrollView {

@@ -777,6 +777,28 @@ final class AppStore {
         return rideInstances.filter { $0.routeId == routeId && $0.date >= now && $0.date <= end }.sorted { $0.date < $1.date }
     }
 
+    /// Marks a single ride instance as skipped for the current rider.
+    /// Backend frees the seat and notifies the driver. Optimistically
+    /// removes the ride from the local rideInstances so the calendar
+    /// updates without waiting for a refresh; rolls back on failure.
+    func skipRide(rideInstanceId: String) async -> Result<Void, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        let snapshot = rideInstances.first(where: { $0.id == rideInstanceId })
+        rideInstances.removeAll { $0.id == rideInstanceId }
+        do {
+            _ = try await VoygoAPIClient.skipRide(rideInstanceId: rideInstanceId)
+            Telemetry.track("ride_skipped", ["ride_id": .string(rideInstanceId)])
+            return .success(())
+        } catch APIError.unauthorized {
+            if let snap = snapshot { rideInstances.append(snap) }
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            if let snap = snapshot { rideInstances.append(snap) }
+            return .failure(.from(error))
+        }
+    }
+
     func calendarItems(routeId: String? = nil) -> [CommuteRideCalendarItem] {
         let now = Calendar.current.startOfDay(for: Date())
         return rideInstances
@@ -787,7 +809,8 @@ final class AppStore {
                 let sub = subscriptions.first { $0.routeId == route.id && $0.status == .active && (routeId != nil || $0.riderId == riderId) }
                 guard let pickup = sub?.selectedPickupPoint ?? route.pickupPoints.first,
                       let drop   = sub?.selectedDropPoint  ?? route.dropPoints.first else { return nil }
-                return CommuteRideCalendarItem(date: ride.date, routeId: route.id, driverName: route.driverName,
+                return CommuteRideCalendarItem(rideInstanceId: ride.id,
+                                               date: ride.date, routeId: route.id, driverName: route.driverName,
                                                startLocation: route.startLocation, endLocation: route.endLocation,
                                                pickupPoint: pickup, dropPoint: drop, rideStatus: ride.rideStatus)
             }
@@ -1010,6 +1033,7 @@ final class AppStore {
             let response = try await VoygoAPIClient.createRoute(request: request)
             let id = response.routeId ?? response.id ?? "rr-\(UUID().uuidString)"
             replaceRoute(RecurringRoute(id: id, driverId: driverId, driverName: currentUser.name,
+                                        driverPhone: phoneNumber.isEmpty ? nil : phoneNumber,
                                         startLocation: startLocation, endLocation: endLocation,
                                         pickupPoints: pickups, dropPoints: drops, departureTime: departureTime,
                                         daysOfWeek: daysOfWeek, seatCount: seatCount, pricePerSeat: pricePerSeat,

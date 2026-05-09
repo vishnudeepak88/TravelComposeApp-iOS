@@ -73,6 +73,54 @@ enum S {
     static var homePromoKicker: String { Self.t("home.promo.kicker", "FIRST RIDE FREE") }
     static var homePromoTitle: String { Self.t("home.promo.title", "Try carpool today, save RM 14") }
 
+    // MARK: Action-required banner (Home)
+
+    static var actionRequiredOne: String { Self.t("home.actionRequired.one", "Subscription paused") }
+    static func actionRequiredMany(count: Int) -> String {
+        let template = Self.t("home.actionRequired.many", "%d subscriptions paused")
+        return String(format: template, count)
+    }
+    static var actionRequiredBody: String { Self.t("home.actionRequired.body", "Payment didn't go through. Tap to retry — your seats stay reserved until then.") }
+
+    // MARK: Skip-a-day
+
+    static var skipShort: String { Self.t("skip.label", "Skip") }
+    static var skipFailedTitle: String { Self.t("skip.failed.title", "Couldn't skip") }
+    static var skipAccessibility: String { Self.t("skip.a11y", "Skip this ride") }
+
+    // MARK: Subscriptions list
+
+    static var subscriptionsEmptyTitle: String { Self.t("subs.empty.title", "No subscriptions") }
+    static var subscriptionsEmptyBody: String { Self.t("subs.empty.body", "Search for commute routes and subscribe to start riding") }
+    static var subscriptionsEmptyCTA: String { Self.t("subs.empty.cta", "Find a route") }
+
+    // MARK: Driver dashboard
+
+    static var driverEmptyTitle: String { Self.t("driver.empty.title", "No routes yet") }
+    static var driverEmptyBody: String { Self.t("driver.empty.body", "Create your first recurring route to start picking up riders") }
+    static var driverEmptyCTA: String { Self.t("driver.empty.cta", "Create a route") }
+
+    // MARK: KYC
+
+    static var kycVerified: String { Self.t("kyc.verified", "Verified") }
+    static var kycUnderReview: String { Self.t("kyc.underReview", "Under review") }
+    static var kycNotUploaded: String { Self.t("kyc.notUploaded", "Not uploaded") }
+    static var kycUpload: String { Self.t("kyc.upload", "Upload") }
+    static var kycReplace: String { Self.t("kyc.replace", "Replace") }
+    static var kycReupload: String { Self.t("kyc.reupload", "Re-upload") }
+    static func kycRejected(reason: String) -> String {
+        let template = Self.t("kyc.rejected", "Rejected — %@")
+        return String(format: template, reason)
+    }
+
+    // MARK: Auth — Terms link copy
+
+    static var authTermsLead: String { Self.t("auth.terms.lead", "By continuing, you agree to Voygo's") }
+    static var authTermsLink: String { Self.t("auth.terms.link", "Terms") }
+    static var authTermsAnd: String { Self.t("auth.terms.and", "and") }
+    static var authPrivacyLink: String { Self.t("auth.privacy.link", "Privacy Policy") }
+    static var authSendOtp: String { Self.t("auth.sendOtp", "Send OTP") }
+
     // MARK: - Internals
 
     /// Look up a string from `Localizable.strings`, falling back to

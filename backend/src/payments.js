@@ -217,8 +217,22 @@ async function chargeSubscription(pool, { userId, subscriptionId, routeId, amoun
   });
 
   if (config.billplz.isMockMode) {
-    // In mock mode we resolve the payment immediately so the rest of the
-    // flow (subscription activation, receipts) works without external IO.
+    // SAFETY: in production a missing Billplz key would silently mark every
+    // ride paid. Refuse to do that — fail loud so ops notices instead of
+    // discovering it via a revenue ledger that doesn't match reality.
+    if (process.env.NODE_ENV === "production") {
+      console.error(
+        "[payments] BILLPLZ_API_KEY/COLLECTION_ID unset in production — refusing to mock-pay"
+      );
+      const err = new Error("payments_unconfigured");
+      err.statusCode = 503;
+      throw err;
+    }
+    // Dev only: resolve the payment immediately so the rest of the flow
+    // (subscription activation, receipts) works without external IO.
+    console.warn(
+      `[payments] mock-mode: marking payment ${paymentId} PAID without charging`
+    );
     await markPaymentPaid(pool, { paymentId });
     return {
       paymentId,

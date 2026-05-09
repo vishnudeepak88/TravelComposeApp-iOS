@@ -13,6 +13,7 @@ const {
   hashOtp,
   normalizePhone
 } = require("./auth");
+const { sendSms, smsConfigured, isProd } = require("./sms");
 const { generateRideInstances } = require("./generation");
 const { autocompletePlaces } = require("./places");
 const {
@@ -194,11 +195,33 @@ app.post(
        VALUES ($1, $2, $3, $4, $5)`,
       [crypto.randomUUID(), phone, codeHash, salt, expiresAt]
     );
-    console.log(`[auth] OTP for ${phone}: ${code} (expires ${expiresAt.toISOString()})`);
-    // TODO: integrate an SMS provider (Twilio/MessageBird). Until one is wired,
-    // the code is logged here and — when AUTH_DEV_MODE is on — echoed in the response.
+    // Hand the code to the SMS provider. In production we REQUIRE it to be
+    // configured — otherwise this endpoint is a silent no-op that breaks
+    // every new-user signup. In dev we log + echo the code.
+    if (smsConfigured()) {
+      const result = await sendSms({
+        to: phone,
+        body: `Your Voygo verification code is ${code}. It expires in 5 minutes.`
+      });
+      if (!result.ok) {
+        console.warn(`[auth] sms send failed for ${phone}: ${result.reason}`);
+        if (isProd()) {
+          res.status(502).json({ detail: "sms_provider_error" });
+          return;
+        }
+      }
+    } else if (isProd()) {
+      // Refuse to silently fall through to dev-mode in production. Better
+      // to return 503 and have ops notice than to issue an OTP only the
+      // server log can see.
+      console.error("[auth] OTP requested in production but SMS is unconfigured — refusing");
+      res.status(503).json({ detail: "sms_unconfigured" });
+      return;
+    } else {
+      console.log(`[auth] OTP for ${phone}: ${code} (expires ${expiresAt.toISOString()})`);
+    }
     const response = { sent: true, expiresAt: expiresAt.toISOString() };
-    if (config.authDevMode) response.devCode = code;
+    if (config.authDevMode && !smsConfigured()) response.devCode = code;
     res.json(response);
   })
 );
@@ -756,25 +779,173 @@ app.get(
       return;
     }
 
-    // TODO: real call to Stripe — POST /v1/accounts then POST
-    // /v1/account_links. For now we cache a stub URL and the
-    // webhook flips `payouts_enabled` once it lands.
-    const stubUrl = `${process.env.STRIPE_RETURN_URL || "https://voygo.app/drivers/onboarding"}?driver=${driverId}`;
-    await pool.query(
-      `INSERT INTO driver_stripe_accounts
-         (driver_id, onboarding_url, updated_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (driver_id) DO UPDATE
-         SET onboarding_url = EXCLUDED.onboarding_url,
-             updated_at = NOW()`,
-      [driverId, stubUrl]
+    // Real Stripe Connect Express onboarding. Two REST calls:
+    //   1) POST /v1/accounts        → creates a Connect Express account
+    //   2) POST /v1/account_links   → creates a hosted onboarding URL
+    // We persist the account id so subsequent calls re-use it; the
+    // onboarding URL itself is short-lived so a re-issue is the
+    // right choice on every PENDING fetch.
+    try {
+      let stripeAccountId = existing.rows[0]?.stripe_account_id || null;
+      if (!stripeAccountId) {
+        const acct = await stripeFetch("/v1/accounts", stripeKey, {
+          type: "express",
+          country: process.env.STRIPE_DRIVER_COUNTRY || "MY",
+          "capabilities[transfers][requested]": "true"
+        });
+        stripeAccountId = acct.id;
+      }
+      const link = await stripeFetch("/v1/account_links", stripeKey, {
+        account: stripeAccountId,
+        refresh_url: `${process.env.STRIPE_RETURN_URL || "https://voygo.app/drivers/onboarding"}?driver=${driverId}&refresh=1`,
+        return_url:  `${process.env.STRIPE_RETURN_URL || "https://voygo.app/drivers/onboarding"}?driver=${driverId}`,
+        type: "account_onboarding"
+      });
+      await pool.query(
+        `INSERT INTO driver_stripe_accounts
+           (driver_id, stripe_account_id, onboarding_url, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (driver_id) DO UPDATE
+           SET stripe_account_id = EXCLUDED.stripe_account_id,
+               onboarding_url    = EXCLUDED.onboarding_url,
+               updated_at        = NOW()`,
+        [driverId, stripeAccountId, link.url]
+      );
+      res.json({
+        state: "PENDING",
+        onboardingUrl: link.url,
+        payoutsEnabled: false,
+        detailsSubmitted: false
+      });
+    } catch (err) {
+      // Don't fabricate a fake URL on Stripe failure — return
+      // UNCONFIGURED so the iOS side shows the honest banner.
+      console.warn(`[stripe] connect onboarding failed for ${driverId}: ${err.message}`);
+      res.json({
+        state: "UNCONFIGURED",
+        onboardingUrl: process.env.STRIPE_CONFIG_HELP_URL || "https://voygo.app/drivers/payouts",
+        payoutsEnabled: false,
+        detailsSubmitted: false
+      });
+    }
+  })
+);
+
+// Minimal Stripe REST helper. Uses application/x-www-form-urlencoded as
+// Stripe requires; no SDK so we don't pull a heavyweight dep.
+function stripeFetch(path, secretKey, params) {
+  const https = require("https");
+  return new Promise((resolve, reject) => {
+    const body = new URLSearchParams(params).toString();
+    const auth = Buffer.from(`${secretKey}:`).toString("base64");
+    const req = https.request(
+      {
+        hostname: "api.stripe.com",
+        path,
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Length": Buffer.byteLength(body)
+        },
+        timeout: 10_000
+      },
+      (resp) => {
+        let chunks = "";
+        resp.on("data", (c) => { chunks += c; });
+        resp.on("end", () => {
+          try {
+            const json = JSON.parse(chunks);
+            if (resp.statusCode && resp.statusCode >= 200 && resp.statusCode < 300) {
+              resolve(json);
+            } else {
+              reject(new Error(json?.error?.message || `stripe_${resp.statusCode}`));
+            }
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }
     );
-    res.json({
-      state: "PENDING",
-      onboardingUrl: stubUrl,
-      payoutsEnabled: false,
-      detailsSubmitted: false
-    });
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("stripe_timeout")));
+    req.write(body);
+    req.end();
+  });
+}
+
+// Skip-a-day. The rider has an active subscription but wants to drop a
+// single instance (off sick, working from home, etc.). Marks the
+// passenger row SKIPPED, restores the seat, and notifies the driver so
+// they don't wait at the curb. Idempotent — calling twice is a no-op.
+app.post(
+  "/trips/:id/skip",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const rideId = req.params.id;
+    const client = await pool.connect();
+    let committed = false;
+    try {
+      await client.query("BEGIN");
+      const passengerRes = await client.query(
+        `SELECT id, status
+           FROM commute_ride_passengers
+          WHERE instance_id = $1 AND rider_id = $2
+          LIMIT 1
+          FOR UPDATE`,
+        [rideId, req.user.id]
+      );
+      if (passengerRes.rows.length === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ detail: "not_a_passenger" });
+        return;
+      }
+      if (passengerRes.rows[0].status === "SKIPPED") {
+        await client.query("ROLLBACK");
+        res.json({ ok: true, alreadySkipped: true });
+        return;
+      }
+      await client.query(
+        `UPDATE commute_ride_passengers
+            SET status = 'SKIPPED'
+          WHERE id = $1`,
+        [passengerRes.rows[0].id]
+      );
+      // Restore the seat so another rider can grab it.
+      await client.query(
+        `UPDATE commute_ride_instances
+            SET seat_availability = seat_availability + 1
+          WHERE id = $1`,
+        [rideId]
+      );
+      await client.query("COMMIT");
+      committed = true;
+
+      // Notify the driver so they don't wait. Best-effort.
+      const ride = await pool.query(
+        `SELECT r.driver_id, r.start_location, r.end_location
+           FROM commute_ride_instances i
+           JOIN recurring_routes r ON r.id = i.route_id
+          WHERE i.id = $1`,
+        [rideId]
+      );
+      const row = ride.rows[0];
+      if (row?.driver_id) {
+        await createNotification({
+          userId: row.driver_id,
+          type: "RIDER_SKIPPED",
+          title: "Rider skipped tomorrow's pickup",
+          body: `${row.start_location} → ${row.end_location}`,
+          rideInstanceId: rideId
+        });
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      if (!committed) await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   })
 );
 
@@ -1088,19 +1259,32 @@ app.put(
       return;
     }
     const body = req.body || {};
+    const newActive = normalizeActiveStatus(bodyValue(body, "activeStatus", "active_status"));
     await pool.query(
       `UPDATE recurring_routes
        SET active_status = $2
        WHERE id = $1`,
-      [routeId, normalizeActiveStatus(bodyValue(body, "activeStatus", "active_status"))]
+      [routeId, newActive]
     );
     await generateRideInstances(pool, todayIso(), 30);
-    await notifyRouteSubscribers(
-      routeId,
-      "ROUTE_STATUS_UPDATED",
-      "Route status updated",
-      "Your driver changed this route's active status."
-    );
+    // Notify riders with copy that actually says what happened — the
+    // generic "active status changed" line previously left riders
+    // guessing why their calendar suddenly went empty.
+    if (newActive) {
+      await notifyRouteSubscribers(
+        routeId,
+        "ROUTE_RESUMED",
+        "Driver resumed this route",
+        "Your scheduled pickups are back on. Check the calendar."
+      );
+    } else {
+      await notifyRouteSubscribers(
+        routeId,
+        "ROUTE_PAUSED",
+        "Driver paused this route",
+        "Upcoming pickups are cancelled while the route is paused. We'll let you know when it resumes."
+      );
+    }
     res.status(204).send();
   })
 );
@@ -1889,7 +2073,38 @@ app.post(
       [id, rideInstanceId || null, subscriptionId || null, routeId, actor, kind, penalty, notes]
     );
 
-    res.status(201).json({ id, penaltyMyr: penalty, driverId });
+    // Wire the refund ledger. A negative penalty means the rider is owed
+    // money back (mid-month cancel = pro-rated credit minus admin fee).
+    // We materialise that as a REFUNDED payment row so the wallet balance
+    // and `voygoCreditMyr` actually reflect what the cancellation policy
+    // promises, instead of the previous wishful filtering against rows
+    // that were never created.
+    let refundPaymentId = null;
+    if (actor === "RIDER" && penalty < 0 && subscriptionId) {
+      try {
+        refundPaymentId = crypto.randomUUID();
+        await pool.query(
+          `INSERT INTO payments
+             (id, user_id, subscription_id, route_id, amount_myr, status, tier, paid_at)
+           VALUES ($1, $2, $3, $4, $5, 'REFUNDED', 'REFUND', NOW())`,
+          [refundPaymentId, req.user.id, subscriptionId, routeId, Math.abs(penalty)]
+        );
+        await createNotification({
+          userId: req.user.id,
+          type: "REFUND",
+          title: "Refund issued",
+          body: `RM ${Math.abs(penalty)} credited to your Voygo wallet.`,
+          routeId,
+          subscriptionId
+        });
+      } catch (refundErr) {
+        // Don't fail the cancellation if the refund row insert blows up;
+        // ops can reconcile from the cancellation_records audit trail.
+        console.warn(`[cancellations] refund insert failed: ${refundErr.message}`);
+      }
+    }
+
+    res.status(201).json({ id, penaltyMyr: penalty, driverId, refundPaymentId });
   })
 );
 

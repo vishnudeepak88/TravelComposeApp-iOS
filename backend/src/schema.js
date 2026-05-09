@@ -130,9 +130,15 @@ async function initSchema(pool) {
       id UUID PRIMARY KEY,
       instance_id UUID NOT NULL REFERENCES commute_ride_instances(id) ON DELETE CASCADE,
       rider_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'CONFIRMED',
       CONSTRAINT uq_instance_rider UNIQUE (instance_id, rider_id)
     )
   `);
+  // Idempotent migration for installations created before the column existed.
+  await pool.query(
+    `ALTER TABLE commute_ride_passengers
+       ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'CONFIRMED'`
+  );
   await pool.query(
     "CREATE INDEX IF NOT EXISTS ix_commute_ride_passengers_instance_id ON commute_ride_passengers(instance_id)"
   );

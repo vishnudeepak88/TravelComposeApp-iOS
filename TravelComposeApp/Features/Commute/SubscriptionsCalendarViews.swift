@@ -6,6 +6,11 @@ struct MySubscriptionsView: View {
     @Environment(AppStore.self) private var store
     var onOpenRoute: (String) -> Void
     var onOpenCalendar: () -> Void
+    /// Empty-state CTA: drills the rider into the search flow so they
+    /// don't bounce off "No subscriptions" with no next step. Optional
+    /// for the compatibility of older call sites; falls back to a
+    /// no-op which hides the button.
+    var onFindRoutes: (() -> Void)? = nil
     var onBack: (() -> Void)? = nil
 
     @State private var actionError: String? = nil
@@ -58,8 +63,10 @@ struct MySubscriptionsView: View {
                         .padding(.vertical, 16)
                     }
                 } else if items.isEmpty {
-                    EmptyStateView(icon: "mappin.slash", title: "No subscriptions",
-                                   subtitle: "Search for commute routes and subscribe to start riding")
+                    EmptyStateView(icon: "mappin.slash", title: S.subscriptionsEmptyTitle,
+                                   subtitle: S.subscriptionsEmptyBody,
+                                   ctaLabel: onFindRoutes != nil ? S.subscriptionsEmptyCTA : nil,
+                                   ctaAction: onFindRoutes)
                         .frame(maxHeight: .infinity)
                 } else {
                     ScrollViewReader { proxy in
@@ -385,7 +392,20 @@ struct UpcomingCalendarView: View {
 }
 
 struct CalendarItemCard: View {
+    @Environment(AppStore.self) private var store
     let item: CommuteRideCalendarItem
+    var onSkipped: (() -> Void)? = nil
+    @State private var pendingSkip: Bool = false
+    @State private var skipError: String? = nil
+
+    /// Riders can skip future rides only — past rides are immutable
+    /// so we hide the action entirely on those rows.
+    private var canSkip: Bool {
+        item.rideInstanceId != nil &&
+        item.rideStatus == .scheduled &&
+        item.date >= Calendar.current.startOfDay(for: Date())
+    }
+
     var body: some View {
         VoygoCard {
             HStack(spacing: 14) {
@@ -413,10 +433,53 @@ struct CalendarItemCard: View {
                     }
                 }
                 Spacer()
-                StatusBadge(text: item.rideStatus.label,
-                            color: item.rideStatus == .scheduled ? VoygoTheme.success : VoygoTheme.textHint)
+                VStack(alignment: .trailing, spacing: 6) {
+                    StatusBadge(text: item.rideStatus.label,
+                                color: item.rideStatus == .scheduled ? VoygoTheme.success : VoygoTheme.textHint)
+                    if canSkip {
+                        // Skip-a-day: lets a rider drop a single instance without
+                        // cancelling their whole subscription. Frees the seat
+                        // for someone else and notifies the driver.
+                        Button {
+                            Task {
+                                pendingSkip = true
+                                let result = await store.skipRide(rideInstanceId: item.rideInstanceId!)
+                                pendingSkip = false
+                                switch result {
+                                case .success: onSkipped?()
+                                case .failure(let err): skipError = err.localizedDescription
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                if pendingSkip {
+                                    ProgressView().controlSize(.mini)
+                                } else {
+                                    Image(systemName: "calendar.badge.minus")
+                                        .font(.caption2.weight(.bold))
+                                }
+                                Text(S.skipShort)
+                                    .font(.caption2.weight(.bold))
+                            }
+                            .foregroundColor(VoygoTheme.warning)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(VoygoTheme.warning.opacity(0.12))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(pendingSkip)
+                        .accessibilityLabel(S.skipAccessibility)
+                    }
+                }
             }
             .padding(14)
         }
+        .alert(S.skipFailedTitle, isPresented: Binding(
+            get: { skipError != nil },
+            set: { if !$0 { skipError = nil } }
+        ), presenting: skipError) { _ in
+            Button("OK", role: .cancel) { skipError = nil }
+        } message: { Text($0) }
     }
 }

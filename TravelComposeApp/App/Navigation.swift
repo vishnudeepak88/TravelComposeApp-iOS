@@ -255,6 +255,7 @@ struct TripsTab: View {
             MySubscriptionsView(
                 onOpenRoute: { path.append(.routeDetails(routeId: $0)) },
                 onOpenCalendar: { path.append(.calendar()) },
+                onFindRoutes: { path.append(.findRides) },
                 onBack: nil
             )
             .appRouteDestinations(

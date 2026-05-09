@@ -179,40 +179,45 @@ struct KycVerificationView: View {
         let doc = docByKind[kind]
         let state = docState(for: doc)
         let isLoading = inFlightKind == kind
+        let wasRejected = (doc?.rejectionReason?.isEmpty == false)
+        let buttonLabel: String = {
+            if wasRejected { return S.kycReupload }
+            return doc == nil ? S.kycUpload : S.kycReplace
+        }()
+        let buttonTint: Color = wasRejected ? VPalette.danger : VPalette.primary
+        let buttonBg: Color = wasRejected ? VPalette.danger.opacity(0.12) : VPalette.primaryContainer
 
         return HStack(spacing: 12) {
             VIconBubble(systemName: state.icon, color: state.color, size: 32, iconSize: 14)
             VStack(alignment: .leading, spacing: 1) {
                 Text(kind.label).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
-                Text(state.subtitle).font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                Text(state.subtitle).font(.system(size: 11))
+                    .foregroundColor(wasRejected ? VPalette.danger : VPalette.textSec)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
             }
             Spacer()
             Button {
-                // Open the system photo picker — caller-side
-                // confirms the image, system handles permission +
-                // crop. On result we pass the bytes through the
-                // existing upload pipeline (the backend's S3 path
-                // isn't wired yet so the bytes are observed only
-                // for `submitKycDocument(kind:storageUrl:nil)`).
                 pickerKind = kind
             } label: {
                 ZStack {
                     if isLoading {
-                        ProgressView().tint(VPalette.primary)
+                        ProgressView().tint(buttonTint)
                     } else {
-                        Text(doc == nil ? "Upload" : "Replace")
+                        Text(buttonLabel)
                             .font(.system(size: 13, weight: .heavy))
-                            .foregroundColor(VPalette.primary)
+                            .foregroundColor(buttonTint)
                     }
                 }
                 // Bumped to 88×44 — the 78×32 chip was below the 44pt
                 // tap-target spec for VoiceOver / motor accessibility.
                 .frame(minWidth: 88, minHeight: 44)
-                .background(VPalette.primaryContainer)
+                .background(buttonBg)
                 .clipShape(Capsule())
             }
             .buttonStyle(.plain)
             .disabled(isLoading)
+            .accessibilityLabel(wasRejected ? "Re-upload \(kind.label) — \(doc?.rejectionReason ?? "rejected")" : "\(buttonLabel) \(kind.label)")
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
     }
@@ -248,15 +253,15 @@ struct KycVerificationView: View {
 
     private func docState(for doc: KycDocument?) -> DocState {
         guard let doc else {
-            return DocState(icon: "tray.fill", color: VPalette.textHint, subtitle: "Not uploaded")
+            return DocState(icon: "tray.fill", color: VPalette.textHint, subtitle: S.kycNotUploaded)
         }
         if doc.verifiedAt != nil {
-            return DocState(icon: "checkmark.seal.fill", color: VPalette.success, subtitle: "Verified")
+            return DocState(icon: "checkmark.seal.fill", color: VPalette.success, subtitle: S.kycVerified)
         }
         if let reason = doc.rejectionReason, !reason.isEmpty {
-            return DocState(icon: "xmark.seal.fill", color: VPalette.danger, subtitle: "Rejected — \(reason)")
+            return DocState(icon: "xmark.seal.fill", color: VPalette.danger, subtitle: S.kycRejected(reason: reason))
         }
-        return DocState(icon: "clock.fill", color: VPalette.warning, subtitle: "Under review")
+        return DocState(icon: "clock.fill", color: VPalette.warning, subtitle: S.kycUnderReview)
     }
 
     private func banner(_ text: String, color: Color) -> some View {

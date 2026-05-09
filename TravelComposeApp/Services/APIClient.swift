@@ -90,6 +90,10 @@ struct VoygoAPIClient {
 
     // MARK: - Bookings, reviews
 
+    static func skipRide(rideInstanceId: String) async throws -> SkipRideResponse {
+        try await post(EmptyRequest(), to: baseURL.appendingPathComponent("trips/\(rideInstanceId)/skip"), as: SkipRideResponse.self)
+    }
+
     static func bookRide(rideInstanceId: String) async throws -> RideBooking {
         try await post(EmptyRequest(), to: baseURL.appendingPathComponent("trips/\(rideInstanceId)/book"), as: RideBooking.self)
     }
@@ -505,6 +509,11 @@ struct KycResponse: Decodable { var kycStatus: String }
 struct UpdateDisplayNameRequest: Encodable { var displayName: String }
 struct EmptyRequest: Encodable {}
 
+struct SkipRideResponse: Decodable {
+    var ok: Bool
+    var alreadySkipped: Bool?
+}
+
 // MARK: - API DTOs (mirrors Android DTOs)
 
 struct CommuteRouteSearchRequest: Encodable {
@@ -563,6 +572,7 @@ struct RecurringRouteDTO: Decodable {
     var id: String
     var driverId: String
     var driverName: String?
+    var driverPhone: String?
     var startLocation: String
     var endLocation: String
     var pickupPoints: [RoutePoint]
@@ -578,6 +588,7 @@ struct RecurringRouteDTO: Decodable {
     func toModel() -> RecurringRoute {
         RecurringRoute(
             id: id, driverId: driverId, driverName: driverName ?? "Driver",
+            driverPhone: driverPhone,
             startLocation: startLocation, endLocation: endLocation,
             pickupPoints: pickupPoints, dropPoints: dropPoints,
             departureTime: departureTime, daysOfWeek: daysOfWeek,
@@ -621,6 +632,7 @@ struct CommuteRideInstanceDTO: Decodable {
 }
 
 struct CommuteRideCalendarItemDTO: Decodable {
+    var id: String?
     var date: Date
     var routeId: String
     var driverName: String?
@@ -631,7 +643,8 @@ struct CommuteRideCalendarItemDTO: Decodable {
     var rideStatus: CommuteRideStatus
 
     func toModel() -> CommuteRideCalendarItem {
-        CommuteRideCalendarItem(date: date, routeId: routeId, driverName: driverName ?? "Driver",
+        CommuteRideCalendarItem(rideInstanceId: id, date: date, routeId: routeId,
+                                driverName: driverName ?? "Driver",
                                 startLocation: startLocation, endLocation: endLocation,
                                 pickupPoint: pickupPoint, dropPoint: dropPoint, rideStatus: rideStatus)
     }

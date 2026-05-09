@@ -202,7 +202,10 @@ struct CommuteRouteMatchResult: Identifiable {
 }
 
 struct CommuteRideCalendarItem: Identifiable {
-    var id: String { "\(routeId)-\(date.timeIntervalSince1970)" }
+    var id: String { rideInstanceId ?? "\(routeId)-\(date.timeIntervalSince1970)" }
+    /// Real `commute_ride_instances.id` when known. Powers the skip-a-day
+    /// action; nil for synthesized rows that were generated locally.
+    var rideInstanceId: String? = nil
     var date: Date
     var routeId: String
     var driverName: String

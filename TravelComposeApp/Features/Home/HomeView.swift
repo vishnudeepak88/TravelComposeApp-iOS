@@ -57,7 +57,8 @@ struct HomeTab: View {
                             object: nil
                         )
                     }
-                }
+                },
+                onOpenSubscriptions:  { path.append(.mySubscriptions) }
             )
             .appRouteDestinations(
                 path: $path,
@@ -91,6 +92,9 @@ struct HomeView: View {
     /// is the route id so the parent can decide whether to open an
     /// existing chat thread or fall back to the Inbox root.
     var onMessageDriver: (_ routeId: String) -> Void = { _ in }
+    /// "Resolve" tap on the persistent action-required banner. Routes
+    /// the rider into MySubscriptions where retry-payment lives.
+    var onOpenSubscriptions: () -> Void = {}
 
     @State private var showComingSoonFor: String? = nil
 
@@ -119,6 +123,15 @@ struct HomeView: View {
         nextCommute != nil
     }
 
+    /// Subscriptions that need the rider's attention — paused (likely
+    /// from a failed payment, since manual pause from the rider side
+    /// is rare) or auto-cancelled. Drives the persistent "Action
+    /// required" banner; without it a rider whose card was declined
+    /// shows up at the curb tomorrow.
+    private var pausedSubscriptions: [RouteSubscriptionWithRoute] {
+        store.mySubscriptions().filter { $0.subscription.status == .paused }
+    }
+
     var body: some View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
@@ -127,6 +140,17 @@ struct HomeView: View {
                     VStack(spacing: 0) {
                         Color.clear.frame(height: 0).id("top")
                         hero
+
+                        // Persistent "Action required" banner — surfaces
+                        // any paused subscription (typically because a
+                        // charge failed). Without this the rider only
+                        // sees a notification once and forgets, then
+                        // wakes up at the curb without a driver.
+                        if !pausedSubscriptions.isEmpty {
+                            actionRequiredBanner
+                                .padding(.horizontal, 16)
+                                .padding(.top, 12)
+                        }
 
                         if hasActiveCommute {
                             // Subscribed user — lead with the next
@@ -419,6 +443,46 @@ struct HomeView: View {
         // backend populates from `chat_threads.route_id`).
         let hasThread = store.threads.contains { $0.tripId == nc.route.id }
         return hasThread ? "Message" : "Inbox"
+    }
+
+    // MARK: Action-required banner
+
+    private var actionRequiredBanner: some View {
+        Button(action: onOpenSubscriptions) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 18, weight: .heavy))
+                    .foregroundColor(VPalette.danger)
+                    .frame(width: 38, height: 38)
+                    .background(VPalette.danger.opacity(0.12))
+                    .clipShape(Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(pausedSubscriptions.count == 1
+                         ? S.actionRequiredOne
+                         : S.actionRequiredMany(count: pausedSubscriptions.count))
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundColor(VPalette.text)
+                    Text(S.actionRequiredBody)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(VPalette.textSec)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundColor(VPalette.textHint)
+            }
+            .padding(14)
+            .background(VPalette.surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(VPalette.danger.opacity(0.35), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Action required: subscription paused. Tap to resolve.")
     }
 
     // MARK: Hero

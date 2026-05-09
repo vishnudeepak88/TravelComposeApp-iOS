@@ -265,6 +265,12 @@ struct EmptyStateView: View {
     let icon: String
     let title: String
     let subtitle: String
+    /// Optional CTA. Without one, an empty state is a dead-end —
+    /// "no subscriptions, search to find one" with no button forces the
+    /// user to remember which tab the search lives in.
+    var ctaLabel: String? = nil
+    var ctaAction: (() -> Void)? = nil
+
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: icon)
@@ -277,6 +283,19 @@ struct EmptyStateView: View {
                 .font(.system(size: 13))
                 .foregroundColor(VPalette.textHint)
                 .multilineTextAlignment(.center)
+            if let ctaLabel, let ctaAction {
+                Button(action: ctaAction) {
+                    Text(ctaLabel)
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 11)
+                        .background(VPalette.primary)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
+            }
         }
         .padding(32)
     }

@@ -41,3 +41,39 @@
 "home.seeAll" = "Lihat semua";
 "home.promo.kicker" = "PERJALANAN PERTAMA PERCUMA";
 "home.promo.title" = "Cuba carpool hari ini, jimat RM 14";
+
+/* Action-required banner (Home) */
+"home.actionRequired.one" = "Langganan dijeda";
+"home.actionRequired.many" = "%d langganan dijeda";
+"home.actionRequired.body" = "Pembayaran gagal. Ketik untuk cuba semula — tempat duduk anda dikekalkan sehingga itu.";
+
+/* Skip-a-day */
+"skip.label" = "Langkau";
+"skip.failed.title" = "Tidak dapat dilangkau";
+"skip.a11y" = "Langkau perjalanan ini";
+
+/* Subscriptions list — empty state */
+"subs.empty.title" = "Tiada langganan";
+"subs.empty.body" = "Cari laluan ulang-alik dan langgan untuk mula menaiki";
+"subs.empty.cta" = "Cari laluan";
+
+/* Driver dashboard — empty state */
+"driver.empty.title" = "Belum ada laluan";
+"driver.empty.body" = "Cipta laluan ulang-alik pertama anda untuk mula mengambil penumpang";
+"driver.empty.cta" = "Cipta laluan";
+
+/* KYC document statuses */
+"kyc.verified" = "Disahkan";
+"kyc.underReview" = "Sedang disemak";
+"kyc.notUploaded" = "Belum dimuat naik";
+"kyc.upload" = "Muat naik";
+"kyc.replace" = "Gantikan";
+"kyc.reupload" = "Muat naik semula";
+"kyc.rejected" = "Ditolak — %@";
+
+/* Auth — Terms link copy */
+"auth.terms.lead" = "Dengan meneruskan, anda bersetuju dengan";
+"auth.terms.link" = "Terma";
+"auth.terms.and" = "dan";
+"auth.privacy.link" = "Dasar Privasi";
+"auth.sendOtp" = "Hantar OTP";

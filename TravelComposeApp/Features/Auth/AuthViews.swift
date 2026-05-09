@@ -99,17 +99,27 @@ struct AuthPhoneView: View {
                         VErrorBanner(error: err, onRetry: { sendOtp() })
                     }
 
-                    VPrimaryButton("Send OTP", isLoading: isLoading, isEnabled: phone.count >= 9) {
+                    VPrimaryButton(S.authSendOtp, isLoading: isLoading, isEnabled: phone.count >= 9) {
                         sendOtp()
                     }
 
-                    Group {
-                        Text("By continuing, you agree to Voygo's ")
+                    // Real, tappable links — previously these were styled `Text`
+                    // segments concatenated with `+` which can't be tapped, so
+                    // riders had no way to read the policies they were agreeing
+                    // to. PDPA + App Store review both flag this.
+                    HStack(spacing: 4) {
+                        Text(S.authTermsLead)
                             .foregroundColor(VPalette.textHint)
-                        + Text("Terms").foregroundColor(VPalette.primary).fontWeight(.semibold)
-                        + Text(" and ").foregroundColor(VPalette.textHint)
-                        + Text("Privacy Policy").foregroundColor(VPalette.primary).fontWeight(.semibold)
-                        + Text(".").foregroundColor(VPalette.textHint)
+                        Link(S.authTermsLink,
+                             destination: URL(string: "https://voygo.app/terms")!)
+                            .foregroundColor(VPalette.primary)
+                            .fontWeight(.semibold)
+                        Text(S.authTermsAnd)
+                            .foregroundColor(VPalette.textHint)
+                        Link(S.authPrivacyLink,
+                             destination: URL(string: "https://voygo.app/privacy")!)
+                            .foregroundColor(VPalette.primary)
+                            .fontWeight(.semibold)
                     }
                     .font(.system(size: 11))
                     .multilineTextAlignment(.center)

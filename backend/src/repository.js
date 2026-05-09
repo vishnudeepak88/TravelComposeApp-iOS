@@ -69,7 +69,7 @@ function normalizeActiveStatus(status) {
     .trim() === "ACTIVE";
 }
 
-function mapRouteDto(routeRow, points, reliabilityRow) {
+function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null) {
   const pickupPoints = points.filter((p) => p.kind === "pickup").map(mapPoint);
   const dropPoints = points.filter((p) => p.kind === "drop").map(mapPoint);
   const reliability = mapReliability(reliabilityRow);
@@ -78,6 +78,10 @@ function mapRouteDto(routeRow, points, reliabilityRow) {
     id: String(routeRow.id),
     driverId: routeRow.driver_id,
     driverName: routeRow.driver_name || routeRow.driver_id,
+    // E.164 phone from users table — populated at OTP signup. Powers
+    // the LiveTrip "Call driver" affordance; the iOS Models keep it
+    // optional so a missing phone keeps the button disabled.
+    driverPhone: driverPhone || null,
     startLocation: routeRow.start_location,
     endLocation: routeRow.end_location,
     pickupPoints,
@@ -130,6 +134,17 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = []) {
     reliabilityRes.rows.map((row) => [row.driver_id, row])
   );
 
+  // Pull driver phones from the users table so the route DTO can
+  // expose driver_phone for the LiveTrip Call button. Without this
+  // every Call button stays disabled.
+  const userRes = await pool.query(
+    `SELECT id, phone FROM users WHERE id = ANY($1::text[])`,
+    [driverIds]
+  );
+  const phoneByDriver = new Map(
+    userRes.rows.map((row) => [String(row.id), row.phone || null])
+  );
+
   const activeCountRes = await pool.query(
     `SELECT route_id, COUNT(*)::int AS active_count
      FROM route_subscriptions
@@ -145,7 +160,8 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = []) {
   return routeRes.rows.map((route) => {
     const points = pointsByRoute.get(String(route.id)) || [];
     const reliabilityRow = reliabilityByDriver.get(route.driver_id) || null;
-    const dto = mapRouteDto(route, points, reliabilityRow);
+    const driverPhone = phoneByDriver.get(String(route.driver_id)) || null;
+    const dto = mapRouteDto(route, points, reliabilityRow, driverPhone);
     const activeCount = activeCountByRoute.get(String(route.id)) || 0;
     return {
       route,

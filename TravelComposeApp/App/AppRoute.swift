@@ -94,6 +94,7 @@ struct AppRouteDestinations: ViewModifier {
                 MySubscriptionsView(
                     onOpenRoute: { path.append(.routeDetails(routeId: $0)) },
                     onOpenCalendar: { path.append(.calendar()) },
+                    onFindRoutes: { path.append(.findRides) },
                     onBack: { if !path.isEmpty { path.removeLast() } }
                 )
                 .navigationBarHidden(true)
@@ -119,7 +120,8 @@ struct AppRouteDestinations: ViewModifier {
                 DriverDashboardView(
                     onBack:         { if !path.isEmpty { path.removeLast() } },
                     onOpenCalendar: { path.append(.driverCalendar(routeId: $0)) },
-                    onOpenPayouts:  { path.append(.driverPayouts) }
+                    onOpenPayouts:  { path.append(.driverPayouts) },
+                    onCreateRoute:  { path.append(.createRoute) }
                 )
                 .navigationBarHidden(true)
 
