@@ -33,11 +33,26 @@ extension URL {
         // Trap loudly in DEBUG — this is a programmer error.
         fatalError("URL.staticURL: \(string) is not a valid URL")
         #else
-        // Release-mode fallback: an opaque `about:blank` URL. Any
-        // open() call against this will simply fail silently, which
-        // is preferable to a startup crash.
-        return URL(string: "about:blank")!
+        // Release-mode fallback: a generic placeholder. Any open()
+        // against this fails silently, which is preferable to a
+        // startup crash. URL.staticURL("data:,") is guaranteed to
+        // parse — RFC 2397 minimal data URL.
+        return URL(string: "data:,") ?? URL(fileURLWithPath: "/")
         #endif
+    }
+
+    /// Builds a URL from a base + query items. Replaces the pattern
+    /// `URLComponents(url:resolvingAgainstBaseURL:)! ... .url!` which
+    /// the Apple R&D audit flagged across APIClient. Falls back to the
+    /// base URL when components fail (vanishingly rare — the inputs
+    /// here are server-base + appendingPathComponent results, both
+    /// validated upstream — but the helper removes the force-unwraps).
+    static func withQuery(base: URL, items: [URLQueryItem]) -> URL {
+        guard var comps = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
+            return base
+        }
+        comps.queryItems = items.isEmpty ? nil : items
+        return comps.url ?? base
     }
 }
 

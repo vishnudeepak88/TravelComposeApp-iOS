@@ -35,11 +35,30 @@ struct VoygoAPIClient {
         set { AppConfiguration.setAPIBaseURLOverride(newValue) }
     }
 
-    private static var session: URLSession {
+    // Shared URLSession built ONCE at first access. The previous
+    // computed-property form rebuilt a `URLSessionConfiguration` +
+    // `URLSession` on every call — `refreshAll()` fans out ~8 calls
+    // and that meant 8 session constructions per refresh, each
+    // allocating internal queues + caches. Apple's URLSession docs
+    // explicitly call this out as the canonical perf foot-gun.
+    //
+    // A `let` static gets us free thread-safety (the runtime
+    // dispatch_once-style guard) and the session's own internal
+    // serial queue handles concurrent requests correctly.
+    private static let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
+        // HTTP/2 + connection pooling are on by default; we just
+        // bump the concurrent-request ceiling slightly because the
+        // refreshAll fan-out hits 6-8 routes at once.
+        config.httpMaximumConnectionsPerHost = 8
+        // Disable URLCache for API responses — auth-bearing requests
+        // don't benefit from disk caching and the cache layer adds
+        // a non-trivial amount of disk I/O on cold start.
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.urlCache = nil
         return URLSession(configuration: config)
-    }
+    }()
 
     // MARK: - Auth
 
@@ -161,9 +180,11 @@ struct VoygoAPIClient {
     }
 
     static func listMyPayments(limit: Int = 20) async throws -> [PaymentRecord] {
-        var comps = URLComponents(url: baseURL.appendingPathComponent("payments/me"), resolvingAgainstBaseURL: false)!
-        comps.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
-        return try await get(comps.url!, as: [PaymentRecord].self)
+        let url = URL.withQuery(
+            base: baseURL.appendingPathComponent("payments/me"),
+            items: [URLQueryItem(name: "limit", value: String(limit))]
+        )
+        return try await get(url, as: [PaymentRecord].self)
     }
 
     static func getMyPayout() async throws -> PayoutStatement {
@@ -251,10 +272,6 @@ struct VoygoAPIClient {
         originLat: Double?, originLng: Double?,
         destLat: Double?, destLng: Double?
     ) async throws -> [CorridorSuggestion] {
-        var components = URLComponents(
-            url: baseURL.appendingPathComponent("commute/corridor-suggestions"),
-            resolvingAgainstBaseURL: false
-        )!
         var items: [URLQueryItem] = [URLQueryItem(name: "kind", value: kind.rawValue)]
         if let lat = originLat, let lng = originLng {
             items.append(URLQueryItem(name: "originLat", value: String(lat)))
@@ -264,18 +281,23 @@ struct VoygoAPIClient {
             items.append(URLQueryItem(name: "destLat", value: String(lat)))
             items.append(URLQueryItem(name: "destLng", value: String(lng)))
         }
-        components.queryItems = items
-        return try await get(components.url!, as: [CorridorSuggestion].self)
+        let url = URL.withQuery(
+            base: baseURL.appendingPathComponent("commute/corridor-suggestions"),
+            items: items
+        )
+        return try await get(url, as: [CorridorSuggestion].self)
     }
 
     // GET /places/autocomplete
     static func autocompletePlaces(query: String, lat: Double?, lon: Double?) async throws -> [PlaceSuggestion] {
-        var components = URLComponents(url: baseURL.appendingPathComponent("places/autocomplete"), resolvingAgainstBaseURL: false)!
         var items: [URLQueryItem] = [URLQueryItem(name: "q", value: query), URLQueryItem(name: "limit", value: "8")]
         if let lat { items.append(URLQueryItem(name: "lat", value: String(lat))) }
         if let lon { items.append(URLQueryItem(name: "lon", value: String(lon))) }
-        components.queryItems = items
-        return try await get(components.url!, as: [PlaceSuggestion].self)
+        let url = URL.withQuery(
+            base: baseURL.appendingPathComponent("places/autocomplete"),
+            items: items
+        )
+        return try await get(url, as: [PlaceSuggestion].self)
     }
 
     // POST /commute/search
@@ -295,9 +317,11 @@ struct VoygoAPIClient {
 
     // GET /commute/routes/{id}/rides
     static func getRouteRides(routeId: String, fromDate: String, days: Int) async throws -> [CommuteRideInstanceDTO] {
-        var comps = URLComponents(url: baseURL.appendingPathComponent("commute/routes/\(routeId)/rides"), resolvingAgainstBaseURL: false)!
-        comps.queryItems = [URLQueryItem(name: "fromDate", value: fromDate), URLQueryItem(name: "days", value: String(days))]
-        return try await get(comps.url!, as: [CommuteRideInstanceDTO].self)
+        let url = URL.withQuery(
+            base: baseURL.appendingPathComponent("commute/routes/\(routeId)/rides"),
+            items: [URLQueryItem(name: "fromDate", value: fromDate), URLQueryItem(name: "days", value: String(days))]
+        )
+        return try await get(url, as: [CommuteRideInstanceDTO].self)
     }
 
     // POST /commute/subscriptions
@@ -318,9 +342,11 @@ struct VoygoAPIClient {
 
     // GET /commute/riders/{riderId}/calendar
     static func getRiderCalendar(riderId: String, fromDate: String, days: Int) async throws -> [CommuteRideCalendarItemDTO] {
-        var comps = URLComponents(url: baseURL.appendingPathComponent("commute/riders/\(riderId)/calendar"), resolvingAgainstBaseURL: false)!
-        comps.queryItems = [URLQueryItem(name: "fromDate", value: fromDate), URLQueryItem(name: "days", value: String(days))]
-        return try await get(comps.url!, as: [CommuteRideCalendarItemDTO].self)
+        let url = URL.withQuery(
+            base: baseURL.appendingPathComponent("commute/riders/\(riderId)/calendar"),
+            items: [URLQueryItem(name: "fromDate", value: fromDate), URLQueryItem(name: "days", value: String(days))]
+        )
+        return try await get(url, as: [CommuteRideCalendarItemDTO].self)
     }
 
     // GET /commute/routes/driver/{driverId}
@@ -375,9 +401,11 @@ struct VoygoAPIClient {
 
     /// GET /notifications/me — most-recent first, defaults to 30 rows.
     static func listNotifications(limit: Int = 30) async throws -> [NotificationDTO] {
-        var comps = URLComponents(url: baseURL.appendingPathComponent("notifications/me"), resolvingAgainstBaseURL: false)!
-        comps.queryItems = [URLQueryItem(name: "limit", value: String(limit))]
-        return try await get(comps.url!, as: [NotificationDTO].self)
+        let url = URL.withQuery(
+            base: baseURL.appendingPathComponent("notifications/me"),
+            items: [URLQueryItem(name: "limit", value: String(limit))]
+        )
+        return try await get(url, as: [NotificationDTO].self)
     }
 
     /// PUT /notifications/{id}/read — idempotent. Server returns 204 with
@@ -470,8 +498,6 @@ struct VoygoAPIClient {
     static func listLongHaulTrips(origin: String? = nil,
                                   destination: String? = nil,
                                   fromDate: Date? = nil) async throws -> [LongHaulTrip] {
-        var comps = URLComponents(url: baseURL.appendingPathComponent("longhaul/trips"),
-                                  resolvingAgainstBaseURL: false)!
         var items: [URLQueryItem] = []
         if let o = origin?.trimmingCharacters(in: .whitespaces), !o.isEmpty {
             items.append(URLQueryItem(name: "origin", value: o))
@@ -482,8 +508,11 @@ struct VoygoAPIClient {
         if let date = fromDate {
             items.append(URLQueryItem(name: "fromDate", value: longHaulIsoFormatter.string(from: date)))
         }
-        if !items.isEmpty { comps.queryItems = items }
-        return try await get(comps.url!, as: [LongHaulTrip].self)
+        let url = URL.withQuery(
+            base: baseURL.appendingPathComponent("longhaul/trips"),
+            items: items
+        )
+        return try await get(url, as: [LongHaulTrip].self)
     }
 
     static func getLongHaulTrip(id: String) async throws -> LongHaulTrip {
@@ -539,10 +568,10 @@ struct VoygoAPIClient {
     /// step is intentional: we want a chance to surface upload
     /// failures distinctly from kyc-row failures.
     static func uploadKycDocument(kind: KycDocumentKind, imageData: Data) async throws -> KycUploadResponse {
-        var comps = URLComponents(url: baseURL.appendingPathComponent("users/me/kyc-documents/upload"),
-                                  resolvingAgainstBaseURL: false)!
-        comps.queryItems = [URLQueryItem(name: "kind", value: kind.rawValue)]
-        let url = comps.url!
+        let url = URL.withQuery(
+            base: baseURL.appendingPathComponent("users/me/kyc-documents/upload"),
+            items: [URLQueryItem(name: "kind", value: kind.rawValue)]
+        )
         var req = authedRequest(url, method: "POST")
         req.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         req.httpBody = imageData

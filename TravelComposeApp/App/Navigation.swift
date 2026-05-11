@@ -81,26 +81,37 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: tabBinding) {
+            // `.dynamicTypeSize(...DynamicTypeSize.accessibility3)`
+            // caps the upper bound so layouts that mix system fonts
+            // (Dynamic Type aware) with the remaining .font(.system(
+            // size:)) hold-outs don't break at the very largest
+            // accessibility sizes. AccessibilityXXL still works;
+            // we cap at the third accessibility size to balance
+            // readability and the existing fixed-size layouts.
             Tab("Home", systemImage: "house.fill", value: VoygoTab.home) {
                 HomeTab()
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Home tab")
             .accessibilityHint("Your next commute and quick actions")
 
             Tab("Search", systemImage: "magnifyingglass", value: VoygoTab.search) {
                 CommuteTab()
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Search tab")
             .accessibilityHint("Find a carpool route")
 
             Tab("Calendar", systemImage: "calendar", value: VoygoTab.calendar) {
                 TripsTab()
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Calendar tab")
             .accessibilityHint("Your subscriptions and upcoming rides")
 
             Tab("Inbox", systemImage: "bubble.left.fill", value: VoygoTab.inbox) {
                 InboxView()
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             // Sum of per-thread unread counts. Native `.badge` shows
             // the red dot+number on the tab automatically when the
@@ -112,6 +123,7 @@ struct MainTabView: View {
 
             Tab("Profile", systemImage: "person.fill", value: VoygoTab.profile) {
                 ProfileView()
+                    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Profile tab")
             .accessibilityHint("Your account, vehicle and settings")

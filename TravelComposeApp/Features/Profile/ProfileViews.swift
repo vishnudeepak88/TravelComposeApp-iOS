@@ -160,8 +160,9 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(store.currentUser.name.isEmpty ? "Welcome" : store.currentUser.name)
-                        .font(.system(size: 20, weight: .heavy)).tracking(-0.4)
+                        .font(.title3.weight(.heavy)).tracking(-0.4)
                         .foregroundColor(VPalette.text)
+                        .minimumScaleFactor(0.7)
                     Image(systemName: "pencil")
                         .font(.system(size: 12, weight: .heavy))
                         .foregroundColor(VPalette.textHint)

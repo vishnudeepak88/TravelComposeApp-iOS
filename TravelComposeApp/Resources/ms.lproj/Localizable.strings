@@ -77,3 +77,51 @@
 "auth.terms.and" = "dan";
 "auth.privacy.link" = "Dasar Privasi";
 "auth.sendOtp" = "Hantar OTP";
+
+/* Auth — brand + screen copy added in i18n sweep */
+"auth.brandName" = "Voygo";
+"auth.tagline" = "Perjalanan ulang-alik harian, dipercayai";
+"auth.phoneCaption" = "Kami akan hantar kod pengesahan";
+"auth.or" = "atau";
+"auth.devOnly" = "PEMBANGUNAN SAHAJA";
+"auth.skipLogin" = "Langkau log masuk → skrin utama";
+
+/* Profile — identity + member-since + logout */
+"profile.welcome" = "Selamat datang";
+"profile.newRider" = "Penumpang baru";
+"profile.memberSince" = "Ahli sejak";
+"profile.memberSinceToday" = "Hari ini";
+"profile.rides" = "Perjalanan";
+"profile.logOut" = "Log keluar";
+"profile.logOutTitle" = "Log Keluar";
+"profile.logOutMessage" = "Anda perlu log masuk semula.";
+
+/* Privacy & Security */
+"privacy.title" = "Privasi & Keselamatan";
+"privacy.section.preferences" = "Keutamaan";
+"privacy.toggle.push" = "Pemberitahuan tolak";
+"privacy.toggle.pushSubtitle" = "Terima peringatan perjalanan, mesej sembang, resit pembayaran";
+"privacy.toggle.phone" = "Kongsi telefon dengan pelanggan";
+"privacy.toggle.phoneSubtitle" = "Apabila DIMATIKAN, penumpang melihat nombor disembunyikan sehingga pertemuan";
+"privacy.toggle.biometric" = "Kunci dompet dengan Face ID";
+"privacy.toggle.biometricSubtitle" = "Memerlukan biometrik untuk melihat pembayaran + resit";
+"privacy.toggle.marketing" = "E-mel promosi";
+"privacy.toggle.marketingSubtitle" = "Pilihan. Lalai DIMATIKAN (PDPA opt-in)";
+"privacy.section.blocked" = "Pengguna disekat";
+"privacy.blocked.empty" = "Tiada pengguna disekat";
+"privacy.blocked.emptyBody" = "Sekat pemandu dari mana-mana butiran laluan untuk berhenti dipadankan dengan mereka.";
+"privacy.unblock" = "Buka sekatan";
+"privacy.section.data" = "Data anda";
+"privacy.data.download" = "Muat turun data saya";
+"privacy.data.downloadSubtitle" = "Kami akan menghantar e-mel salinan perjalanan, pembayaran dan profil anda dalam 7 hari (PDPA s.7)";
+"privacy.section.danger" = "Zon bahaya";
+"privacy.delete" = "Padam akaun";
+"privacy.deleteSubtitle" = "Memadamkan akaun anda secara kekal selepas 30 hari. Diperlukan oleh App Store + PDPA.";
+
+/* Solo seat */
+"solo.title" = "Berkenderaan solo";
+"solo.bookWhole" = "Tempah seluruh kereta";
+"solo.blurb" = "Bayar ~2× harga tempat duduk untuk perjalanan eksklusif. Pemandu yang sama, tiada penumpang lain, tiada lencongan.";
+"solo.confirmTitle" = "Sahkan perjalanan solo";
+"solo.browseRoutes" = "Lihat laluan";
+"solo.confirmCTA" = "Sahkan — RM %d";

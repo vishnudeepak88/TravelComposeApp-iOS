@@ -436,9 +436,18 @@ struct CalendarItemCard: View {
                         // cancelling their whole subscription. Frees the seat
                         // for someone else and notifies the driver.
                         Button {
+                            // `rideInstanceId` is optional on the DTO
+                            // (server returns it nil for some legacy
+                            // calendar rows). Guard rather than force-
+                            // unwrap so a stale row never crashes the
+                            // calendar; surface a soft error instead.
+                            guard let rideId = item.rideInstanceId else {
+                                skipError = "This ride isn't skippable yet — please reload the calendar."
+                                return
+                            }
                             Task {
                                 pendingSkip = true
-                                let result = await store.skipRide(rideInstanceId: item.rideInstanceId!)
+                                let result = await store.skipRide(rideInstanceId: rideId)
                                 pendingSkip = false
                                 switch result {
                                 case .success: onSkipped?()

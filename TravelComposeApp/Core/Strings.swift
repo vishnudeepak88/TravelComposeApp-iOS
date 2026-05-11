@@ -37,6 +37,58 @@ enum S {
     static var enterPhone: String { Self.t("auth.enterPhone", "Enter your phone number") }
     static var enterOtp: String { Self.t("auth.enterOtp", "Enter the 6-digit code") }
     static var phoneMissing: String { Self.t("auth.phoneMissing", "Phone number missing — go back and re-enter") }
+    static var authBrandName: String { Self.t("auth.brandName", "Voygo") }
+    static var authTagline: String { Self.t("auth.tagline", "Your recurring commute, made dependable") }
+    static var authPhoneCaption: String { Self.t("auth.phoneCaption", "We'll send a verification code") }
+    static var authOr: String { Self.t("auth.or", "or") }
+    static var authDevOnly: String { Self.t("auth.devOnly", "DEV ONLY") }
+    static var authSkipLogin: String { Self.t("auth.skipLogin", "Skip login \u{2192} home screen") }
+
+    // MARK: Profile
+
+    static var profileWelcome: String { Self.t("profile.welcome", "Welcome") }
+    static var profileNewRider: String { Self.t("profile.newRider", "New rider") }
+    static var profileMemberSinceLabel: String { Self.t("profile.memberSince", "Member since") }
+    static var profileMemberSinceToday: String { Self.t("profile.memberSinceToday", "Today") }
+    static var profileRidesLabel: String { Self.t("profile.rides", "Rides") }
+    static var profileLogOut: String { Self.t("profile.logOut", "Log out") }
+    static var profileLogOutTitle: String { Self.t("profile.logOutTitle", "Log Out") }
+    static var profileLogOutMessage: String { Self.t("profile.logOutMessage", "You'll need to sign in again.") }
+
+    // MARK: Privacy & Security
+
+    static var privacyTitle: String { Self.t("privacy.title", "Privacy & Security") }
+    static var privacyPreferences: String { Self.t("privacy.section.preferences", "Preferences") }
+    static var privacyPushNotifications: String { Self.t("privacy.toggle.push", "Push notifications") }
+    static var privacyPushSubtitle: String { Self.t("privacy.toggle.pushSubtitle", "Receive ride reminders, chat messages, payment receipts") }
+    static var privacyPhoneShare: String { Self.t("privacy.toggle.phone", "Share phone with subscribers") }
+    static var privacyPhoneShareSubtitle: String { Self.t("privacy.toggle.phoneSubtitle", "When OFF, riders see a masked number until pickup") }
+    static var privacyBiometric: String { Self.t("privacy.toggle.biometric", "Lock wallet with Face ID") }
+    static var privacyBiometricSubtitle: String { Self.t("privacy.toggle.biometricSubtitle", "Require biometric to view payments + receipts") }
+    static var privacyMarketing: String { Self.t("privacy.toggle.marketing", "Promotional emails") }
+    static var privacyMarketingSubtitle: String { Self.t("privacy.toggle.marketingSubtitle", "Optional. Defaults to OFF (PDPA opt-in)") }
+    static var privacyBlockedTitle: String { Self.t("privacy.section.blocked", "Blocked users") }
+    static var privacyBlockedEmpty: String { Self.t("privacy.blocked.empty", "No blocked users") }
+    static var privacyBlockedEmptyBody: String { Self.t("privacy.blocked.emptyBody", "Block a driver from any route detail to stop being matched with them.") }
+    static var privacyUnblock: String { Self.t("privacy.unblock", "Unblock") }
+    static var privacyDataTitle: String { Self.t("privacy.section.data", "Your data") }
+    static var privacyDataDownload: String { Self.t("privacy.data.download", "Download my data") }
+    static var privacyDataDownloadSubtitle: String { Self.t("privacy.data.downloadSubtitle", "We'll email a copy of your rides, payments and profile within 7 days (PDPA s.7)") }
+    static var privacyDangerTitle: String { Self.t("privacy.section.danger", "Danger zone") }
+    static var privacyDelete: String { Self.t("privacy.delete", "Delete account") }
+    static var privacyDeleteSubtitle: String { Self.t("privacy.deleteSubtitle", "Permanently removes your account after 30 days. Required by App Store + PDPA.") }
+
+    // MARK: Solo seat
+
+    static var soloRideTitle: String { Self.t("solo.title", "Ride solo") }
+    static var soloBookWhole: String { Self.t("solo.bookWhole", "Book the whole car") }
+    static var soloRiderBlurb: String { Self.t("solo.blurb", "Pay ~2\u{00D7} the seat price for an exclusive ride. Same trusted driver, no other passengers, no detours.") }
+    static var soloConfirmTitle: String { Self.t("solo.confirmTitle", "Confirm solo ride") }
+    static var soloBrowseRoutes: String { Self.t("solo.browseRoutes", "Browse routes") }
+    static func soloConfirmCTA(amountMyr: Int) -> String {
+        let template = Self.t("solo.confirmCTA", "Confirm \u{2014} RM %d")
+        return String(format: template, amountMyr)
+    }
 
     // MARK: Subscription / pricing
 

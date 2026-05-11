@@ -33,12 +33,13 @@ struct AuthPhoneView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Voygo")
-                                .font(.system(size: 40, weight: .black))
+                            Text(S.authBrandName)
+                                .font(.largeTitle.weight(.black))
                                 .tracking(-1.2)
                                 .foregroundColor(VPalette.text)
-                            Text("Your recurring commute, made dependable")
-                                .font(.system(size: 15, weight: .semibold))
+                                .minimumScaleFactor(0.6)
+                            Text(S.authTagline)
+                                .font(.subheadline.weight(.semibold))
                                 .foregroundColor(VPalette.textSec)
                                 .frame(maxWidth: 240, alignment: .leading)
                         }
@@ -59,10 +60,13 @@ struct AuthPhoneView: View {
                     }
 
                     VStack(alignment: .center, spacing: 6) {
-                        Text("Enter your mobile number")
-                            .font(.system(size: 20, weight: .bold)).foregroundColor(VPalette.text)
-                        Text("We'll send a verification code")
-                            .font(.system(size: 13)).foregroundColor(VPalette.textSec)
+                        Text(S.enterPhone)
+                            .font(.title3.weight(.bold))
+                            .foregroundColor(VPalette.text)
+                            .minimumScaleFactor(0.8)
+                        Text(S.authPhoneCaption)
+                            .font(.footnote)
+                            .foregroundColor(VPalette.textSec)
                     }
                     .frame(maxWidth: .infinity)
 
