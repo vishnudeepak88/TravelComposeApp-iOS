@@ -101,6 +101,13 @@ struct AppRouteDestinations: ViewModifier {
                             pickup: routeName,
                             driverName: driverName
                         ))
+                    },
+                    onBookSolo: { _ in
+                        // Drop the rider into the pick-a-date screen.
+                        // The cached `store.routes` already contains
+                        // this route (we just rendered its details), so
+                        // SoloPickRouteView will render it at the top.
+                        path.append(.soloPick)
                     }
                 )
                 .navigationBarHidden(true)
@@ -333,7 +340,14 @@ struct AppRouteDestinations: ViewModifier {
             case .soloPick:
                 SoloPickRouteView(
                     onBack:    { if !path.isEmpty { path.removeLast() } },
-                    onPickRide: { rideId in path.append(.soloConfirm(rideInstanceId: rideId)) }
+                    onPickRide: { rideId in path.append(.soloConfirm(rideInstanceId: rideId)) },
+                    onFindRoutes: {
+                        // Push Search onto the same stack. Riders pick a
+                        // route → drill into details → "Book solo" pushes
+                        // .soloConfirm directly (Gap B), so we don't need
+                        // to bounce back here.
+                        path.append(.findRides)
+                    }
                 )
                 .navigationBarHidden(true)
 

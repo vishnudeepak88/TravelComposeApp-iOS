@@ -563,6 +563,9 @@ async function listRouteRides(pool, routeId, fromDate, days) {
       i.date,
       i.seat_availability,
       i.ride_status,
+      i.is_solo,
+      i.solo_rider_id,
+      i.solo_price_myr,
       COALESCE(
         ARRAY_AGG(p.rider_id) FILTER (WHERE p.rider_id IS NOT NULL),
         ARRAY[]::text[]
@@ -583,7 +586,14 @@ async function listRouteRides(pool, routeId, fromDate, days) {
     date: row.date,
     seatAvailability: Number(row.seat_availability),
     confirmedPassengers: row.confirmed_passengers || [],
-    rideStatus: row.ride_status
+    rideStatus: row.ride_status,
+    // Solo-seat flags. iOS dashboard renders a "Solo today" badge
+    // and the driver knows not to pick up other passengers on this
+    // ride. solo_rider_id isn't exposed to riders, but the driver
+    // owns the route and needs it to know who they're picking up.
+    isSolo: Boolean(row.is_solo),
+    soloRiderId: row.solo_rider_id || null,
+    soloPriceMyr: row.solo_price_myr != null ? Number(row.solo_price_myr) : null
   }));
 }
 
@@ -595,6 +605,8 @@ async function listRiderCalendar(pool, riderId, fromDate, days) {
       i.date,
       i.seat_availability,
       i.ride_status,
+      i.is_solo,
+      i.solo_rider_id,
       COALESCE(
         ARRAY_AGG(allp.rider_id) FILTER (WHERE allp.rider_id IS NOT NULL),
         ARRAY[]::text[]
@@ -615,7 +627,11 @@ async function listRiderCalendar(pool, riderId, fromDate, days) {
     date: row.date,
     seatAvailability: Number(row.seat_availability),
     confirmedPassengers: row.confirmed_passengers || [],
-    rideStatus: row.ride_status
+    rideStatus: row.ride_status,
+    isSolo: Boolean(row.is_solo),
+    // Rider only sees their OWN solo_rider_id mirrored back ("yes,
+    // this is your booking") — not someone else's. Server-side scope.
+    isMySolo: row.solo_rider_id != null && String(row.solo_rider_id) === String(riderId)
   }));
 }
 

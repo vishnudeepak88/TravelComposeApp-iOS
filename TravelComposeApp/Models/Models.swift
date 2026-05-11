@@ -210,6 +210,18 @@ struct CommuteRideInstance: Codable, Equatable, Identifiable {
     var seatAvailability: Int
     var confirmedPassengers: [String]
     var rideStatus: CommuteRideStatus
+    /// True when this specific day's ride has been exclusively booked
+    /// by a rider (solo seat). Drivers see a "Solo today" badge;
+    /// other riders can no longer book this date.
+    var isSolo: Bool = false
+    /// Mirrored back to the rider when *they* are the solo booker.
+    /// Lets the rider calendar render "Your solo ride" without
+    /// exposing other riders' identities to anyone else.
+    var isMySolo: Bool = false
+    /// Server-stored solo price for the driver-side view (they own the
+    /// route, so they're allowed to see the premium). Nil for non-solo
+    /// rides and for rider-side responses.
+    var soloPriceMyr: Int? = nil
 }
 
 struct RideBooking: Codable, Equatable, Identifiable {

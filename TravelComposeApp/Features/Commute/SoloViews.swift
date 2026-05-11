@@ -22,6 +22,11 @@ struct SoloPickRouteView: View {
     @Environment(AppStore.self) private var store
     var onBack: () -> Void
     var onPickRide: (_ rideInstanceId: String) -> Void
+    /// Empty-state action: a fresh user with no cached routes
+    /// taps "Find a route" → caller switches to Search tab so they
+    /// can pick one then come back to book solo. Defaulted to a
+    /// no-op for previews; HomeTab wires the real cross-tab nav.
+    var onFindRoutes: () -> Void = {}
 
     @State private var hasLoaded = false
     @State private var expandedRouteId: String? = nil
@@ -45,11 +50,22 @@ struct SoloPickRouteView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                 if pickableRoutes.isEmpty && hasLoaded {
-                    EmptyStateView(
-                        icon: "person",
-                        title: "No routes yet",
-                        subtitle: "Find a carpool route first, then come back to book it solo."
-                    )
+                    // Fresh user with zero cached routes. Send them to
+                    // Search — without this CTA the screen is a dead
+                    // end and the rider bounces.
+                    VStack(spacing: 16) {
+                        Spacer()
+                        EmptyStateView(
+                            icon: "magnifyingglass",
+                            title: "Find a route first",
+                            subtitle: "Solo rides are upgrades on existing carpool routes — find one you like, then book any day exclusively."
+                        )
+                        VPrimaryButton("Browse routes") {
+                            onFindRoutes()
+                        }
+                        .padding(.horizontal, 32)
+                        Spacer()
+                    }
                     .frame(maxHeight: .infinity)
                 } else if pickableRoutes.isEmpty {
                     ScrollView { loadingSkeletons }

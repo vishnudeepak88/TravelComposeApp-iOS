@@ -248,6 +248,34 @@ struct DriverRouteCard: View {
                     DashStatCell(icon: "calendar.day.timeline.leading", value: route.daysOfWeek.shortLabel, label: "Days")
                 }
 
+                // Solo bookings banner — surfaces upcoming exclusive
+                // rides so the driver sees at a glance which days
+                // their car is locked to one rider. Without this they
+                // only learn via push notification at booking time.
+                let upcomingSolos = dashboard.upcomingRides.filter { $0.isSolo }
+                if !upcomingSolos.isEmpty {
+                    HStack(spacing: 10) {
+                        Image(systemName: "person.fill.checkmark")
+                            .font(.system(size: 14, weight: .heavy))
+                            .foregroundColor(VoygoTheme.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(upcomingSolos.count) solo \(upcomingSolos.count == 1 ? "booking" : "bookings") ahead")
+                                .font(.system(size: 13, weight: .heavy))
+                                .foregroundColor(VoygoTheme.textPrimary)
+                            Text(soloDatesSummary(upcomingSolos))
+                                .font(.caption2)
+                                .foregroundColor(VoygoTheme.textSecondary)
+                        }
+                        Spacer()
+                        Text("RM \(upcomingSolos.compactMap { $0.soloPriceMyr }.reduce(0, +))")
+                            .font(.system(size: 13, weight: .black))
+                            .foregroundColor(VoygoTheme.accent)
+                    }
+                    .padding(10)
+                    .background(VoygoTheme.accent.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+
                 Divider().background(VoygoTheme.cardBorder)
 
                 // Schedule editor
@@ -307,6 +335,17 @@ struct DriverRouteCard: View {
             }
             .padding(16)
         }
+    }
+
+    /// Comma-separated month-day list of upcoming solo bookings —
+    /// "May 14, May 16" — for the dashboard's solo-summary banner.
+    /// Truncates at 3 entries to keep the line readable.
+    private func soloDatesSummary(_ rides: [CommuteRideInstance]) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        let labels = rides.prefix(3).map { formatter.string(from: $0.date) }
+        let head = labels.joined(separator: ", ")
+        return rides.count > 3 ? "\(head), +\(rides.count - 3) more" : head
     }
 }
 

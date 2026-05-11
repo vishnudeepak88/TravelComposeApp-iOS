@@ -166,6 +166,11 @@ struct RouteDetailsView: View {
     let routeId: String
     var onBack: () -> Void
     var onSubscribed: ((String) -> Void)? = nil
+    /// Optional "Book solo" entry from this route. Caller decides
+    /// where to push (.soloPick filtered to this route, or straight
+    /// into the date picker for solo). Leaving nil hides the CTA so
+    /// previews + driver-side route detail aren't affected.
+    var onBookSolo: ((_ routeId: String) -> Void)? = nil
     @Environment(AppStore.self) private var store
     @State private var vm = RouteDetailsViewModel()
 
@@ -378,6 +383,44 @@ struct RouteDetailsView: View {
                                         VErrorBanner(message: msg, onRetry: vm.subscribe)
                                     default: EmptyView()
                                     }
+                                }
+
+                                // Secondary affordance — book this exact
+                                // route for one day exclusively at 2× the
+                                // seat price. Distinct from subscribing
+                                // (which is recurring) so it sits below
+                                // the primary CTA, not next to it.
+                                if let route = vm.route, let onBookSolo {
+                                    Button {
+                                        onBookSolo(route.id)
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "person.fill.checkmark")
+                                                .font(.system(size: 13, weight: .heavy))
+                                                .foregroundColor(VoygoTheme.accent)
+                                            VStack(alignment: .leading, spacing: 1) {
+                                                Text("Book solo for a day")
+                                                    .font(.system(size: 13, weight: .heavy))
+                                                    .foregroundColor(VoygoTheme.textPrimary)
+                                                Text("RM \(route.pricePerSeat * 2) — whole car, no other passengers")
+                                                    .font(.caption2)
+                                                    .foregroundColor(VoygoTheme.textSecondary)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.caption.weight(.heavy))
+                                                .foregroundColor(VoygoTheme.textHint)
+                                        }
+                                        .padding(12)
+                                        .background(VoygoTheme.surfaceHigh)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .stroke(VoygoTheme.cardBorder, lineWidth: 1)
+                                        )
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.top, 4)
                                 }
                             }
                         }
