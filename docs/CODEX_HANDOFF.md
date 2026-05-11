@@ -10,6 +10,8 @@ Branch: main
 - Added graceful MapKit fallback behavior: failed legs render as dashed direct estimates and the badge switches to `Partial` or `Direct` instead of pretending the route is fully road-resolved. Partial/direct fallback shows distance only; full Apple routing shows distance + ETA.
 - Added an `Open` map action to `VRouteMapPreview`; users can choose Apple Maps or Google Maps. Google Maps opens the native app when installed and falls back to Google Maps web with waypoints.
 - Built, installed, and launched the updated iOS app on `Vishnu’s iPhone` (`com.voygo.travelcomposeapp`) with process launch outcome `success`.
+- Fixed the Home `See all` / Find Routes flow so it no longer runs a blank stale search that can show the dev KL/Subang route.
+- Changed route map previews with missing/zero coordinates to show an honest `Map unavailable` state instead of falling back to a hard-coded KL map.
 - Fast-forwarded local `main` to `origin/main` at `f6a58c3`.
 - Re-read Voygo project handoff and project map.
 - Confirmed recent upstream changes already added privacy manifest, entitlements, account deletion/privacy controls, and backend deletion routes.
@@ -32,6 +34,7 @@ Branch: main
 - `TravelComposeApp/Info.plist`
 - `TravelComposeApp/App/AppRoute.swift`
 - `TravelComposeApp/App/Navigation.swift`
+- `TravelComposeApp/Features/Commute/FindCommuteRoutesView.swift`
 - `TravelComposeApp/Features/Money/ReceiptView.swift`
 - `TravelComposeApp/Features/Money/WalletView.swift`
 - `TravelComposeApp/Features/Profile/ProfileViews.swift`
@@ -52,13 +55,16 @@ Branch: main
 - `xcodebuild -project TravelComposeApp.xcodeproj -scheme TravelComposeApp -destination 'generic/platform=iOS Simulator' build` (blocked locally because `xcode-select` points at Command Line Tools instead of full Xcode)
 - `for f in backend/src/*.js backend/test/*.js; do node --check "$f" || exit 1; done`
 - `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project TravelComposeApp.xcodeproj -scheme TravelComposeApp -destination 'generic/platform=iOS Simulator' build` (passes)
+- `git diff --check` (passes)
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project TravelComposeApp.xcodeproj -scheme TravelComposeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO test` (passes, 47 tests)
 - `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project TravelComposeApp.xcodeproj -scheme TravelComposeApp -destination 'platform=iOS,id=00008140-001805CE0E40801C' -configuration Debug -derivedDataPath /tmp/voygo-device-build build` (passes)
 - `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl device install app --device 00008140-001805CE0E40801C /tmp/voygo-device-build/Build/Products/Debug-iphoneos/TravelComposeApp.app` (passes)
-- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl device process launch --device 00008140-001805CE0E40801C --terminate-existing --json-output /tmp/voygo-launch.json com.voygo.travelcomposeapp` (passes, latest PID 15851)
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl device process launch --device 00008140-001805CE0E40801C --terminate-existing --json-output /tmp/voygo-launch.json com.voygo.travelcomposeapp` (passes, latest PID 15925)
 
 ## Current state
 - Remaining local untracked files before this work: `.playwright-mcp/`, `form-filled.png`, `TravelComposeApp/Features/System/NotificationsView 2.swift`.
 - MapKit route preview is now local/client-calculated. Backend persistence for `distanceMeters`, `durationSeconds`, and route provider is still not implemented.
+- Find Routes now requires both From and To before searching. If a route has fewer than two real coordinates, the UI shows `Map unavailable` instead of KL.
 - Important remaining blockers:
   - Backend test suite now contains a small auth security regression suite, but payments/KYC/SOS still need route-level tests.
   - Production KYC uploads intentionally fail with `kyc_storage_unavailable` until real object storage is implemented.

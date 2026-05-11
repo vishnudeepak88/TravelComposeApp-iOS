@@ -64,52 +64,56 @@ struct VRouteMapPreview: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Map(position: $camera, interactionModes: [.pan, .zoom]) {
-                if routeSegments.isEmpty, routeCoordinates.count >= 2 {
-                    MapPolyline(coordinates: routeCoordinates)
-                        .stroke(accent.opacity(0.75), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round, dash: [7, 5]))
-                }
+            if routeCoordinates.count >= 2 {
+                Map(position: $camera, interactionModes: [.pan, .zoom]) {
+                    if routeSegments.isEmpty {
+                        MapPolyline(coordinates: routeCoordinates)
+                            .stroke(accent.opacity(0.75), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round, dash: [7, 5]))
+                    }
 
-                ForEach(routeSegments) { segment in
-                    MapPolyline(segment.polyline)
-                        .stroke(
-                            accent.opacity(segment.isEstimated ? 0.72 : 1),
-                            style: StrokeStyle(
-                                lineWidth: segment.isEstimated ? 4 : 5,
-                                lineCap: .round,
-                                lineJoin: .round,
-                                dash: segment.isEstimated ? [7, 5] : []
+                    ForEach(routeSegments) { segment in
+                        MapPolyline(segment.polyline)
+                            .stroke(
+                                accent.opacity(segment.isEstimated ? 0.72 : 1),
+                                style: StrokeStyle(
+                                    lineWidth: segment.isEstimated ? 4 : 5,
+                                    lineCap: .round,
+                                    lineJoin: .round,
+                                    dash: segment.isEstimated ? [7, 5] : []
+                                )
                             )
-                        )
-                }
-
-                ForEach(stops) { stop in
-                    Annotation(stop.title, coordinate: stop.coordinate, anchor: .bottom) {
-                        mapPin(for: stop)
                     }
-                }
 
-                if let liveCoordinate, CLLocationCoordinate2DIsValid(liveCoordinate) {
-                    Annotation("Driver", coordinate: liveCoordinate, anchor: .center) {
-                        ZStack {
-                            Circle()
-                                .fill(VPalette.primary)
-                                .frame(width: 30, height: 30)
-                            Circle()
-                                .stroke(.white, lineWidth: 3)
-                                .frame(width: 30, height: 30)
-                            Image(systemName: "car.fill")
-                                .font(.caption.weight(.bold))
-                                .foregroundColor(.white)
+                    ForEach(stops) { stop in
+                        Annotation(stop.title, coordinate: stop.coordinate, anchor: .bottom) {
+                            mapPin(for: stop)
                         }
-                        .shadow(color: VPalette.primary.opacity(0.45), radius: 10, y: 4)
+                    }
+
+                    if let liveCoordinate, CLLocationCoordinate2DIsValid(liveCoordinate) {
+                        Annotation("Driver", coordinate: liveCoordinate, anchor: .center) {
+                            ZStack {
+                                Circle()
+                                    .fill(VPalette.primary)
+                                    .frame(width: 30, height: 30)
+                                Circle()
+                                    .stroke(.white, lineWidth: 3)
+                                    .frame(width: 30, height: 30)
+                                Image(systemName: "car.fill")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundColor(.white)
+                            }
+                            .shadow(color: VPalette.primary.opacity(0.45), radius: 10, y: 4)
+                        }
                     }
                 }
-            }
-            .mapStyle(.standard(elevation: .realistic))
-            .mapControls {
-                MapCompass()
-                MapScaleView()
+                .mapStyle(.standard(elevation: .realistic))
+                .mapControls {
+                    MapCompass()
+                    MapScaleView()
+                }
+            } else {
+                unavailableMapPlaceholder
             }
 
             mapControlsOverlay
@@ -133,6 +137,56 @@ struct VRouteMapPreview: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityLabel))
+    }
+
+    private var unavailableMapPlaceholder: some View {
+        ZStack {
+            LinearGradient(
+                colors: [VPalette.surfaceHigh, VPalette.surface],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "mappin.slash")
+                        .font(.title3.weight(.black))
+                        .foregroundColor(VPalette.warning)
+                        .frame(width: 38, height: 38)
+                        .background(VPalette.warning.opacity(0.14))
+                        .clipShape(Circle())
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Map unavailable")
+                            .font(.subheadline.weight(.black))
+                            .foregroundColor(VPalette.text)
+                        Text("This route needs saved pickup and drop coordinates.")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(VPalette.textSec)
+                            .lineLimit(2)
+                    }
+                }
+
+                HStack(alignment: .top, spacing: 8) {
+                    VRouteGlyph(squareColor: accent)
+                        .frame(width: 10)
+                        .padding(.top, 3)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(route.startLocation.isEmpty ? "Start location missing" : route.startLocation)
+                            .font(.caption.weight(.heavy))
+                            .foregroundColor(VPalette.text)
+                            .lineLimit(2)
+                        Text(route.endLocation.isEmpty ? "Destination missing" : route.endLocation)
+                            .font(.caption.weight(.heavy))
+                            .foregroundColor(VPalette.text)
+                            .lineLimit(2)
+                    }
+                }
+                .padding(.top, 2)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     @ViewBuilder
@@ -184,7 +238,7 @@ struct VRouteMapPreview: View {
     }
 
     private var routeBadgeText: String {
-        if routeCoordinates.count < 2 { return "Map pin" }
+        if routeCoordinates.count < 2 { return "Missing coordinates" }
         if isResolvingRoute { return "Calculating route" }
         if let routeSummary { return routeSummary.badgeText }
         return routeResolutionFailed ? "Direct route estimate" : "Loading route"
@@ -513,7 +567,8 @@ private struct MapStop: Identifiable {
 
     init?(point: RoutePoint, title: String, kind: Kind) {
         let coordinate = CLLocationCoordinate2D(latitude: point.lat, longitude: point.lng)
-        guard CLLocationCoordinate2DIsValid(coordinate) else { return nil }
+        guard CLLocationCoordinate2DIsValid(coordinate),
+              !(abs(point.lat) < 0.0001 && abs(point.lng) < 0.0001) else { return nil }
         self.id = point.id
         self.title = title
         self.coordinate = coordinate
