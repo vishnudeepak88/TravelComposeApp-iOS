@@ -30,6 +30,11 @@ struct ProfileView: View {
     /// a fresh signup who lands on the auto-generated "User 6789"
     /// fallback can replace it with their real name in two taps.
     @State private var showEditName = false
+    /// Edit-vehicle sheet for drivers. Vehicle identity (plate +
+    /// colour + model) lives on the user profile — not per-route —
+    /// so a driver can't bait riders with one plate on a route and
+    /// arrive in a different car.
+    @State private var showEditVehicle = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -51,6 +56,17 @@ struct ProfileView: View {
                                 // can find what they saved + what they
                                 // asked for without buried navigation.
                                 myCommuteSection
+                                // Vehicle identity card for drivers.
+                                // Always rendered once a user has at
+                                // least one published route (they're
+                                // verifiably a driver) — that's the
+                                // same gate we use for driverModeCard.
+                                // We also show it for KYC-approved
+                                // users so they can pre-fill it before
+                                // creating their first route.
+                                if shouldShowVehicleCard {
+                                    vehicleCard
+                                }
                                 settingsCard
                                 // Driver mode card only when the user has at
                                 // least one published route. Riders who've
@@ -103,6 +119,20 @@ struct ProfileView: View {
                     }
                 )
                 .presentationDetents([.height(280)])
+            }
+            .sheet(isPresented: $showEditVehicle) {
+                EditVehicleSheet(
+                    initialPlate: store.currentUser.plateNumber ?? "",
+                    initialColor: store.currentUser.carColor ?? "",
+                    initialModel: store.currentUser.carModel ?? "",
+                    onCancel: { showEditVehicle = false },
+                    onSave: { plate, color, model in
+                        let result = await store.updateVehicle(plate: plate, color: color, model: model)
+                        if case .success = result { showEditVehicle = false }
+                        return result
+                    }
+                )
+                .presentationDetents([.height(440)])
             }
             .task { await store.refreshMe() }
             .enableSwipeBack()
@@ -382,6 +412,70 @@ struct ProfileView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+
+    /// Show the vehicle card to anyone who's a driver (≥1 published
+    /// route) OR is KYC-approved (very likely to become a driver soon
+    /// and benefits from filling this in once, not at create-route
+    /// time). Riders without either signal don't see it — they have
+    /// no use for vehicle fields and the card would be noise.
+    private var shouldShowVehicleCard: Bool {
+        !store.driverDashboards().isEmpty || store.kycStatus == .approved
+    }
+
+    private var vehicleCard: some View {
+        Button {
+            showEditVehicle = true
+        } label: {
+            HStack(spacing: 12) {
+                VIconBubble(
+                    systemName: hasVehicleSet ? "car.side.fill" : "car.side",
+                    color: hasVehicleSet ? VPalette.primary : VPalette.warning,
+                    size: 44,
+                    iconSize: 18
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Your vehicle")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundColor(VPalette.text)
+                    Text(vehicleSubtitle)
+                        .font(.system(size: 11))
+                        .foregroundColor(VPalette.textSec)
+                        .lineLimit(2)
+                }
+                Spacer()
+                if !hasVehicleSet {
+                    VBadge(text: "Set up", color: VPalette.warning, container: VPalette.warning.opacity(0.15))
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundColor(VPalette.textHint)
+                }
+            }
+            .padding(14)
+            .background(VPalette.surface)
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Tap to edit your plate, colour and model")
+    }
+
+    private var hasVehicleSet: Bool {
+        let plate = (store.currentUser.plateNumber ?? "").trimmingCharacters(in: .whitespaces)
+        return !plate.isEmpty
+    }
+
+    private var vehicleSubtitle: String {
+        let plate = store.currentUser.plateNumber?.trimmingCharacters(in: .whitespaces) ?? ""
+        let color = store.currentUser.carColor?.trimmingCharacters(in: .whitespaces) ?? ""
+        let model = store.currentUser.carModel?.trimmingCharacters(in: .whitespaces) ?? ""
+        if plate.isEmpty {
+            return "Set your plate, colour & model so riders can spot you"
+        }
+        let descriptor = [color, model].filter { !$0.isEmpty }.joined(separator: " ")
+        if descriptor.isEmpty { return plate }
+        return "\(plate) · \(descriptor)"
     }
 
     private var logoutPill: some View {
@@ -1310,5 +1404,151 @@ struct EditDisplayNameSheet: View {
         initialName: "User 1234",
         onCancel: {},
         onSave: { _ in .success(()) }
+    )
+}
+
+// MARK: - Edit Vehicle Sheet
+//
+// Vehicle identity (plate + colour + model) is set ONCE on the driver
+// profile and the server reads it back per-route. Surfacing it here
+// (not on Create Route) closes the "list plate A, arrive in car B"
+// safety hole — a malicious driver can't list a fake plate on a single
+// route, because every route they publish reads from this same record.
+
+struct EditVehicleSheet: View {
+    let initialPlate: String
+    let initialColor: String
+    let initialModel: String
+    let onCancel: () -> Void
+    let onSave:   (String, String, String) async -> Result<Void, AppError>
+
+    @State private var plate: String = ""
+    @State private var color: String = ""
+    @State private var model: String = ""
+    @State private var isSaving: Bool = false
+    @State private var errorMessage: String? = nil
+    @FocusState private var focused: Field?
+
+    private enum Field: Hashable { case plate, color, model }
+
+    /// Save when at least one field changed AND the plate is set
+    /// (the only required field — a rider with just colour + model is
+    /// not actionable). Plate format validation is intentionally
+    /// loose — Malaysian plates vary by state/region.
+    private var canSave: Bool {
+        let p = plate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let c = color.trimmingCharacters(in: .whitespacesAndNewlines)
+        let m = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isSaving || p.isEmpty { return false }
+        return p != initialPlate || c != initialColor || m != initialModel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Your vehicle")
+                    .font(.system(size: 18, weight: .black))
+                    .tracking(-0.3)
+                    .foregroundColor(VPalette.text)
+                Spacer()
+                Button(action: onCancel) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .heavy))
+                        .foregroundColor(VPalette.textSec)
+                        .frame(width: 32, height: 32)
+                        .background(VPalette.surfaceHigh)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cancel")
+            }
+
+            Text("Riders use your plate, colour and model to spot the right car at the pickup point. This is set once and applies to every route you publish.")
+                .font(.system(size: 12))
+                .foregroundColor(VPalette.textSec)
+
+            field(label: "Plate number",
+                  placeholder: "PEN 1234",
+                  text: $plate,
+                  field: .plate,
+                  autocaps: .characters)
+
+            HStack(spacing: 10) {
+                field(label: "Colour",
+                      placeholder: "White",
+                      text: $color,
+                      field: .color,
+                      autocaps: .words)
+                field(label: "Model",
+                      placeholder: "Myvi",
+                      text: $model,
+                      field: .model,
+                      autocaps: .words)
+            }
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(VPalette.danger)
+            }
+
+            VPrimaryButton("Save", isLoading: isSaving, isEnabled: canSave) {
+                Task { await save() }
+            }
+        }
+        .padding(20)
+        .onAppear {
+            plate = initialPlate
+            color = initialColor
+            model = initialModel
+            focused = .plate
+        }
+    }
+
+    @ViewBuilder
+    private func field(label: String, placeholder: String, text: Binding<String>,
+                       field: Field, autocaps: TextInputAutocapitalization) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption.weight(.heavy))
+                .foregroundColor(VPalette.textSec)
+            TextField(placeholder, text: text)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(VPalette.text)
+                .tint(VPalette.primary)
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                .background(VPalette.surfaceHigh)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .textInputAutocapitalization(autocaps)
+                .autocorrectionDisabled()
+                .submitLabel(.next)
+                .focused($focused, equals: field)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func save() async {
+        guard canSave else { return }
+        isSaving = true
+        errorMessage = nil
+        let result = await onSave(
+            plate.trimmingCharacters(in: .whitespacesAndNewlines),
+            color.trimmingCharacters(in: .whitespacesAndNewlines),
+            model.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        isSaving = false
+        if case .failure(let err) = result {
+            errorMessage = err.localizedDescription
+        }
+    }
+}
+
+#Preview("EditVehicleSheet") {
+    EditVehicleSheet(
+        initialPlate: "",
+        initialColor: "",
+        initialModel: "",
+        onCancel: {},
+        onSave: { _, _, _ in .success(()) }
     )
 }

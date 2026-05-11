@@ -11,6 +11,15 @@ async function initSchema(pool) {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  // Vehicle identity lives on the driver, not per-route. A driver
+  // who lists one plate on a route then shows up in a different car
+  // is an obvious safety/trust hole. These columns let every route
+  // the driver creates inherit their single vehicle identity at
+  // read time via the users JOIN. Future: validate against the
+  // KYC vehicle registration document on PUT /users/me/vehicle.
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS plate_number TEXT NULL");
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS car_color   TEXT NULL");
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS car_model   TEXT NULL");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS otp_codes (

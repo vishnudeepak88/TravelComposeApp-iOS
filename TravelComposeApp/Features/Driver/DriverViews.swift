@@ -349,11 +349,10 @@ private struct InfoBanner: View {
     var seatCount: Int = 3
     var pricePerSeat: Int = 8
     var carType: CarType = .sedan
-    /// Plate + colour — surfaced on the rider's search card so they can
-    /// identify the vehicle at the pickup point. Optional, but strongly
-    /// encouraged via the placeholder copy.
-    var plateNumber: String = ""
-    var carColor: String = ""
+    // Plate + colour intentionally NOT here. Vehicle identity is set
+    // ONCE on the driver's profile (Profile → Your vehicle) and the
+    // server reads it back per-route. Keeping it off the route prevents
+    // the "list plate A on route, arrive in car B" bait-and-switch.
     var monday = true; var tuesday = true; var wednesday = true
     var thursday = true; var friday = true; var saturday = false; var sunday = false
     var pickupPoints: [String] = []
@@ -568,14 +567,14 @@ private struct InfoBanner: View {
         guard let store else { return }
         createState = .loading
         Task {
-            let trimmedPlate = plateNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedColor = carColor.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Vehicle identity is intentionally NOT passed here — the
+            // server reads it from the driver's profile (PUT
+            // /users/me/vehicle) via a JOIN. Drivers set it once on
+            // Profile and every route reflects the current values.
             let result = await store.createRoute(startLocation: startLocation, endLocation: endLocation,
                                                 departureTime: departureTime, seatCount: seatCount, pricePerSeat: pricePerSeat,
                                                 carType: carType, daysOfWeek: daysOfWeek,
-                                                pickupNames: pickupPoints, dropNames: dropPoints,
-                                                plateNumber: trimmedPlate.isEmpty ? nil : trimmedPlate.uppercased(),
-                                                carColor: trimmedColor.isEmpty ? nil : trimmedColor)
+                                                pickupNames: pickupPoints, dropNames: dropPoints)
             switch result {
             case .success(let id): createState = .success(id)
             case .failure(let err): createState = .error(err.localizedDescription)
@@ -722,19 +721,42 @@ struct CreateRouteView: View {
                                         }
                                     }
                                 }
-                                // Plate + colour. Shown on the rider's
-                                // search card so they can identify the
-                                // vehicle at the pickup. Both optional
-                                // so a driver can save a route without
-                                // them, but strongly recommended via
-                                // placeholder copy.
-                                HStack(spacing: 10) {
-                                    VoygoTextField(label: "Plate", text: $vm.plateNumber, placeholder: "PEN 1234")
-                                    VoygoTextField(label: "Car colour", text: $vm.carColor, placeholder: "White")
+                                // Vehicle identity is owned by the
+                                // driver profile, not the route — set
+                                // it once on Profile → Your vehicle
+                                // and every route reflects it. Show a
+                                // soft hint here when nothing's set yet
+                                // so the driver doesn't ship a route
+                                // riders can't visually identify.
+                                if (store.currentUser.plateNumber ?? "").trimmingCharacters(in: .whitespaces).isEmpty {
+                                    HStack(spacing: 10) {
+                                        Image(systemName: "exclamationmark.triangle.fill")
+                                            .foregroundColor(VPalette.warning)
+                                            .font(.system(size: 14, weight: .heavy))
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Add your vehicle to Profile")
+                                                .font(.caption.weight(.heavy))
+                                                .foregroundColor(VPalette.text)
+                                            Text("Plate + colour go on your profile so riders can spot the right car. Set once, applies to every route.")
+                                                .font(.caption2)
+                                                .foregroundColor(VPalette.textHint)
+                                        }
+                                        Spacer()
+                                    }
+                                    .padding(10)
+                                    .background(VPalette.warning.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                } else {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "car.side.fill")
+                                            .foregroundColor(VPalette.primary)
+                                            .font(.system(size: 14, weight: .heavy))
+                                        Text(vehicleHint)
+                                            .font(.caption2)
+                                            .foregroundColor(VPalette.textSec)
+                                        Spacer()
+                                    }
                                 }
-                                Text("Plate + colour help riders spot you at the pickup point. Optional but strongly recommended.")
-                                    .font(.caption2)
-                                    .foregroundColor(VPalette.textHint)
                             }
                             .padding(16)
                         }
@@ -896,6 +918,18 @@ struct CreateRouteView: View {
               let h = Int(parts[0]), let m = Int(parts[1]),
               (0...23).contains(h), (0...59).contains(m) else { return false }
         return vm.seatCount > 0 && vm.pricePerSeat > 0
+    }
+
+    /// Short, human-readable summary of the driver's current vehicle
+    /// — shown on Create Route when the profile is already filled in
+    /// so the driver can sanity-check what riders will see.
+    private var vehicleHint: String {
+        let plate = (store.currentUser.plateNumber ?? "").trimmingCharacters(in: .whitespaces)
+        let color = (store.currentUser.carColor ?? "").trimmingCharacters(in: .whitespaces)
+        let model = (store.currentUser.carModel ?? "").trimmingCharacters(in: .whitespaces)
+        let descriptor = [color, model].filter { !$0.isEmpty }.joined(separator: " ")
+        if descriptor.isEmpty { return "Riders will see: \(plate)" }
+        return "Riders will see: \(plate) · \(descriptor)"
     }
 }
 

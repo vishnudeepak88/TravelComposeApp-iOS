@@ -678,21 +678,21 @@ final class AppStore {
         guard !trimmed.isEmpty else { return .failure(.message("Name can't be empty")) }
         guard trimmed.count <= 60 else { return .failure(.message("Name is too long")) }
         guard isAuthenticated else { return .failure(.message("Sign in first")) }
-        let previous = currentUser.name
-        currentUser = User(id: currentUser.id, name: trimmed, rating: currentUser.rating)
+        let previous = currentUser
+        currentUser.name = trimmed
         UserDefaults.standard.set(trimmed, forKey: SessionKeys.displayName)
         do {
             try await VoygoAPIClient.updateDisplayName(trimmed)
             return .success(())
         } catch APIError.unauthorized {
             // Rollback so the UI doesn't lie about a saved name.
-            currentUser = User(id: currentUser.id, name: previous, rating: currentUser.rating)
-            UserDefaults.standard.set(previous, forKey: SessionKeys.displayName)
+            currentUser = previous
+            UserDefaults.standard.set(previous.name, forKey: SessionKeys.displayName)
             clearSession()
             return .failure(.unauthorized)
         } catch {
-            currentUser = User(id: currentUser.id, name: previous, rating: currentUser.rating)
-            UserDefaults.standard.set(previous, forKey: SessionKeys.displayName)
+            currentUser = previous
+            UserDefaults.standard.set(previous.name, forKey: SessionKeys.displayName)
             return .failure(.from(error))
         }
     }
@@ -1334,8 +1334,7 @@ final class AppStore {
 
     func createRoute(startLocation: String, endLocation: String, departureTime: String,
                      seatCount: Int, pricePerSeat: Int, carType: CarType, daysOfWeek: DaysOfWeekFlags,
-                     pickupNames: [String], dropNames: [String],
-                     plateNumber: String? = nil, carColor: String? = nil) async -> Result<String, AppError> {
+                     pickupNames: [String], dropNames: [String]) async -> Result<String, AppError> {
         guard isAuthenticated else { return .failure(.message("Sign in first")) }
         guard !startLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !endLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1358,20 +1357,25 @@ final class AppStore {
             daysOfWeek: daysOfWeek.asDictionary,
             seatCount: seatCount,
             pricePerSeat: pricePerSeat,
-            carType: carType.rawValue,
-            plateNumber: plateNumber,
-            carColor: carColor
+            carType: carType.rawValue
         )
         do {
             let response = try await VoygoAPIClient.createRoute(request: request)
             let id = response.routeId ?? response.id ?? "rr-\(UUID().uuidString)"
+            // Hydrate the local copy with the driver's profile vehicle
+            // so the route card reflects what other users will see
+            // (server JOINs the same fields on read). Empty fields
+            // surface a "Vehicle not set" CTA on the driver's own
+            // route page.
             replaceRoute(RecurringRoute(id: id, driverId: driverId, driverName: currentUser.name,
                                         driverPhone: phoneNumber.isEmpty ? nil : phoneNumber,
                                         startLocation: startLocation, endLocation: endLocation,
                                         pickupPoints: pickups, dropPoints: drops, departureTime: departureTime,
                                         daysOfWeek: daysOfWeek, seatCount: seatCount, pricePerSeat: pricePerSeat,
                                         carType: carType,
-                                        plateNumber: plateNumber, carColor: carColor,
+                                        plateNumber: currentUser.plateNumber,
+                                        carColor: currentUser.carColor,
+                                        carModel: currentUser.carModel,
                                         activeStatus: .active,
                                         reliability: DriverReliability(onTimeRate: 0.9, cancellationRate: 0.05, repeatRiders: 0, averageRating: 5.0)))
             regenerateRides()
@@ -1380,6 +1384,34 @@ final class AppStore {
             clearSession()
             return .failure(.unauthorized)
         } catch {
+            return .failure(.from(error))
+        }
+    }
+
+    /// Updates the driver's vehicle identity (plate + colour + model)
+    /// on /users/me/vehicle. Mirrors the saved values onto `currentUser`
+    /// optimistically; rolls back on failure. Empty strings clear a
+    /// field on the server.
+    func updateVehicle(plate: String, color: String, model: String) async -> Result<Void, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        let previous = currentUser
+        currentUser.plateNumber = plate.isEmpty ? nil : plate
+        currentUser.carColor    = color.isEmpty ? nil : color
+        currentUser.carModel    = model.isEmpty ? nil : model
+        do {
+            let saved = try await VoygoAPIClient.updateVehicle(plate: plate, color: color, model: model)
+            // Server is the source of truth — adopt whatever it stored
+            // (trimmed, length-capped) so local + remote agree.
+            currentUser.plateNumber = saved.plateNumber
+            currentUser.carColor    = saved.carColor
+            currentUser.carModel    = saved.carModel
+            return .success(())
+        } catch APIError.unauthorized {
+            currentUser = previous
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            currentUser = previous
             return .failure(.from(error))
         }
     }
@@ -1554,7 +1586,16 @@ final class AppStore {
         riderId = id
         driverId = id
         let displayName = user.displayName.isEmpty ? defaultDisplayName(for: user.phone) : user.displayName
-        currentUser = User(id: id, name: displayName, rating: currentUser.rating > 0 ? currentUser.rating : 5.0)
+        // Hydrate vehicle identity from /auth/me so Profile + Create
+        // Route both see the same source of truth as other clients.
+        currentUser = User(
+            id: id,
+            name: displayName,
+            rating: currentUser.rating > 0 ? currentUser.rating : 5.0,
+            plateNumber: user.plateNumber,
+            carColor: user.carColor,
+            carModel: user.carModel
+        )
         kycStatus = user.kyc
         if !user.phone.isEmpty {
             phoneNumber = user.phone

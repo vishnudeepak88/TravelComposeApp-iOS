@@ -347,7 +347,10 @@ app.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const userRes = await pool.query(
-      "SELECT id, phone, display_name, kyc_status FROM users WHERE id = $1",
+      `SELECT id, phone, display_name, kyc_status,
+              plate_number, car_color, car_model
+         FROM users
+        WHERE id = $1`,
       [req.user.id]
     );
     const user = userRes.rows[0];
@@ -359,7 +362,14 @@ app.get(
       id: String(user.id),
       phone: user.phone,
       displayName: user.display_name || "",
-      kycStatus: user.kyc_status || "NOT_STARTED"
+      kycStatus: user.kyc_status || "NOT_STARTED",
+      // Vehicle identity belongs to the driver, not per-route. iOS reads
+      // these from the profile and renders the "Vehicle" tile in
+      // settings; missing fields show an empty CTA until the driver
+      // fills them in.
+      plateNumber: user.plate_number || null,
+      carColor: user.car_color || null,
+      carModel: user.car_model || null
     });
   })
 );
@@ -376,6 +386,50 @@ app.put(
       [req.user.id, displayName]
     );
     res.status(204).send();
+  })
+);
+
+// Driver vehicle identity — the single source of truth for plate +
+// colour + model. A bad actor cannot list one plate on a route and
+// arrive in another car because every route DTO sources vehicle from
+// here at read time (see loadRouteContexts in repository.js).
+//
+// Light validation only: plates and colour strings are user-facing
+// labels for the rider to spot at pickup, not authoritative legal
+// fields. KYC is where vehicle ownership is actually checked.
+app.put(
+  "/users/me/vehicle",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const plateRaw = body.plateNumber ?? body.plate_number ?? "";
+    const colorRaw = body.carColor ?? body.car_color ?? "";
+    const modelRaw = body.carModel ?? body.car_model ?? "";
+
+    // Trim + length-cap so a malicious client can't push 1MB of text
+    // into the column. 32 chars holds even the longest Malaysian
+    // plate ("WMM 1234 P" is 10), 24 covers "Pearl White Metallic",
+    // 64 covers most "Toyota Vios 1.5 G AT".
+    const plate = String(plateRaw).trim().slice(0, 32);
+    const color = String(colorRaw).trim().slice(0, 24);
+    const model = String(modelRaw).trim().slice(0, 64);
+
+    await pool.query(
+      `UPDATE users
+          SET plate_number = $2,
+              car_color    = $3,
+              car_model    = $4,
+              updated_at   = NOW()
+        WHERE id = $1`,
+      [req.user.id, plate || null, color || null, model || null]
+    );
+
+    res.json({
+      plateNumber: plate || null,
+      carColor: color || null,
+      carModel: model || null
+    });
   })
 );
 
@@ -1295,8 +1349,11 @@ app.post(
       seatCount: bodyValue(body, "seatCount", "seat_count"),
       pricePerSeat: bodyValue(body, "pricePerSeat", "price_per_seat"),
       carType: bodyValue(body, "carType", "car_type"),
-      plateNumber: bodyValue(body, "plateNumber", "plate_number"),
-      carColor: bodyValue(body, "carColor", "car_color"),
+      // plateNumber/carColor are intentionally NOT read from this body.
+      // Vehicle identity is sourced from the driver's profile via
+      // loadRouteContexts's user JOIN — preventing a route from
+      // listing one plate at search time and the driver arriving
+      // in a different car.
       activeStatus: "ACTIVE"
     });
     await generateRideInstances(pool, todayIso(), 30);

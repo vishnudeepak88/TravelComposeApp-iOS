@@ -161,11 +161,15 @@ struct RecurringRoute: Codable, Equatable, Identifiable {
     var seatCount: Int
     var pricePerSeat: Int
     var carType: CarType
-    /// Plate + color let the rider identify the vehicle at the pickup
-    /// point. Both optional until the driver fills them on Create
-    /// Route. Surfaced on the search-result card.
+    /// Plate + colour + model let the rider identify the vehicle at
+    /// the pickup point. These are sourced from the driver's user
+    /// record (PUT /users/me/vehicle) — NOT from per-route input — so
+    /// a driver cannot list one plate at search time and arrive in
+    /// a different car. All three optional until the driver fills
+    /// them on Profile → Vehicle.
     var plateNumber: String? = nil
     var carColor: String? = nil
+    var carModel: String? = nil
     var activeStatus: RouteActiveStatus
     var reliability: DriverReliability
     /// Server-decorated for the requesting rider — true when the
@@ -334,6 +338,13 @@ struct User: Equatable {
     var id: String
     var name: String
     var rating: Double
+    /// Driver vehicle identity, mirrored from /auth/me. All nil until
+    /// the driver fills the Profile → Vehicle form. Profile reads
+    /// these to render the vehicle tile; we never use them as inputs
+    /// to per-route creation.
+    var plateNumber: String? = nil
+    var carColor: String? = nil
+    var carModel: String? = nil
     var initial: String { String(name.prefix(1)).uppercased() }
 }
 

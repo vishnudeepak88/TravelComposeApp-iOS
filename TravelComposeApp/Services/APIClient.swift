@@ -72,6 +72,15 @@ struct VoygoAPIClient {
         _ = try await putVoid(body, to: baseURL.appendingPathComponent("users/me"))
     }
 
+    /// Sets the driver's vehicle identity on their profile. Returns
+    /// the trimmed/saved values so the client can store exactly what
+    /// the server persisted (e.g. server may strip trailing spaces).
+    /// Empty strings clear the field on the server side.
+    static func updateVehicle(plate: String, color: String, model: String) async throws -> UpdateVehicleResponse {
+        let body = UpdateVehicleRequest(plateNumber: plate, carColor: color, carModel: model)
+        return try await put(body, to: baseURL.appendingPathComponent("users/me/vehicle"), as: UpdateVehicleResponse.self)
+    }
+
     // MARK: - KYC documents (Trust.swift)
 
     static func listKycDocuments() async throws -> [KycDocument] {
@@ -720,8 +729,29 @@ struct AuthUserDTO: Decodable {
     var phone: String
     var displayName: String
     var kycStatus: String
+    /// Vehicle identity lives on the driver, not per-route. Optional
+    /// because non-drivers and freshly-signed-up drivers haven't set
+    /// theirs yet — Profile shows a CTA in that case.
+    var plateNumber: String?
+    var carColor: String?
+    var carModel: String?
 
     var kyc: KycStatus { KycStatus(rawValue: kycStatus) ?? .notStarted }
+}
+
+/// Driver vehicle identity. The server stores plate + colour + model
+/// on the user row; iOS sends this whole struct to PUT /users/me/vehicle
+/// and reads it back from /auth/me.
+struct UpdateVehicleRequest: Encodable {
+    var plateNumber: String
+    var carColor: String
+    var carModel: String
+}
+
+struct UpdateVehicleResponse: Decodable {
+    var plateNumber: String?
+    var carColor: String?
+    var carModel: String?
 }
 
 // `UpdateKycRequest` was removed — the server no longer accepts a
@@ -868,8 +898,12 @@ struct RecurringRouteDTO: Decodable {
     var seatCount: Int
     var pricePerSeat: Int
     var carType: CarType?
+    /// Vehicle identity is server-sourced (from the driver's user
+    /// record). Client never writes these back through this DTO —
+    /// drivers update their profile via PUT /users/me/vehicle.
     var plateNumber: String?
     var carColor: String?
+    var carModel: String?
     var activeStatus: RouteActiveStatus?
     var reliability: DriverReliability?
     var isFavorite: Bool?
@@ -883,7 +917,7 @@ struct RecurringRouteDTO: Decodable {
             departureTime: departureTime, daysOfWeek: daysOfWeek,
             seatCount: seatCount, pricePerSeat: pricePerSeat,
             carType: carType ?? .sedan,
-            plateNumber: plateNumber, carColor: carColor,
+            plateNumber: plateNumber, carColor: carColor, carModel: carModel,
             activeStatus: activeStatus ?? .active,
             reliability: reliability ?? DriverReliability(onTimeRate: 0.9, cancellationRate: 0.05, repeatRiders: 0, averageRating: 4.5),
             isFavorite: isFavorite ?? false
@@ -1065,8 +1099,11 @@ struct CreateRecurringRouteRequest: Encodable {
     var seatCount: Int
     var pricePerSeat: Int
     var carType: String
-    var plateNumber: String? = nil
-    var carColor: String? = nil
+    // plateNumber + carColor intentionally removed — vehicle identity
+    // is set once on the driver's profile (PUT /users/me/vehicle) and
+    // the server reads it back per-route via a JOIN. A driver who lists
+    // one plate on a route and arrives in another car is the exact
+    // safety hole we're closing.
     var activeStatus: Bool = true
 
     struct RoutePointIn: Encodable {

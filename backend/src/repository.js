@@ -69,7 +69,9 @@ function normalizeActiveStatus(status) {
     .trim() === "ACTIVE";
 }
 
-function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null, isFavorite = false) {
+function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null,
+                    driverPlate = null, driverColor = null, driverCarModel = null,
+                    isFavorite = false) {
   const pickupPoints = points.filter((p) => p.kind === "pickup").map(mapPoint);
   const dropPoints = points.filter((p) => p.kind === "drop").map(mapPoint);
   const reliability = mapReliability(reliabilityRow);
@@ -91,8 +93,13 @@ function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null, isFav
     seatCount: Number(routeRow.seat_count),
     pricePerSeat: Number(routeRow.price_per_seat),
     carType: routeRow.car_type || "SEDAN",
-    plateNumber: routeRow.plate_number || null,
-    carColor: routeRow.car_color || null,
+    // Vehicle identity is driver-owned now — sourced from users table
+    // via the JOIN in loadRouteContexts. A route cannot fake a plate
+    // it doesn't have; a driver who swaps cars updates the profile
+    // once and every route reflects the change.
+    plateNumber: driverPlate || null,
+    carColor: driverColor || null,
+    carModel: driverCarModel || null,
     activeStatus: routeRow.active_status ? "ACTIVE" : "PAUSED",
     reliability,
     isFavorite
@@ -142,18 +149,30 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
     reliabilityRes.rows.map((row) => [row.driver_id, row])
   );
 
-  // Pull driver phones from the users table so the route DTO can
-  // expose driver_phone for the LiveTrip Call button. `users.id` is
-  // UUID and `recurring_routes.driver_id` is TEXT — same mismatch
-  // that 500'd /longhaul/trips. Cast id::text on the comparison so
-  // Postgres doesn't error out.
+  // Pull driver phones AND vehicle identity from the users table.
+  // Vehicle lives on the driver (not per-route) so a bad actor can't
+  // list one plate at search time and arrive in a different car —
+  // every route DTO reflects whatever's currently on the profile.
+  // `users.id` is UUID and `recurring_routes.driver_id` is TEXT —
+  // same mismatch that 500'd /longhaul/trips. Cast id::text on both
+  // sides so Postgres doesn't error out.
   const userRes = await pool.query(
-    `SELECT id::text AS id, phone FROM users WHERE id::text = ANY($1::text[])`,
+    `SELECT id::text AS id, phone, plate_number, car_color, car_model
+       FROM users
+      WHERE id::text = ANY($1::text[])`,
     [driverIds]
   );
-  const phoneByDriver = new Map(
-    userRes.rows.map((row) => [String(row.id), row.phone || null])
-  );
+  const phoneByDriver = new Map();
+  const plateByDriver = new Map();
+  const colorByDriver = new Map();
+  const carModelByDriver = new Map();
+  for (const row of userRes.rows) {
+    const key = String(row.id);
+    phoneByDriver.set(key, row.phone || null);
+    plateByDriver.set(key, row.plate_number || null);
+    colorByDriver.set(key, row.car_color || null);
+    carModelByDriver.set(key, row.car_model || null);
+  }
 
   const activeCountRes = await pool.query(
     `SELECT route_id, COUNT(*)::int AS active_count
@@ -182,11 +201,24 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
   }
 
   return routeRes.rows.map((route) => {
+    const driverKey = String(route.driver_id);
     const points = pointsByRoute.get(String(route.id)) || [];
     const reliabilityRow = reliabilityByDriver.get(route.driver_id) || null;
-    const driverPhone = phoneByDriver.get(String(route.driver_id)) || null;
+    const driverPhone = phoneByDriver.get(driverKey) || null;
+    const driverPlate = plateByDriver.get(driverKey) || null;
+    const driverColor = colorByDriver.get(driverKey) || null;
+    const driverCarModel = carModelByDriver.get(driverKey) || null;
     const isFavorite = favoriteRouteIds.has(String(route.id));
-    const dto = mapRouteDto(route, points, reliabilityRow, driverPhone, isFavorite);
+    const dto = mapRouteDto(
+      route,
+      points,
+      reliabilityRow,
+      driverPhone,
+      driverPlate,
+      driverColor,
+      driverCarModel,
+      isFavorite
+    );
     const activeCount = activeCountByRoute.get(String(route.id)) || 0;
     return {
       route,
@@ -206,13 +238,17 @@ async function createRoute(pool, payload, options = {}) {
       : normalizeActiveStatus(payload.activeStatus || "ACTIVE");
   const driverName = payload.driverName || payload.driverId;
 
+  // Vehicle identity (plate, colour, model) is intentionally NOT written
+  // here — it lives on the driver's user record. Any plateNumber /
+  // carColor fields in payload are dropped on the floor to prevent
+  // route-level spoofing. If those legacy columns still exist they
+  // stay NULL for new rows.
   await pool.query(
     `INSERT INTO recurring_routes (
       id, driver_id, driver_name, start_location, end_location, departure_time,
-      days_of_week, seat_count, price_per_seat, car_type,
-      plate_number, car_color, active_status
+      days_of_week, seat_count, price_per_seat, car_type, active_status
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13)`,
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)`,
     [
       routeId,
       payload.driverId,
@@ -224,8 +260,6 @@ async function createRoute(pool, payload, options = {}) {
       Number(payload.seatCount),
       Number(payload.pricePerSeat),
       payload.carType || "SEDAN",
-      payload.plateNumber || null,
-      payload.carColor || null,
       activeStatus
     ]
   );
