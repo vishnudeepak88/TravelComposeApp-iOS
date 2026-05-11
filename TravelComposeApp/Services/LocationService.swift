@@ -129,25 +129,22 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
         return try await mapKitSearch(query: cleaned, near: coordinate, limit: limit)
     }
 
-    /// Suggests pickup / drop candidates near a coordinate AND along
-    /// the corridor between two coordinates when both are given.
-    /// Combines transit hubs, malls, shopping centres, and well-known
-    /// landmarks — the places Malaysian commuters actually meet
-    /// drivers ("see you at Sunway Pyramid"). Drives the "Suggested
-    /// pickups" / "Suggested drops" pill rows on Create Route.
-    ///
-    /// When `corridorAnchor` is provided, we also sample a query at
-    /// the midpoint between `coordinate` and `corridorAnchor` so the
-    /// rail surfaces waypoints riders along the route can join from,
-    /// not just hubs clustered around the endpoints.
+    /// Pickup vs drop suggestion intent. Drives query selection
+    /// (transit/malls for pickups, offices/hospitals/schools for
+    /// drops) AND anchor sampling (drops never sample the corridor
+    /// midpoint — a rider going to KLCC wants to be dropped at
+    /// KLCC, not at a mall halfway there).
+    enum SuggestionPurpose {
+        case pickup
+        case drop
+    }
+
     /// Penang commute hubs — Voygo's pilot region is Penang, so these
     /// are the meet-points drivers and riders actually use day-to-day.
     /// Mix of the central Georgetown transit hubs, the Bayan Lepas
     /// industrial cluster (where the bulk of the commute flow goes),
     /// and the two big mainland-side gateways (Penang Sentral,
-    /// Sunway Carnival). Renamed from `popularKlangValleyHubs` to
-    /// `popularLocalHubs` so a future region rotation doesn't need
-    /// another call-site rename.
+    /// Sunway Carnival).
     static let popularLocalHubs: [PlaceSuggestion] = [
         PlaceSuggestion(displayName: "Komtar",                 lat: 5.4148, lon: 100.3299),
         PlaceSuggestion(displayName: "Gurney Plaza",           lat: 5.4382, lon: 100.3094),
@@ -159,35 +156,98 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
         PlaceSuggestion(displayName: "Sunway Carnival Mall",   lat: 5.3925, lon: 100.4017)
     ]
 
+    /// Penang commute DESTINATIONS — where riders are heading to,
+    /// not where they wait. Skewed toward workplaces, schools and
+    /// healthcare — the actual reasons people commute. Hubs that
+    /// double as destinations (Komtar, Penang Sentral) stay; ones
+    /// that are mainly meeting points (Gurney Plaza shop-front,
+    /// Sunway Carnival Mall) come out.
+    static let popularLocalDestinations: [PlaceSuggestion] = [
+        PlaceSuggestion(displayName: "Bayan Lepas FIZ",        lat: 5.3267, lon: 100.2787),
+        PlaceSuggestion(displayName: "Komtar",                 lat: 5.4148, lon: 100.3299),
+        PlaceSuggestion(displayName: "USM",                    lat: 5.3556, lon: 100.3015),
+        PlaceSuggestion(displayName: "Penang General Hospital", lat: 5.4197, lon: 100.3083),
+        PlaceSuggestion(displayName: "Island Hospital",        lat: 5.4216, lon: 100.3138),
+        PlaceSuggestion(displayName: "Penang International Airport", lat: 5.2974, lon: 100.2734),
+        PlaceSuggestion(displayName: "Penang Sentral",         lat: 5.4014, lon: 100.3623),
+        PlaceSuggestion(displayName: "Queensbay Mall",         lat: 5.3318, lon: 100.3068)
+    ]
+
+    /// Suggests pickup OR drop candidates near a coordinate. The
+    /// `purpose` parameter determines:
+    ///   - which MapKit query categories to search (pickup = transit
+    ///     hubs + malls; drop = offices, hospitals, schools, malls)
+    ///   - whether to sample the corridor midpoint (pickups yes —
+    ///     "join along the way"; drops no — riders want to be dropped
+    ///     AT their destination, not halfway there)
+    ///
+    /// Drives the "Suggested pickups" / "Suggested drops" pill rows
+    /// on Create Route. Previously a single shared query set produced
+    /// transit-hub results for both rails — meaning a driver creating
+    /// a Subang→KLCC route saw "LRT Sentul" suggested as a drop point
+    /// instead of "Petronas Tower". This split fixes that.
     func searchNearbyHubs(near coordinate: CLLocationCoordinate2D,
+                          purpose: SuggestionPurpose = .pickup,
                           corridorAnchor: CLLocationCoordinate2D? = nil,
                           radiusMeters: Double = 5_000,
                           limit: Int = 8) async throws -> [PlaceSuggestion] {
-        // Each query phrase pulls a distinct category MapKit indexes well.
-        // Transit first (the most common meeting point), then high-traffic
-        // landmarks riders use as casual reference ("pick me up at AEON").
-        let queries = [
-            "LRT station",
-            "MRT station",
-            "bus station",
-            "shopping mall",
-            "university"
-        ]
+        // Per-purpose query lists. Each phrase pulls a distinct
+        // category MapKit indexes well in Malaysia.
+        let queries: [String]
+        switch purpose {
+        case .pickup:
+            // Where riders gather + wait. Transit nodes lead because
+            // they're the most common pre-booked meeting point;
+            // shopping malls double as casual landmarks
+            // ("see you at AEON").
+            queries = [
+                "LRT station",
+                "MRT station",
+                "bus station",
+                "KTM station",
+                "shopping mall"
+            ]
+        case .drop:
+            // Where riders ACTUALLY GO. Offices first (the dominant
+            // commute drop), then schools/universities (school run),
+            // hospitals (medical), business/industrial parks (the
+            // Bayan Lepas / Cyberjaya pattern), then malls as a
+            // fallback category for retail-cluster drops.
+            queries = [
+                "office",
+                "office tower",
+                "business park",
+                "industrial park",
+                "university",
+                "hospital",
+                "school",
+                "shopping mall"
+            ]
+        }
 
-        // Sample anchors: the start coord, the corridor midpoint when we
-        // have both endpoints, and the corridor anchor itself. Midpoint
-        // surfaces "places along the way" rather than only at endpoints.
+        // Anchor sampling rule:
+        //   - Pickups SHOULD sample the corridor midpoint so a rider
+        //     halfway along the route can be picked up at a hub
+        //     between the driver's start and destination.
+        //   - Drops should NOT — the destination is the whole point;
+        //     a "drop at the midpoint" mall is a worse suggestion
+        //     than just the destination's nearby office tower.
         var anchors: [CLLocationCoordinate2D] = [coordinate]
-        if let other = corridorAnchor {
+        if purpose == .pickup, let other = corridorAnchor {
             let mid = CLLocationCoordinate2D(
                 latitude:  (coordinate.latitude  + other.latitude)  / 2.0,
                 longitude: (coordinate.longitude + other.longitude) / 2.0
             )
             anchors.append(mid)
         }
-        // Per-anchor search radius — widen slightly when corridor is
-        // active so the midpoint catches a bigger slice.
-        let perAnchorRadius = corridorAnchor == nil ? radiusMeters : max(radiusMeters, 7_000)
+        // Tighter radius for drops — workplaces clustered around a
+        // destination are usually within 2-3km. Wider radius for
+        // pickups (catch transit hubs that feed into the corridor).
+        let perAnchorRadius: Double
+        switch purpose {
+        case .pickup: perAnchorRadius = corridorAnchor == nil ? radiusMeters : max(radiusMeters, 7_000)
+        case .drop:   perAnchorRadius = min(radiusMeters, 3_500)
+        }
 
         var seen: Set<String> = []
         var results: [PlaceSuggestion] = []

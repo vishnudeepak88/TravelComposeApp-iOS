@@ -498,7 +498,7 @@ private struct InfoBanner: View {
         // Destination) is picked, the MapKit corridor results
         // replace these.
         if startCoordinate == nil {
-            pickupSuggestions = filteredDefaults(against: pickupPoints)
+            pickupSuggestions = filteredPickupDefaults(against: pickupPoints)
             return
         }
         guard let coord = startCoordinate else { return }
@@ -513,6 +513,7 @@ private struct InfoBanner: View {
             await MainActor.run { self?.isLoadingPickupSuggestions = true }
             let hubs = (try? await VoygoLocationService.shared.searchNearbyHubs(
                 near: target,
+                purpose: .pickup,
                 corridorAnchor: corridor
             )) ?? []
             await MainActor.run {
@@ -524,7 +525,7 @@ private struct InfoBanner: View {
                 let existing = Set(self.pickupPoints.map { $0.lowercased() })
                 let mapKit = hubs.filter { !existing.contains($0.displayName.lowercased()) }
                 self.pickupSuggestions = mapKit.isEmpty
-                    ? self.filteredDefaults(against: self.pickupPoints)
+                    ? self.filteredPickupDefaults(against: self.pickupPoints)
                     : mapKit
             }
         }
@@ -532,21 +533,21 @@ private struct InfoBanner: View {
     func refreshDropSuggestions() {
         dropSuggestionTask?.cancel()
         if endCoordinate == nil {
-            dropSuggestions = filteredDefaults(against: dropPoints)
+            dropSuggestions = filteredDropDefaults(against: dropPoints)
             return
         }
         guard let coord = endCoordinate else { return }
         let target = CLLocationCoordinate2D(latitude: coord.lat, longitude: coord.lon)
-        // Symmetric: drops benefit from the same midpoint sampling so a
-        // "between source and destination" mall shows up on both rails.
-        let corridor: CLLocationCoordinate2D? = startCoordinate.map {
-            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
-        }
+        // No corridor anchor for drops — riders want to be dropped AT
+        // the destination, not at a hub halfway there. Passing nil
+        // makes the service search only the destination area, with
+        // destination-flavored queries (office/hospital/school/etc.).
         dropSuggestionTask = Task { [weak self] in
             await MainActor.run { self?.isLoadingDropSuggestions = true }
             let hubs = (try? await VoygoLocationService.shared.searchNearbyHubs(
                 near: target,
-                corridorAnchor: corridor
+                purpose: .drop,
+                corridorAnchor: nil
             )) ?? []
             await MainActor.run {
                 guard let self else { return }
@@ -554,18 +555,29 @@ private struct InfoBanner: View {
                 let existing = Set(self.dropPoints.map { $0.lowercased() })
                 let mapKit = hubs.filter { !existing.contains($0.displayName.lowercased()) }
                 self.dropSuggestions = mapKit.isEmpty
-                    ? self.filteredDefaults(against: self.dropPoints)
+                    ? self.filteredDropDefaults(against: self.dropPoints)
                     : mapKit
             }
         }
     }
 
-    /// Filter the popular hubs list against already-added stops so we
-    /// don't suggest a duplicate. Used as the empty-state fallback
-    /// for both pickup and drop rails.
-    private func filteredDefaults(against existing: [String]) -> [PlaceSuggestion] {
+    /// Filter the popular PICKUP hubs list against already-added stops
+    /// so we don't suggest a duplicate. Empty-state fallback for the
+    /// pickup rail.
+    private func filteredPickupDefaults(against existing: [String]) -> [PlaceSuggestion] {
         let lower = Set(existing.map { $0.lowercased() })
         return VoygoLocationService.popularLocalHubs.filter {
+            !lower.contains($0.displayName.lowercased())
+        }
+    }
+
+    /// Filter the popular DROP destinations against already-added drops.
+    /// Different list from pickup defaults — biased toward workplaces,
+    /// schools and hospitals (where riders actually go) rather than
+    /// transit hubs (where riders wait).
+    private func filteredDropDefaults(against existing: [String]) -> [PlaceSuggestion] {
+        let lower = Set(existing.map { $0.lowercased() })
+        return VoygoLocationService.popularLocalDestinations.filter {
             !lower.contains($0.displayName.lowercased())
         }
     }
