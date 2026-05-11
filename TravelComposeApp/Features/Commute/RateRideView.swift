@@ -133,7 +133,7 @@ struct RateRideView: View {
                     } label: {
                         HStack(spacing: 6) {
                             if on {
-                                Image(systemName: "checkmark").font(.caption2.weight(.heavy))
+                                Image(systemName: "checkmark").font(.caption2.weight(.heavy)).accessibilityHidden(true)
                             }
                             Text(tag).font(.caption.weight(.bold))
                         }

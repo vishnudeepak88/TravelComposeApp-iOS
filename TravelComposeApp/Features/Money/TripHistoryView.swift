@@ -106,7 +106,7 @@ struct TripHistoryView: View {
                         }
                         if filteredTrips.isEmpty {
                             VStack(spacing: 8) {
-                                Image(systemName: "tray").font(.title).foregroundColor(VPalette.textHint)
+                                Image(systemName: "tray").font(.title).foregroundColor(VPalette.textHint).accessibilityHidden(true)
                                 Text(emptyStateTitle)
                                     .font(.footnote.weight(.heavy))
                                     .foregroundColor(VPalette.textSec)

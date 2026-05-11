@@ -88,7 +88,7 @@ struct LongHaulBrowseView: View {
                 } label: {
                     HStack(spacing: 6) {
                         if isSearching { ProgressView().tint(.white).controlSize(.small) }
-                        else { Image(systemName: "magnifyingglass").font(.footnote.weight(.heavy)) }
+                        else { Image(systemName: "magnifyingglass").font(.footnote.weight(.heavy)).accessibilityHidden(true) }
                         Text("Search")
                             .font(.footnote.weight(.heavy))
                     }

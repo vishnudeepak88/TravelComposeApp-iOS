@@ -756,7 +756,7 @@ struct PolishedRouteCard: View {
                                 .font(.subheadline.weight(.black))
                                 .foregroundColor(VPalette.text)
                             HStack(spacing: 2) {
-                                Image(systemName: "star.fill").font(.caption2).foregroundColor(VPalette.starGold)
+                                Image(systemName: "star.fill").font(.caption2).foregroundColor(VPalette.starGold).accessibilityHidden(true)
                                 Text("4.\(min(9, max(0, Int(match.reliabilityScore * 10))))")
                                     .font(.caption2.weight(.bold)).foregroundColor(VPalette.text)
                             }
@@ -806,7 +806,7 @@ struct PolishedRouteCard: View {
 
                 HStack {
                     HStack(spacing: 6) {
-                        Image(systemName: "person.fill").font(.caption).foregroundColor(VPalette.textSec)
+                        Image(systemName: "person.fill").font(.caption).foregroundColor(VPalette.textSec).accessibilityHidden(true)
                         let warning = match.availableSeats <= 1
                         (Text("\(match.availableSeats)").fontWeight(.heavy).foregroundColor(warning ? VPalette.warning : VPalette.success)
                          + Text(" of \(match.route.seatCount) seats left").foregroundColor(VPalette.textSec))
@@ -815,7 +815,7 @@ struct PolishedRouteCard: View {
                     Spacer()
                     HStack(spacing: 4) {
                         Text("View details").font(.caption.weight(.heavy)).foregroundColor(VPalette.primary)
-                        Image(systemName: "arrow.right").font(.caption2.weight(.heavy)).foregroundColor(VPalette.primary)
+                        Image(systemName: "arrow.right").font(.caption2.weight(.heavy)).accessibilityHidden(true).foregroundColor(VPalette.primary)
                     }
                 }
 

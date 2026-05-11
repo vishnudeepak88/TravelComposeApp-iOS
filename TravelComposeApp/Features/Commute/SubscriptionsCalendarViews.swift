@@ -422,7 +422,7 @@ struct CalendarItemCard: View {
                         .font(.subheadline.weight(.semibold)).foregroundColor(VoygoTheme.textPrimary)
                     Text("Driver: \(item.driverName)").font(.caption).foregroundColor(VoygoTheme.textSecondary)
                     HStack(spacing: 4) {
-                        Image(systemName: "mappin").font(.caption2).foregroundColor(VoygoTheme.accent)
+                        Image(systemName: "mappin").font(.caption2).foregroundColor(VoygoTheme.accent).accessibilityHidden(true)
                         Text("\(item.pickupPoint.label) → \(item.dropPoint.label)")
                             .font(.caption2).foregroundColor(VoygoTheme.textHint).lineLimit(1)
                     }

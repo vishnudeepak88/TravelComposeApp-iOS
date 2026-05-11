@@ -73,6 +73,8 @@
 		A1A1A1A1B1B1B1B100000025 /* SafeURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A1A1A1B1B1B1B100000015 /* SafeURLTests.swift */; };
 		A1A1A1A1B1B1B1B100000026 /* CapabilityFlagsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A1A1A1B1B1B1B100000016 /* CapabilityFlagsTests.swift */; };
 		A1A1A1A1B1B1B1B100000027 /* VoygoFocusStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A1A1A1B1B1B1B100000017 /* VoygoFocusStateTests.swift */; };
+		A1A1A1A1B1B1B1B100000028 /* AppStoreDeepLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A1A1A1B1B1B1B100000018 /* AppStoreDeepLinkTests.swift */; };
+		A1A1A1A1B1B1B1B100000029 /* APIClientDateDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A1A1A1B1B1B1B100000019 /* APIClientDateDecoderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -155,6 +157,8 @@
 		A1A1A1A1B1B1B1B100000015 /* SafeURLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeURLTests.swift; sourceTree = "<group>"; };
 		A1A1A1A1B1B1B1B100000016 /* CapabilityFlagsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityFlagsTests.swift; sourceTree = "<group>"; };
 		A1A1A1A1B1B1B1B100000017 /* VoygoFocusStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoygoFocusStateTests.swift; sourceTree = "<group>"; };
+		A1A1A1A1B1B1B1B100000018 /* AppStoreDeepLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreDeepLinkTests.swift; sourceTree = "<group>"; };
+		A1A1A1A1B1B1B1B100000019 /* APIClientDateDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientDateDecoderTests.swift; sourceTree = "<group>"; };
 		A1A1A1A1B1B1B1B100000002 /* TravelComposeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TravelComposeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -383,6 +387,8 @@
 				A1A1A1A1B1B1B1B100000015 /* SafeURLTests.swift */,
 				A1A1A1A1B1B1B1B100000016 /* CapabilityFlagsTests.swift */,
 				A1A1A1A1B1B1B1B100000017 /* VoygoFocusStateTests.swift */,
+				A1A1A1A1B1B1B1B100000018 /* AppStoreDeepLinkTests.swift */,
+				A1A1A1A1B1B1B1B100000019 /* APIClientDateDecoderTests.swift */,
 			);
 			path = TravelComposeAppTests;
 			sourceTree = "<group>";
@@ -564,6 +570,8 @@
 				A1A1A1A1B1B1B1B100000025 /* SafeURLTests.swift in Sources */,
 				A1A1A1A1B1B1B1B100000026 /* CapabilityFlagsTests.swift in Sources */,
 				A1A1A1A1B1B1B1B100000027 /* VoygoFocusStateTests.swift in Sources */,
+				A1A1A1A1B1B1B1B100000028 /* AppStoreDeepLinkTests.swift in Sources */,
+				A1A1A1A1B1B1B1B100000029 /* APIClientDateDecoderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

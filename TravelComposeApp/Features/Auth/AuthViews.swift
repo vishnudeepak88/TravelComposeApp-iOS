@@ -46,7 +46,7 @@ struct AuthPhoneView: View {
                         Spacer()
                         ZStack {
                             VPalette.primaryGradient
-                            Image(systemName: "car.fill").font(.title2).foregroundColor(.white)
+                            Image(systemName: "car.fill").font(.title2).foregroundColor(.white).accessibilityHidden(true)
                         }
                         .frame(width: 58, height: 58)
                         .clipShape(Circle())

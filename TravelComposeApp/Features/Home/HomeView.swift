@@ -784,9 +784,10 @@ struct HomeView: View {
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("RM \(row.priceMyr)")
-                        .font(.system(size: 18, weight: .black, design: .default))
+                        .font(.headline.weight(.black))
                         .foregroundColor(VPalette.primary)
-                    Text("per seat")
+                        .minimumScaleFactor(0.8)
+                    Text(S.homePerSeat)
                         .font(.caption2.weight(.semibold))
                         .foregroundColor(VPalette.textHint)
                 }

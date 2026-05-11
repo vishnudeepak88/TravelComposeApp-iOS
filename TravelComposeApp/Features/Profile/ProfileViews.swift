@@ -225,7 +225,7 @@ struct ProfileView: View {
                         .font(.caption2).foregroundColor(VPalette.textSec)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.footnote.weight(.heavy)).foregroundColor(VPalette.textHint)
+                Image(systemName: "chevron.right").font(.footnote.weight(.heavy)).accessibilityHidden(true).foregroundColor(VPalette.textHint)
             }
             .padding(14)
             .background(VPalette.surface)
@@ -411,7 +411,7 @@ struct ProfileView: View {
                     trailing
                 }
                 if chevron {
-                    Image(systemName: "chevron.right").font(.footnote.weight(.heavy)).foregroundColor(VPalette.textHint)
+                    Image(systemName: "chevron.right").font(.footnote.weight(.heavy)).accessibilityHidden(true).foregroundColor(VPalette.textHint)
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
@@ -439,7 +439,7 @@ struct ProfileView: View {
                         .foregroundColor(VPalette.textSec)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.footnote.weight(.heavy)).foregroundColor(VPalette.textHint)
+                Image(systemName: "chevron.right").font(.footnote.weight(.heavy)).accessibilityHidden(true).foregroundColor(VPalette.textHint)
             }
             .padding(14)
             .background(VPalette.surface)
@@ -625,7 +625,7 @@ struct HelpCenterView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         HStack {
-                            Image(systemName: "questionmark.bubble.fill").font(.largeTitle).foregroundStyle(VoygoTheme.primaryGradient)
+                            Image(systemName: "questionmark.bubble.fill").font(.largeTitle).foregroundStyle(VoygoTheme.primaryGradient).accessibilityHidden(true)
                             VStack(alignment: .leading) {
                                 Text("Need Help?").font(.title3.bold()).foregroundColor(VoygoTheme.textPrimary)
                                 Text("We're here for you").font(.subheadline).foregroundColor(VoygoTheme.textSecondary)

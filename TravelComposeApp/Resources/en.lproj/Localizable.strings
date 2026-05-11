@@ -40,3 +40,139 @@
 "home.seeAll" = "See all";
 "home.promo.kicker" = "FIRST RIDE FREE";
 "home.promo.title" = "Try carpool today, save RM 14";
+
+/* Action-required banner (Home) */
+"home.actionRequired.one" = "Subscription paused";
+"home.actionRequired.many" = "%d subscriptions paused";
+"home.actionRequired.body" = "Payment didn't go through. Tap to retry — your seats stay reserved until then.";
+
+/* Skip-a-day */
+"skip.label" = "Skip";
+"skip.failed.title" = "Couldn't skip";
+"skip.a11y" = "Skip this ride";
+
+/* Subscriptions list — empty state */
+"subs.empty.title" = "No subscriptions";
+"subs.empty.body" = "Search for commute routes and subscribe to start riding";
+"subs.empty.cta" = "Find a route";
+
+/* Driver dashboard — empty state */
+"driver.empty.title" = "No routes yet";
+"driver.empty.body" = "Create your first recurring route to start picking up riders";
+"driver.empty.cta" = "Create a route";
+
+/* KYC document statuses */
+"kyc.verified" = "Verified";
+"kyc.underReview" = "Under review";
+"kyc.notUploaded" = "Not uploaded";
+"kyc.upload" = "Upload";
+"kyc.replace" = "Replace";
+"kyc.reupload" = "Re-upload";
+"kyc.rejected" = "Rejected — %@";
+
+/* Auth — Terms link copy */
+"auth.terms.lead" = "By continuing, you agree to our";
+"auth.terms.link" = "Terms";
+"auth.terms.and" = "and";
+"auth.privacy.link" = "Privacy Policy";
+"auth.sendOtp" = "Send OTP";
+
+/* Auth — brand + screen copy */
+"auth.brandName" = "Voygo";
+"auth.tagline" = "Your recurring commute, made dependable";
+"auth.phoneCaption" = "We'll send a verification code";
+"auth.or" = "or";
+"auth.devOnly" = "DEV ONLY";
+"auth.skipLogin" = "Skip login → home screen";
+
+/* Profile — identity + member-since + logout */
+"profile.welcome" = "Welcome";
+"profile.newRider" = "New rider";
+"profile.memberSince" = "Member since";
+"profile.memberSinceToday" = "Today";
+"profile.rides" = "Rides";
+"profile.logOut" = "Log out";
+"profile.logOutTitle" = "Log Out";
+"profile.logOutMessage" = "You'll need to sign in again.";
+
+/* Privacy & Security */
+"privacy.title" = "Privacy & Security";
+"privacy.section.preferences" = "Preferences";
+"privacy.toggle.push" = "Push notifications";
+"privacy.toggle.pushSubtitle" = "Receive ride reminders, chat messages, payment receipts";
+"privacy.toggle.phone" = "Share phone with subscribers";
+"privacy.toggle.phoneSubtitle" = "When OFF, riders see a masked number until pickup";
+"privacy.toggle.biometric" = "Lock wallet with Face ID";
+"privacy.toggle.biometricSubtitle" = "Require biometric to view payments + receipts";
+"privacy.toggle.marketing" = "Promotional emails";
+"privacy.toggle.marketingSubtitle" = "Optional. Defaults to OFF (PDPA opt-in)";
+"privacy.section.blocked" = "Blocked users";
+"privacy.blocked.empty" = "No blocked users";
+"privacy.blocked.emptyBody" = "Block a driver from any route detail to stop being matched with them.";
+"privacy.unblock" = "Unblock";
+"privacy.section.data" = "Your data";
+"privacy.data.download" = "Download my data";
+"privacy.data.downloadSubtitle" = "We'll email a copy of your rides, payments and profile within 7 days (PDPA s.7)";
+"privacy.section.danger" = "Danger zone";
+"privacy.delete" = "Delete account";
+"privacy.deleteSubtitle" = "Permanently removes your account after 30 days. Required by App Store + PDPA.";
+
+/* Solo seat */
+"solo.title" = "Ride solo";
+"solo.bookWhole" = "Book the whole car";
+"solo.blurb" = "Pay ~2× the seat price for an exclusive ride. Same trusted driver, no other passengers, no detours.";
+"solo.confirmTitle" = "Confirm solo ride";
+"solo.browseRoutes" = "Browse routes";
+"solo.confirmCTA" = "Confirm — RM %d";
+
+/* Home — extras */
+"home.nextCommute" = "Next commute";
+"home.destPlaceholder" = "Where are you heading?";
+"home.to" = "To";
+"home.departs" = "Departs %@";
+"home.perSeat" = "per seat";
+
+/* Wallet — extras */
+"wallet.paymentMethods" = "Payment methods";
+"wallet.noPayments" = "No payments yet";
+"wallet.payAtCheckout" = "Pay at checkout";
+"wallet.checkoutBlurb" = "DuitNow, FPX, TNG and cards are selectable on the Billplz checkout page.";
+"wallet.creditBlurb" = "Credit accumulates from cancellation refunds and applies to your next ride automatically.";
+
+/* KYC — extras */
+"kyc.title" = "Identity Verification";
+"kyc.kicker" = "Trust & safety";
+"kyc.whoVerifying" = "Who's verifying";
+"kyc.rider" = "Rider";
+"kyc.driver" = "Driver";
+"kyc.riderDocsCount" = "3 documents";
+"kyc.driverDocsCount" = "7 documents";
+"kyc.docsUploaded" = "Documents uploaded";
+"kyc.stuckTitle" = "Stuck for over 48 hours?";
+"kyc.stuckBody" = "Email support@voygo.app with your name and we'll prioritise your review.";
+"kyc.emailSupport" = "Email support →";
+
+/* Route details */
+"route.details.title" = "Route Details";
+"route.notFound" = "Route not found";
+"route.notFoundBody" = "This route may no longer be available";
+"subscribe.active" = "Subscription active!";
+"subscribe.bookSolo" = "Book solo for a day";
+"subscribe.soloPrice" = "RM %d — whole car, no other passengers";
+
+/* Inbox + chat */
+"inbox.title" = "Inbox";
+"inbox.empty" = "No conversations yet";
+"inbox.emptyBody" = "Subscribe to a route to chat with your driver";
+"inbox.findRoutes" = "Find routes";
+
+/* Common UI actions */
+"common.save" = "Save";
+"common.done" = "Done";
+"common.edit" = "Edit";
+"common.delete" = "Delete";
+"common.confirm" = "Confirm";
+"common.loading" = "Loading…";
+"common.refresh" = "Refresh";
+"common.search" = "Search";
+"common.settings" = "Settings";

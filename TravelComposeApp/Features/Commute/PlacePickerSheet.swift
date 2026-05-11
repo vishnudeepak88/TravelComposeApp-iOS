@@ -540,7 +540,7 @@ struct PlacePickerView: View {
     private var mapPickerLink: some View {
         Button { presentMapPicker = true } label: {
             HStack(spacing: 8) {
-                Image(systemName: "map.fill").font(.footnote)
+                Image(systemName: "map.fill").font(.footnote).accessibilityHidden(true)
                 Text("Pick on map")
                     .font(.footnote.weight(.heavy))
             }
