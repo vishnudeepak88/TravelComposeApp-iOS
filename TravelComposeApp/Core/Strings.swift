@@ -124,6 +124,67 @@ enum S {
     static var homeSeeAll: String { Self.t("home.seeAll", "See all") }
     static var homePromoKicker: String { Self.t("home.promo.kicker", "FIRST RIDE FREE") }
     static var homePromoTitle: String { Self.t("home.promo.title", "Try carpool today, save RM 14") }
+    static var homeNextCommute: String { Self.t("home.nextCommute", "Next commute") }
+    static var homeDestPlaceholder: String { Self.t("home.destPlaceholder", "Where are you heading?") }
+    static var homeTo: String { Self.t("home.to", "To") }
+    static func homeDeparts(_ time: String) -> String {
+        let template = Self.t("home.departs", "Departs %@")
+        return String(format: template, time)
+    }
+    static var homePerSeat: String { Self.t("home.perSeat", "per seat") }
+
+    // MARK: Wallet (additional)
+
+    static var walletPaymentMethods: String { Self.t("wallet.paymentMethods", "Payment methods") }
+    static var walletNoPayments: String { Self.t("wallet.noPayments", "No payments yet") }
+    static var walletPayAtCheckout: String { Self.t("wallet.payAtCheckout", "Pay at checkout") }
+    static var walletCheckoutBlurb: String { Self.t("wallet.checkoutBlurb", "DuitNow, FPX, TNG and cards are selectable on the Billplz checkout page.") }
+    static var walletCreditBlurb: String { Self.t("wallet.creditBlurb", "Credit accumulates from cancellation refunds and applies to your next ride automatically.") }
+
+    // MARK: KYC (visible-screen extras)
+
+    static var kycTitle: String { Self.t("kyc.title", "Identity Verification") }
+    static var kycKicker: String { Self.t("kyc.kicker", "Trust & safety") }
+    static var kycWhoVerifying: String { Self.t("kyc.whoVerifying", "Who's verifying") }
+    static var kycRider: String { Self.t("kyc.rider", "Rider") }
+    static var kycDriver: String { Self.t("kyc.driver", "Driver") }
+    static var kycRiderDocsCount: String { Self.t("kyc.riderDocsCount", "3 documents") }
+    static var kycDriverDocsCount: String { Self.t("kyc.driverDocsCount", "7 documents") }
+    static var kycDocsUploaded: String { Self.t("kyc.docsUploaded", "Documents uploaded") }
+    static var kycStuckTitle: String { Self.t("kyc.stuckTitle", "Stuck for over 48 hours?") }
+    static var kycStuckBody: String { Self.t("kyc.stuckBody", "Email support@voygo.app with your name and we'll prioritise your review.") }
+    static var kycEmailSupport: String { Self.t("kyc.emailSupport", "Email support →") }
+
+    // MARK: Route details / common actions
+
+    static var routeDetailsTitle: String { Self.t("route.details.title", "Route Details") }
+    static var routeNotFound: String { Self.t("route.notFound", "Route not found") }
+    static var routeNotFoundBody: String { Self.t("route.notFoundBody", "This route may no longer be available") }
+    static var subscriptionActive: String { Self.t("subscribe.active", "Subscription active!") }
+    static var subscribeBookSolo: String { Self.t("subscribe.bookSolo", "Book solo for a day") }
+    static func subscribeSoloPrice(_ amount: Int) -> String {
+        let template = Self.t("subscribe.soloPrice", "RM %d — whole car, no other passengers")
+        return String(format: template, amount)
+    }
+
+    // MARK: Inbox + chat
+
+    static var inboxTitle: String { Self.t("inbox.title", "Inbox") }
+    static var inboxEmpty: String { Self.t("inbox.empty", "No conversations yet") }
+    static var inboxEmptyBody: String { Self.t("inbox.emptyBody", "Subscribe to a route to chat with your driver") }
+    static var inboxFindRoutes: String { Self.t("inbox.findRoutes", "Find routes") }
+
+    // MARK: Common UI actions
+
+    static var save: String { Self.t("common.save", "Save") }
+    static var done: String { Self.t("common.done", "Done") }
+    static var edit: String { Self.t("common.edit", "Edit") }
+    static var delete: String { Self.t("common.delete", "Delete") }
+    static var confirm: String { Self.t("common.confirm", "Confirm") }
+    static var loading: String { Self.t("common.loading", "Loading…") }
+    static var refresh: String { Self.t("common.refresh", "Refresh") }
+    static var search: String { Self.t("common.search", "Search") }
+    static var settings: String { Self.t("common.settings", "Settings") }
 
     // MARK: Action-required banner (Home)
 

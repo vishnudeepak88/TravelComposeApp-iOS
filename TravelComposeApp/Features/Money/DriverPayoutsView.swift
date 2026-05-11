@@ -115,16 +115,16 @@ struct DriverPayoutsView: View {
             VIconBubble(systemName: icon, color: color, size: 38, iconSize: 16)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Text(subtitle)
-                    .font(.system(size: 12))
+                    .font(.caption)
                     .foregroundColor(VPalette.textSec)
                     .fixedSize(horizontal: false, vertical: true)
                 if let cta, let action {
                     Button(action: action) {
                         Text(cta)
-                            .font(.system(size: 12, weight: .heavy))
+                            .font(.caption.weight(.heavy))
                             .foregroundColor(.white)
                             .padding(.horizontal, 12).padding(.vertical, 6)
                             .background(color)

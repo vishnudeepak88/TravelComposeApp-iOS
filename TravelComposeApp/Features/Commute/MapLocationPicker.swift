@@ -94,7 +94,7 @@ struct MapLocationPickerView: View {
         HStack(spacing: 12) {
             Button(action: onCancel) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.body.weight(.bold))
                     .foregroundColor(VPalette.text)
                     .frame(width: 40, height: 40)
                     .background(VPalette.surface)
@@ -106,7 +106,7 @@ struct MapLocationPickerView: View {
             VStack(alignment: .leading, spacing: 2) {
                 VKicker(text: "Map picker", size: 10)
                 Text(title)
-                    .font(.system(size: 22, weight: .black))
+                    .font(.title3.weight(.black))
                     .tracking(-0.4)
                     .foregroundColor(VPalette.text)
                     .lineLimit(1)
@@ -121,7 +121,7 @@ struct MapLocationPickerView: View {
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .bold))
+                .font(.subheadline.weight(.bold))
                 .foregroundColor(VPalette.textHint)
             TextField("Search a place, LRT, area…", text: $query)
                 .focused($searchFocused)
@@ -141,7 +141,7 @@ struct MapLocationPickerView: View {
                     suggestions = []
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
+                        .font(.callout)
                         .foregroundColor(VPalette.textHint)
                 }
                 .buttonStyle(.plain)
@@ -169,7 +169,7 @@ struct MapLocationPickerView: View {
                         HStack(spacing: 12) {
                             VIconBubble(systemName: "mappin.circle.fill", color: VPalette.primary, size: 32, iconSize: 14)
                             Text(suggestion.displayName)
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.subheadline.weight(.semibold))
                                 .foregroundColor(VPalette.text)
                                 .multilineTextAlignment(.leading)
                                 .lineLimit(2)
@@ -257,14 +257,14 @@ struct MapLocationPickerView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     VKicker(text: "Selected location", size: 10)
                     Text(centerLabel)
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.text)
                         .lineLimit(2)
                     if isResolvingLabel {
                         HStack(spacing: 6) {
                             ProgressView().controlSize(.mini)
                             Text("Looking up address…")
-                                .font(.system(size: 11))
+                                .font(.caption2)
                                 .foregroundColor(VPalette.textSec)
                         }
                     } else {

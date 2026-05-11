@@ -398,11 +398,11 @@ struct FindCommuteRoutesView: View {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("Best route matches")
-                                        .font(.system(size: 16, weight: .black))
+                                        .font(.callout.weight(.black))
                                         .tracking(-0.3)
                                         .foregroundColor(VPalette.text)
                                     Text("\(vm.results.count) routes available now")
-                                        .font(.system(size: 12)).foregroundColor(VPalette.textSec)
+                                        .font(.caption).foregroundColor(VPalette.textSec)
                                 }
                                 Spacer()
                             }
@@ -530,7 +530,7 @@ struct FindCommuteRoutesView: View {
                 if let onBack {
                     Button(action: onBack) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 16, weight: .heavy))
+                            .font(.callout.weight(.heavy))
                             .foregroundColor(.white)
                             .frame(width: 38, height: 38)
                             .background(Color.white.opacity(0.18))
@@ -543,15 +543,15 @@ struct FindCommuteRoutesView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Voygo")
-                            .font(.system(size: 32, weight: .black))
+                            .font(.title.weight(.black))
                             .tracking(-0.8)
                             .foregroundColor(.white)
                         Text("\(timeAwareGreeting()), \(greetingName)")
-                            .font(.system(size: 11, weight: .heavy))
+                            .font(.caption2.weight(.heavy))
                             .tracking(0.3)
                             .foregroundColor(.white.opacity(0.85))
                         Text("Find or offer recurring commute seats across Malaysia")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundColor(.white.opacity(0.95))
                             .frame(maxWidth: 240, alignment: .leading)
                             .padding(.top, 8)
@@ -614,8 +614,8 @@ struct FindCommuteRoutesView: View {
 
     private func heroStat(_ value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(value).font(.system(size: 14, weight: .black)).foregroundColor(.white)
-            Text(label).font(.system(size: 10, weight: .heavy)).foregroundColor(.white.opacity(0.85))
+            Text(value).font(.subheadline.weight(.black)).foregroundColor(.white)
+            Text(label).font(.caption2.weight(.heavy)).foregroundColor(.white.opacity(0.85))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10).padding(.vertical, 8)
@@ -636,8 +636,8 @@ struct FindCommuteRoutesView: View {
             VStack(alignment: .leading, spacing: 4) {
                 VIconBubble(systemName: icon, color: color, size: 28, iconSize: 14)
                     .padding(.bottom, 4)
-                Text(title).font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.text)
-                Text(sub).font(.system(size: 10, weight: .semibold)).foregroundColor(VPalette.textHint)
+                Text(title).font(.caption.weight(.heavy)).foregroundColor(VPalette.text)
+                Text(sub).font(.caption2.weight(.semibold)).foregroundColor(VPalette.textHint)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
@@ -730,7 +730,7 @@ struct PolishedRouteCard: View {
                     if let onShare {
                         Button(action: onShare) {
                             Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 13, weight: .heavy))
+                                .font(.footnote.weight(.heavy))
                                 .foregroundColor(VPalette.textSec)
                                 .frame(width: 32, height: 32)
                                 .contentShape(Rectangle())
@@ -739,7 +739,7 @@ struct PolishedRouteCard: View {
                     if let onToggleFavorite {
                         Button(action: onToggleFavorite) {
                             Image(systemName: match.route.isFavorite ? "star.fill" : "star")
-                                .font(.system(size: 14, weight: .heavy))
+                                .font(.subheadline.weight(.heavy))
                                 .foregroundColor(match.route.isFavorite ? VPalette.starGold : VPalette.textHint)
                                 .frame(width: 32, height: 32)
                                 .contentShape(Rectangle())
@@ -753,12 +753,12 @@ struct PolishedRouteCard: View {
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 6) {
                             Text(match.route.driverName)
-                                .font(.system(size: 14, weight: .black))
+                                .font(.subheadline.weight(.black))
                                 .foregroundColor(VPalette.text)
                             HStack(spacing: 2) {
-                                Image(systemName: "star.fill").font(.system(size: 11)).foregroundColor(VPalette.starGold)
+                                Image(systemName: "star.fill").font(.caption2).foregroundColor(VPalette.starGold)
                                 Text("4.\(min(9, max(0, Int(match.reliabilityScore * 10))))")
-                                    .font(.system(size: 11, weight: .bold)).foregroundColor(VPalette.text)
+                                    .font(.caption2.weight(.bold)).foregroundColor(VPalette.text)
                             }
                         }
                         // Plate + colour when known so the rider can
@@ -772,13 +772,13 @@ struct PolishedRouteCard: View {
                             return parts.joined(separator: " · ")
                         }()
                         Text(carLine)
-                            .font(.system(size: 11)).foregroundColor(VPalette.textHint)
+                            .font(.caption2).foregroundColor(VPalette.textHint)
                             .lineLimit(1)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 1) {
                         Text("RM \(match.route.pricePerSeat)")
-                            .font(.system(size: 16, weight: .black)).tracking(-0.3)
+                            .font(.callout.weight(.black)).tracking(-0.3)
                             .foregroundColor(VPalette.primary)
                         VKicker(text: "per ride", size: 9)
                     }
@@ -788,9 +788,9 @@ struct PolishedRouteCard: View {
                     VRouteGlyph(squareColor: accent).frame(width: 10)
                     VStack(alignment: .leading, spacing: 8) {
                         Text(match.route.startLocation)
-                            .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                            .font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                         Text(match.route.endLocation)
-                            .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                            .font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                     }
                     Spacer()
                     VStack(alignment: .trailing) {
@@ -798,7 +798,7 @@ struct PolishedRouteCard: View {
                             .font(.system(size: 12, weight: .heavy, design: .monospaced))
                             .foregroundColor(VPalette.text)
                         Text("\(Int(match.estimatedDetourMinutes)) min")
-                            .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                            .font(.caption2).foregroundColor(VPalette.textSec)
                     }
                 }
 
@@ -806,16 +806,16 @@ struct PolishedRouteCard: View {
 
                 HStack {
                     HStack(spacing: 6) {
-                        Image(systemName: "person.fill").font(.system(size: 12)).foregroundColor(VPalette.textSec)
+                        Image(systemName: "person.fill").font(.caption).foregroundColor(VPalette.textSec)
                         let warning = match.availableSeats <= 1
                         (Text("\(match.availableSeats)").fontWeight(.heavy).foregroundColor(warning ? VPalette.warning : VPalette.success)
                          + Text(" of \(match.route.seatCount) seats left").foregroundColor(VPalette.textSec))
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.caption2.weight(.semibold))
                     }
                     Spacer()
                     HStack(spacing: 4) {
-                        Text("View details").font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.primary)
-                        Image(systemName: "arrow.right").font(.system(size: 11, weight: .heavy)).foregroundColor(VPalette.primary)
+                        Text("View details").font(.caption.weight(.heavy)).foregroundColor(VPalette.primary)
+                        Image(systemName: "arrow.right").font(.caption2.weight(.heavy)).foregroundColor(VPalette.primary)
                     }
                 }
 
@@ -824,7 +824,7 @@ struct PolishedRouteCard: View {
                 // to read than the three small metric chips this
                 // replaced.
                 Text(whyThisRoute)
-                    .font(.system(size: 11))
+                    .font(.caption2)
                     .foregroundColor(VPalette.textHint)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -1061,14 +1061,14 @@ private struct MapsStyleCommuteSearchPanel: View {
             if canClear {
                 Button(action: onClear) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundColor(VoygoTheme.textHint)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear \(title)")
             } else {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.callout.weight(.semibold))
                     .foregroundColor(VoygoTheme.textHint)
             }
         }
@@ -1297,7 +1297,7 @@ struct CommuteFiltersBar: View {
 
     private func sectionLabel(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 10, weight: .heavy))
+            .font(.caption2.weight(.heavy))
             .tracking(1.2)
             .foregroundColor(VPalette.textHint)
     }
@@ -1328,10 +1328,10 @@ struct CommuteEmptyState: View {
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "map")
-                .font(.system(size: 40, weight: .semibold))
+                .font(.largeTitle.weight(.semibold))
                 .foregroundColor(VPalette.textHint)
             Text("No routes for that exact corridor — yet")
-                .font(.system(size: 15, weight: .heavy))
+                .font(.subheadline.weight(.heavy))
                 .foregroundColor(VPalette.text)
                 .multilineTextAlignment(.center)
             Text("Penang's pilot still has gaps. Try one of these:")
@@ -1344,7 +1344,7 @@ struct CommuteEmptyState: View {
                                action: onRequest)
                 Button(action: onWiden) {
                     Text("Try a wider time window (06:00–10:00)")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.primary)
                         .padding(.vertical, 10)
                         .frame(maxWidth: .infinity)
@@ -1401,12 +1401,12 @@ struct RequestRouteSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("Request a route")
-                    .font(.system(size: 20, weight: .black))
+                    .font(.title3.weight(.black))
                     .tracking(-0.4)
                 Spacer()
                 Button { dismiss() } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.textSec)
                         .frame(width: 32, height: 32)
                         .background(VPalette.surfaceHigh)
@@ -1421,14 +1421,14 @@ struct RequestRouteSheet: View {
 
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("PREFERRED TIME").font(.system(size: 10, weight: .heavy))
+                    Text("PREFERRED TIME").font(.caption2.weight(.heavy))
                         .tracking(1.2).foregroundColor(VPalette.textHint)
                     TextField("07:30", text: $preferredTime)
                         .padding(10).background(VPalette.surfaceHigh)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("DAYS").font(.system(size: 10, weight: .heavy))
+                    Text("DAYS").font(.caption2.weight(.heavy))
                         .tracking(1.2).foregroundColor(VPalette.textHint)
                     Text(days.shortLabel).font(.caption.weight(.semibold))
                         .padding(10).background(VPalette.surfaceHigh)
@@ -1463,7 +1463,7 @@ struct RequestRouteSheet: View {
 
     private func field(label: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.system(size: 10, weight: .heavy))
+            Text(label).font(.caption2.weight(.heavy))
                 .tracking(1.2).foregroundColor(VPalette.textHint)
             TextField("", text: text)
                 .padding(10).background(VPalette.surfaceHigh)

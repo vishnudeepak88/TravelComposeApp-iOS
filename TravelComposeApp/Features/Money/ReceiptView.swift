@@ -24,7 +24,7 @@ struct ReceiptView: View {
                 VPolishedNavBar(title: "Receipt", onBack: onBack) {
                     Button { showShareSheet = true } label: {
                         Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.callout.weight(.bold))
                             .foregroundColor(VPalette.primary)
                             .frame(width: 40, height: 40)
                             .background(VPalette.primaryContainer)
@@ -65,11 +65,11 @@ struct ReceiptView: View {
         VStack(spacing: 0) {
             VStack(spacing: 4) {
                 Text("Voygo")
-                    .font(.system(size: 22, weight: .black))
+                    .font(.title3.weight(.black))
                     .tracking(-0.4)
                     .foregroundColor(VPalette.primary)
                 Text("Booking #\(displayBookingId) · \(receiptStatusText)")
-                    .font(.system(size: 11, weight: .bold)).tracking(0.4)
+                    .font(.caption2.weight(.bold)).tracking(0.4)
                     .foregroundColor(VPalette.primary)
             }
             .frame(maxWidth: .infinity)
@@ -103,11 +103,11 @@ struct ReceiptView: View {
                             // honest "—" placeholder when the backend
                             // hasn't threaded the address into the
                             // payment row yet.
-                            Text(pickupLabel).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                            Text(pickupLabel).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                         }
                         VStack(alignment: .leading, spacing: 1) {
                             VKicker(text: "Drop · \(dropTimeString)", color: VPalette.primary, size: 10)
-                            Text(dropoffLabel).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                            Text(dropoffLabel).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                         }
                     }
                     Spacer(minLength: 0)
@@ -119,15 +119,15 @@ struct ReceiptView: View {
                 HStack(spacing: 10) {
                     VAvatar(initial: driverInitial, size: 36)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(driverDisplayName).font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.text)
-                        Text(vehicleLabel).font(.system(size: 10)).foregroundColor(VPalette.textSec)
+                        Text(driverDisplayName).font(.caption.weight(.heavy)).foregroundColor(VPalette.text)
+                        Text(vehicleLabel).font(.caption2).foregroundColor(VPalette.textSec)
                     }
                     Spacer()
                     if let rating = driverRating {
                         HStack(spacing: 3) {
-                            Image(systemName: "star.fill").foregroundColor(VPalette.starGold).font(.system(size: 12))
+                            Image(systemName: "star.fill").foregroundColor(VPalette.starGold).font(.caption)
                             Text(String(format: "%.1f", rating))
-                                .font(.system(size: 12, weight: .bold)).foregroundColor(VPalette.text)
+                                .font(.caption.weight(.bold)).foregroundColor(VPalette.text)
                         }
                     }
                 }
@@ -146,7 +146,7 @@ struct ReceiptView: View {
                 Rectangle().fill(VPalette.border).frame(height: 1).padding(.vertical, 10)
 
                 HStack {
-                    Text("Total charged").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                    Text("Total charged").font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                     Spacer()
                     Text(totalChargedString)
                         .font(.system(size: 22, weight: .black, design: .monospaced))
@@ -154,7 +154,7 @@ struct ReceiptView: View {
                         .foregroundColor(VPalette.primary)
                 }
                 Text(paymentMethodString)
-                    .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                    .font(.caption2).foregroundColor(VPalette.textSec)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                 DashedLine().padding(.vertical, 16)
@@ -171,7 +171,7 @@ struct ReceiptView: View {
                             .font(.system(size: 13, weight: .heavy, design: .monospaced))
                             .foregroundColor(VPalette.text)
                         Text("For expense reimbursement")
-                            .font(.system(size: 10))
+                            .font(.caption2)
                             .foregroundColor(VPalette.textSec)
                     }
                     Spacer()
@@ -186,7 +186,7 @@ struct ReceiptView: View {
 
     private func lineItem(_ label: String, value: String, color: Color = VPalette.text) -> some View {
         HStack {
-            Text(label).font(.system(size: 13)).foregroundColor(VPalette.textSec)
+            Text(label).font(.footnote).foregroundColor(VPalette.textSec)
             Spacer()
             Text(value).font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundColor(color)
         }
@@ -308,14 +308,17 @@ struct ReceiptView: View {
         guard let p = payment else {
             return "Voygo receipt \(bookingId)"
         }
-        return "Voygo receipt \(p.id): \(routeLine), RM \(p.amountMyr), \(p.status.rawValue)"
+        // `mapLabel` is the human-readable "Pickup → Drop" string
+        // already computed for the receipt card — reuse it here so
+        // the shared text matches what the rider saw on screen.
+        return "Voygo receipt \(p.id): \(mapLabel), RM \(p.amountMyr), \(p.status.rawValue)"
     }
 
     private var actions: some View {
         HStack(spacing: 8) {
             Button { actionMessage = "PDF email delivery is not enabled yet. Use the share button for this pilot." } label: {
                 Text("Email PDF")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .frame(maxWidth: .infinity, minHeight: 46)
                     .foregroundColor(VPalette.text)
                     .background(VPalette.surface)
@@ -324,7 +327,7 @@ struct ReceiptView: View {
             }.buttonStyle(.plain)
             Button { actionMessage = "Expense export is not enabled yet." } label: {
                 Text("Add to expenses")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .frame(maxWidth: .infinity, minHeight: 46)
                     .foregroundColor(VPalette.primary)
                     .background(VPalette.primaryContainer)

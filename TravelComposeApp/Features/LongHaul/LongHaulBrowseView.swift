@@ -40,7 +40,7 @@ struct LongHaulBrowseView: View {
                 VPolishedNavBar(title: "Long-haul", kicker: "One-off inter-city trips", onBack: onBack) {
                     Button(action: onPostTrip) {
                         Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.callout.weight(.bold))
                             .foregroundColor(VPalette.primary)
                             .frame(width: 40, height: 40)
                             .background(VPalette.primaryContainer)
@@ -88,9 +88,9 @@ struct LongHaulBrowseView: View {
                 } label: {
                     HStack(spacing: 6) {
                         if isSearching { ProgressView().tint(.white).controlSize(.small) }
-                        else { Image(systemName: "magnifyingglass").font(.system(size: 13, weight: .heavy)) }
+                        else { Image(systemName: "magnifyingglass").font(.footnote.weight(.heavy)) }
                         Text("Search")
-                            .font(.system(size: 13, weight: .heavy))
+                            .font(.footnote.weight(.heavy))
                     }
                     .foregroundColor(.white)
                     .padding(.horizontal, 14)
@@ -111,10 +111,10 @@ struct LongHaulBrowseView: View {
     private func fieldChip(icon: String, placeholder: String, text: Binding<String>) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 11, weight: .heavy))
+                .font(.caption2.weight(.heavy))
                 .foregroundColor(VPalette.textHint)
             TextField(placeholder, text: text)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundColor(VPalette.text)
                 .tint(VPalette.primary)
                 .textInputAutocapitalization(.words)
@@ -183,27 +183,27 @@ struct LongHaulTripRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(trip.origin)
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.text)
                         .lineLimit(1)
                     Image(systemName: "arrow.right")
                         .font(.caption2.weight(.heavy))
                         .foregroundColor(VPalette.textHint)
                     Text(trip.destination)
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.text)
                         .lineLimit(1)
                 }
                 Text(formatDeparture(trip.departAt))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundColor(VPalette.textSec)
                 HStack(spacing: 8) {
                     Label("\(trip.seatsAvailable) of \(trip.seatsTotal) seats", systemImage: "person.2.fill")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundColor(VPalette.textSec)
                     if let rating = trip.driverRating, rating > 0 {
                         Label(String(format: "%.1f", rating), systemImage: "star.fill")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.caption2.weight(.semibold))
                             .foregroundColor(VPalette.warning)
                     }
                 }
@@ -211,7 +211,7 @@ struct LongHaulTripRow: View {
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 4) {
                 Text("RM \(trip.pricePerSeatMyr)")
-                    .font(.system(size: 18, weight: .black))
+                    .font(.body.weight(.black))
                     .foregroundColor(VPalette.primary)
                 Text("per seat")
                     .font(.caption2)

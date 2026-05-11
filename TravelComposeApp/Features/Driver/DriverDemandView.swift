@@ -69,12 +69,12 @@ struct DriverDemandView: View {
                                         .fill(VPalette.primaryContainer)
                                         .frame(width: 44, height: 44)
                                     Text("\(row.riders)")
-                                        .font(.system(size: 16, weight: .black))
+                                        .font(.callout.weight(.black))
                                         .foregroundColor(VPalette.primary)
                                 }
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("\(row.origin) → \(row.destination)")
-                                        .font(.system(size: 14, weight: .heavy))
+                                        .font(.subheadline.weight(.heavy))
                                         .foregroundColor(VPalette.text)
                                         .lineLimit(1)
                                     Text(row.riders == 1
@@ -85,7 +85,7 @@ struct DriverDemandView: View {
                                 }
                                 Spacer()
                                 Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 22))
+                                    .font(.title3)
                                     .foregroundColor(VPalette.primary)
                             }
                             .padding(14)

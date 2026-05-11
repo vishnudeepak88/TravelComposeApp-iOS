@@ -125,3 +125,55 @@
 "solo.confirmTitle" = "Sahkan perjalanan solo";
 "solo.browseRoutes" = "Lihat laluan";
 "solo.confirmCTA" = "Sahkan — RM %d";
+
+/* Home — extras */
+"home.nextCommute" = "Perjalanan seterusnya";
+"home.destPlaceholder" = "Anda hendak ke mana?";
+"home.to" = "Ke";
+"home.departs" = "Bertolak %@";
+"home.perSeat" = "setiap tempat duduk";
+
+/* Wallet — extras */
+"wallet.paymentMethods" = "Kaedah pembayaran";
+"wallet.noPayments" = "Tiada pembayaran lagi";
+"wallet.payAtCheckout" = "Bayar di check-out";
+"wallet.checkoutBlurb" = "DuitNow, FPX, TNG dan kad boleh dipilih pada halaman check-out Billplz.";
+"wallet.creditBlurb" = "Kredit terkumpul daripada bayaran balik pembatalan dan digunakan secara automatik pada perjalanan seterusnya.";
+
+/* KYC — extras */
+"kyc.title" = "Pengesahan Identiti";
+"kyc.kicker" = "Amanah & keselamatan";
+"kyc.whoVerifying" = "Siapa yang mengesahkan";
+"kyc.rider" = "Penumpang";
+"kyc.driver" = "Pemandu";
+"kyc.riderDocsCount" = "3 dokumen";
+"kyc.driverDocsCount" = "7 dokumen";
+"kyc.docsUploaded" = "Dokumen dimuat naik";
+"kyc.stuckTitle" = "Tersangkut lebih 48 jam?";
+"kyc.stuckBody" = "E-mel support@voygo.app dengan nama anda dan kami akan utamakan semakan anda.";
+"kyc.emailSupport" = "E-mel sokongan →";
+
+/* Route details */
+"route.details.title" = "Butiran Laluan";
+"route.notFound" = "Laluan tidak dijumpai";
+"route.notFoundBody" = "Laluan ini mungkin sudah tidak tersedia";
+"subscribe.active" = "Langganan aktif!";
+"subscribe.bookSolo" = "Tempah solo untuk satu hari";
+"subscribe.soloPrice" = "RM %d — seluruh kereta, tiada penumpang lain";
+
+/* Inbox + chat */
+"inbox.title" = "Peti masuk";
+"inbox.empty" = "Belum ada perbualan";
+"inbox.emptyBody" = "Langgan laluan untuk berbual dengan pemandu anda";
+"inbox.findRoutes" = "Cari laluan";
+
+/* Common UI actions */
+"common.save" = "Simpan";
+"common.done" = "Selesai";
+"common.edit" = "Sunting";
+"common.delete" = "Padam";
+"common.confirm" = "Sahkan";
+"common.loading" = "Memuatkan…";
+"common.refresh" = "Muat semula";
+"common.search" = "Cari";
+"common.settings" = "Tetapan";

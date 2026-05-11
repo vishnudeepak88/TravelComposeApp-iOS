@@ -101,10 +101,10 @@ struct KycVerificationView: View {
             VIconBubble(systemName: statusIcon, color: statusColor, size: 48, iconSize: 22)
             VStack(alignment: .leading, spacing: 2) {
                 Text(statusTitle)
-                    .font(.system(size: 15, weight: .heavy))
+                    .font(.subheadline.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Text(statusSubtitle)
-                    .font(.system(size: 12))
+                    .font(.caption)
                     .foregroundColor(VPalette.textSec)
             }
             Spacer()
@@ -132,8 +132,8 @@ struct KycVerificationView: View {
             withAnimation(.easeInOut(duration: 0.2)) { role = value }
         } label: {
             VStack(spacing: 2) {
-                Text(label).font(.system(size: 14, weight: .heavy))
-                Text(subtitle).font(.system(size: 11)).opacity(0.85)
+                Text(label).font(.subheadline.weight(.heavy))
+                Text(subtitle).font(.caption2).opacity(0.85)
             }
             .frame(maxWidth: .infinity, minHeight: 56)
             .foregroundColor(on ? .white : VPalette.text)
@@ -157,7 +157,7 @@ struct KycVerificationView: View {
                 VKicker(text: "Documents uploaded")
                 Spacer()
                 Text("\(pair.uploaded) / \(pair.required)")
-                    .font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.text)
+                    .font(.caption.weight(.heavy)).foregroundColor(VPalette.text)
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -200,8 +200,8 @@ struct KycVerificationView: View {
         return HStack(spacing: 12) {
             VIconBubble(systemName: state.icon, color: state.color, size: 32, iconSize: 14)
             VStack(alignment: .leading, spacing: 1) {
-                Text(kind.label).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
-                Text(state.subtitle).font(.system(size: 11))
+                Text(kind.label).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
+                Text(state.subtitle).font(.caption2)
                     .foregroundColor(wasRejected ? VPalette.danger : VPalette.textSec)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -215,7 +215,7 @@ struct KycVerificationView: View {
                         ProgressView().tint(buttonTint)
                     } else {
                         Text(buttonLabel)
-                            .font(.system(size: 13, weight: .heavy))
+                            .font(.footnote.weight(.heavy))
                             .foregroundColor(buttonTint)
                     }
                 }
@@ -240,7 +240,7 @@ struct KycVerificationView: View {
             // backend gates uploads behind `KYC_S3_BUCKET` in
             // production so we can't lie by accident.
             Text("We use your documents to verify identity, run a quick safety check, and meet Bank Negara KYC rules. Only trust & safety reviewers see your photos.")
-                .font(.system(size: 11))
+                .font(.caption2)
                 .foregroundColor(VPalette.textHint)
                 .multilineTextAlignment(.center)
 
@@ -249,7 +249,7 @@ struct KycVerificationView: View {
                     Task { await store.submitKycForReview() }
                 } label: {
                     Text("Mark verification submitted")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.primary)
                 }
                 .buttonStyle(.plain)
@@ -282,7 +282,7 @@ struct KycVerificationView: View {
     private func banner(_ text: String, color: Color) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "info.circle.fill").foregroundColor(color)
-            Text(text).font(.system(size: 12, weight: .semibold)).foregroundColor(VPalette.text)
+            Text(text).font(.caption.weight(.semibold)).foregroundColor(VPalette.text)
             Spacer()
         }
         .padding(12)
@@ -368,14 +368,14 @@ struct KycVerificationView: View {
     private var pendingSupportBanner: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "envelope.fill")
-                .font(.system(size: 14, weight: .heavy))
+                .font(.subheadline.weight(.heavy))
                 .foregroundColor(VPalette.warning)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Stuck for over 48 hours?")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Text("Email support@voygo.app with your name and we'll prioritise your review.")
-                    .font(.system(size: 11))
+                    .font(.caption2)
                     .foregroundColor(VPalette.textSec)
                 Button {
                     // Use the SafeOpen helper — `mailto:` silently
@@ -386,7 +386,7 @@ struct KycVerificationView: View {
                     SafeOpen.mailto("support@voygo.app", subject: "KYC review stuck")
                 } label: {
                     Text("Email support →")
-                        .font(.system(size: 12, weight: .heavy))
+                        .font(.caption.weight(.heavy))
                         .foregroundColor(VPalette.warning)
                 }
                 .buttonStyle(.plain)

@@ -247,7 +247,7 @@ struct PlacePickerView: View {
                 if isRootPicker { onCancel() } else { dismiss() }
             } label: {
                 Image(systemName: isRootPicker ? "xmark" : "chevron.left")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.callout.weight(.bold))
                     .foregroundColor(VPalette.text)
                     .frame(width: 40, height: 40)
                     .background(VPalette.surface)
@@ -263,7 +263,7 @@ struct PlacePickerView: View {
                     VKicker(text: "Where to?", size: 10)
                 }
                 Text(title)
-                    .font(.system(size: 22, weight: .black))
+                    .font(.title3.weight(.black))
                     .tracking(-0.4)
                     .foregroundColor(VPalette.text)
                     .lineLimit(1)
@@ -280,7 +280,7 @@ struct PlacePickerView: View {
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .bold))
+                .font(.subheadline.weight(.bold))
                 .foregroundColor(VPalette.textHint)
             TextField("Search places, LRT, area…", text: $query)
                 .focused($searchFocused)
@@ -297,7 +297,7 @@ struct PlacePickerView: View {
                     query = ""; suggestions = []
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16))
+                        .font(.callout)
                         .foregroundColor(VPalette.textHint)
                 }
                 .buttonStyle(.plain)
@@ -329,22 +329,22 @@ struct PlacePickerView: View {
                         ProgressView().tint(VPalette.primary).controlSize(.small)
                     } else {
                         Image(systemName: "location.fill")
-                            .font(.system(size: 14, weight: .heavy))
+                            .font(.subheadline.weight(.heavy))
                             .foregroundColor(VPalette.primary)
                     }
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Use current location")
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.text)
                     Text(locating ? "Looking up your address…" : "Pin to where you are right now")
-                        .font(.system(size: 11))
+                        .font(.caption2)
                         .foregroundColor(VPalette.textSec)
                 }
                 Spacer()
                 if !locating {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.footnote.weight(.bold))
                         .foregroundColor(VPalette.textHint)
                 }
             }
@@ -365,7 +365,7 @@ struct PlacePickerView: View {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundColor(VPalette.danger)
             Text(message)
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundColor(VPalette.text)
             Spacer()
         }
@@ -445,16 +445,16 @@ struct PlacePickerView: View {
             )
             VStack(alignment: .leading, spacing: 1) {
                 Text(slot.label)
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Text(primary)
-                    .font(.system(size: 11))
+                    .font(.caption2)
                     .foregroundColor(isSet ? VPalette.textSec : VPalette.textHint)
                     .lineLimit(1)
             }
             Spacer()
             Image(systemName: isSet ? "chevron.right" : "plus")
-                .font(.system(size: 13, weight: .bold))
+                .font(.footnote.weight(.bold))
                 .foregroundColor(VPalette.textHint)
         }
         .padding(.horizontal, 14)
@@ -475,7 +475,7 @@ struct PlacePickerView: View {
                             recents = []
                         } label: {
                             Text("Clear")
-                                .font(.system(size: 11, weight: .heavy))
+                                .font(.caption2.weight(.heavy))
                                 .foregroundColor(VPalette.textHint)
                         }
                         .buttonStyle(.plain)
@@ -520,7 +520,7 @@ struct PlacePickerView: View {
             VIconBubble(systemName: "clock.fill", color: VPalette.accent, size: 38, iconSize: 14)
             VStack(alignment: .leading, spacing: 1) {
                 Text(place.displayName)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundColor(VPalette.text)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -530,7 +530,7 @@ struct PlacePickerView: View {
             }
             Spacer()
             Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .bold))
+                .font(.footnote.weight(.bold))
                 .foregroundColor(VPalette.textHint)
         }
         .padding(.horizontal, 14)
@@ -540,9 +540,9 @@ struct PlacePickerView: View {
     private var mapPickerLink: some View {
         Button { presentMapPicker = true } label: {
             HStack(spacing: 8) {
-                Image(systemName: "map.fill").font(.system(size: 13))
+                Image(systemName: "map.fill").font(.footnote)
                 Text("Pick on map")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
             }
             .foregroundColor(VPalette.primary)
             .frame(maxWidth: .infinity, minHeight: 44)
@@ -561,7 +561,7 @@ struct PlacePickerView: View {
                     HStack(spacing: 12) {
                         VIconBubble(systemName: "mappin.circle.fill", color: VPalette.primary, size: 32, iconSize: 14)
                         Text(place.displayName)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.subheadline.weight(.semibold))
                             .foregroundColor(VPalette.text)
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)

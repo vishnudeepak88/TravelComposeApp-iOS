@@ -66,7 +66,7 @@ struct NotificationsView: View {
                         Task { await store.markAllNotificationsRead() }
                     } label: {
                         Text("Mark all read")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.caption.weight(.bold))
                             .foregroundColor(store.unreadNotificationsCount > 0 ? VPalette.primary : VPalette.textHint)
                     }
                     .buttonStyle(.plain)
@@ -145,16 +145,16 @@ struct NotificationsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(n.title)
-                            .font(.system(size: 13, weight: .heavy))
+                            .font(.footnote.weight(.heavy))
                             .foregroundColor(VPalette.text)
                         Spacer()
                         Text(relativeTime(n.createdAt))
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.caption2.weight(.bold))
                             .foregroundColor(VPalette.textHint)
                     }
                     if !n.body.isEmpty {
                         Text(n.body)
-                            .font(.system(size: 12))
+                            .font(.caption)
                             .foregroundColor(VPalette.textSec)
                             .lineLimit(3)
                             .multilineTextAlignment(.leading)

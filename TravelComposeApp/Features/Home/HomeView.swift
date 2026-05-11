@@ -274,8 +274,8 @@ struct HomeView: View {
         if let nc = nextCommute {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("Next commute")
-                        .font(.system(size: 16, weight: .black))
+                    Text(S.homeNextCommute)
+                        .font(.callout.weight(.black))
                         .tracking(-0.2)
                         .foregroundColor(VPalette.text)
                     Spacer()
@@ -304,15 +304,15 @@ struct HomeView: View {
                 VIconBubble(systemName: "clock.fill", color: VPalette.primary, size: 36, iconSize: 16)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(whenLabel(nc))
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.text)
                     Text("Departs \(nc.route.departureTime)")
-                        .font(.system(size: 11))
+                        .font(.caption2)
                         .foregroundColor(VPalette.textSec)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.textHint)
             }
             .padding(14)
@@ -324,15 +324,15 @@ struct HomeView: View {
                 VIconBubble(systemName: "arrow.right.circle.fill", color: VPalette.success, size: 36, iconSize: 16)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(shortStop(nc.route.startLocation)) → \(shortStop(nc.route.endLocation))")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.text)
                         .lineLimit(2)
                     HStack(spacing: 6) {
                         Image(systemName: "mappin.circle.fill")
-                            .font(.system(size: 10))
+                            .font(.caption2)
                             .foregroundColor(VPalette.textHint)
                         Text(pickupDropLabel(nc))
-                            .font(.system(size: 11))
+                            .font(.caption2)
                             .foregroundColor(VPalette.textSec)
                             .lineLimit(2)
                     }
@@ -351,12 +351,12 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(nc.route.driverName.isEmpty ? "Driver" : nc.route.driverName)
-                            .font(.system(size: 13, weight: .heavy))
+                            .font(.footnote.weight(.heavy))
                             .foregroundColor(VPalette.text)
                         VVerifiedTick(size: 10)
                     }
                     Text(nc.route.carType.label)
-                        .font(.system(size: 11))
+                        .font(.caption2)
                         .foregroundColor(VPalette.textSec)
                 }
                 Spacer(minLength: 0)
@@ -385,9 +385,9 @@ struct HomeView: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(.caption.weight(.heavy))
                 Text(label)
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(.caption.weight(.heavy))
                     .lineLimit(1)
             }
             .foregroundColor(VPalette.primary)
@@ -461,7 +461,7 @@ struct HomeView: View {
         Button(action: onOpenSubscriptions) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 18, weight: .heavy))
+                    .font(.body.weight(.heavy))
                     .foregroundColor(VPalette.danger)
                     .frame(width: 38, height: 38)
                     .background(VPalette.danger.opacity(0.12))
@@ -470,17 +470,17 @@ struct HomeView: View {
                     Text(pausedSubscriptions.count == 1
                          ? S.actionRequiredOne
                          : S.actionRequiredMany(count: pausedSubscriptions.count))
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.text)
                     Text(S.actionRequiredBody)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.caption.weight(.medium))
                         .foregroundColor(VPalette.textSec)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(.caption.weight(.heavy))
                     .foregroundColor(VPalette.textHint)
             }
             .padding(14)
@@ -520,10 +520,10 @@ struct HomeView: View {
                         )
                     VStack(alignment: .leading, spacing: 2) {
                         Text(greeting)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.caption.weight(.medium))
                             .foregroundColor(.white.opacity(0.85))
                         HStack(spacing: 4) {
-                            Text(firstName).font(.system(size: 17, weight: .heavy))
+                            Text(firstName).font(.body.weight(.heavy))
                             Text("👋")
                         }
                         .foregroundColor(.white)
@@ -532,7 +532,7 @@ struct HomeView: View {
                     Button(action: onOpenNotifications) {
                         ZStack(alignment: .topTrailing) {
                             Image(systemName: "bell")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.callout.weight(.semibold))
                                 .foregroundColor(.white)
                                 .frame(width: 40, height: 40)
                                 .background(Color.white.opacity(0.18))
@@ -555,7 +555,7 @@ struct HomeView: View {
                 }
 
                 Text(S.homeWhereTo)
-                    .font(.system(size: 26, weight: .black))
+                    .font(.title2.weight(.black))
                     .tracking(-0.5)
                     .foregroundColor(.white)
                     .lineSpacing(1)
@@ -574,17 +574,17 @@ struct HomeView: View {
                 ZStack {
                     Circle().fill(VPalette.primaryContainer)
                     Image(systemName: "magnifyingglass")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.callout.weight(.bold))
                         .foregroundColor(VPalette.primary)
                 }
                 .frame(width: 36, height: 36)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text("To")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundColor(VPalette.textHint)
                     Text("Where are you heading?")
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.text)
                         .lineLimit(1)
                 }
@@ -592,7 +592,7 @@ struct HomeView: View {
                 // Localized via `Strings.swift` → `Localizable.strings`.
                 // English "Book a ride" / Malay "Tempah perjalanan".
                 Text(S.homeBookARide)
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -664,12 +664,12 @@ struct HomeView: View {
                         radius: 16, x: 0, y: 6
                     )
                 Image(systemName: tile.icon)
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.title2.weight(.bold))
                     .foregroundColor(tile.fg)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if let badge = tile.badge {
                     Text(badge)
-                        .font(.system(size: 8, weight: .black))
+                        .font(.caption2.weight(.black))
                         .tracking(0.4)
                         .foregroundColor(.white)
                         .padding(.horizontal, 6).padding(.vertical, 2)
@@ -679,7 +679,7 @@ struct HomeView: View {
                 }
             }
             Text(tile.label)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundColor(VPalette.text)
         }
     }
@@ -701,11 +701,11 @@ struct HomeView: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(S.homePromoKicker)
-                        .font(.system(size: 12, weight: .heavy))
+                        .font(.caption.weight(.heavy))
                         .tracking(0.4)
                         .foregroundColor(.white.opacity(0.92))
                     Text(S.homePromoTitle)
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(.white)
                 }
                 Spacer(minLength: 0)
@@ -713,7 +713,7 @@ struct HomeView: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color.white.opacity(0.95))
                     Image(systemName: "car.fill")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(.title3.weight(.bold))
                         .foregroundColor(Color(hex: 0xFF8A2A))
                 }
                 .frame(width: 52, height: 52)
@@ -732,13 +732,13 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(S.homeHeadingYourWay)
-                    .font(.system(size: 16, weight: .black))
+                    .font(.callout.weight(.black))
                     .tracking(-0.2)
                     .foregroundColor(VPalette.text)
                 Spacer()
                 Button(action: onSearchTapped) {
                     Text(S.homeSeeAll)
-                        .font(.system(size: 12, weight: .heavy))
+                        .font(.caption.weight(.heavy))
                         .foregroundColor(VPalette.primary)
                 }
                 .buttonStyle(.plain)
@@ -767,18 +767,18 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(row.name)
-                            .font(.system(size: 14, weight: .heavy))
+                            .font(.subheadline.weight(.heavy))
                             .foregroundColor(VPalette.text)
                         VVerifiedTick(size: 11)
                         Text("★ \(row.rating, specifier: "%.1f")")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.caption2.weight(.semibold))
                             .foregroundColor(VPalette.textHint)
                     }
                     Text(row.route)
-                        .font(.system(size: 12))
+                        .font(.caption)
                         .foregroundColor(VPalette.textSec)
                     Text("Departs \(row.time)")
-                        .font(.system(size: 11))
+                        .font(.caption2)
                         .foregroundColor(VPalette.textHint)
                 }
                 Spacer(minLength: 0)
@@ -787,7 +787,7 @@ struct HomeView: View {
                         .font(.system(size: 18, weight: .black, design: .default))
                         .foregroundColor(VPalette.primary)
                     Text("per seat")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundColor(VPalette.textHint)
                 }
             }

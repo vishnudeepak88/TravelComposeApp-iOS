@@ -87,14 +87,14 @@ private struct FavoriteRouteRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(route.driverName)
-                        .font(.system(size: 14, weight: .black))
+                        .font(.subheadline.weight(.black))
                         .foregroundColor(VPalette.text)
                     Image(systemName: "star.fill")
                         .font(.caption2)
                         .foregroundColor(VPalette.starGold)
                 }
                 Text("\(route.startLocation) → \(route.endLocation)")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.caption.weight(.semibold))
                     .foregroundColor(VPalette.textSec)
                 Text("\(route.departureTime) · \(route.daysOfWeek.shortLabel)")
                     .font(.caption2)
@@ -102,7 +102,7 @@ private struct FavoriteRouteRow: View {
             }
             Spacer()
             Text("RM \(route.pricePerSeat)")
-                .font(.system(size: 14, weight: .heavy))
+                .font(.subheadline.weight(.heavy))
                 .foregroundColor(VPalette.primary)
         }
         .padding(14)

@@ -88,23 +88,23 @@ struct PostLongHaulTripView: View {
             cardLabel("Capacity & price")
             HStack {
                 Text("Seats")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Spacer()
                 Stepper(value: $seatsTotal, in: 1...20) {
                     Text("\(seatsTotal)")
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.text)
                 }
             }
             HStack {
                 Text("Price per seat")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Spacer()
                 Stepper(value: $pricePerSeatMyr, in: 5...500, step: 5) {
                     Text("RM \(pricePerSeatMyr)")
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.primary)
                 }
             }
@@ -129,7 +129,7 @@ struct PostLongHaulTripView: View {
             cardLabel("Notes (optional)")
             TextField("Pickup point, luggage limits, etc.", text: $notes, axis: .vertical)
                 .lineLimit(2...5)
-                .font(.system(size: 13))
+                .font(.footnote)
                 .foregroundColor(VPalette.text)
                 .tint(VPalette.primary)
                 .padding(10)
@@ -160,10 +160,10 @@ struct PostLongHaulTripView: View {
     private func field(icon: String, placeholder: String, text: Binding<String>) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .heavy))
+                .font(.caption.weight(.heavy))
                 .foregroundColor(VPalette.textHint)
             TextField(placeholder, text: text)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.footnote.weight(.semibold))
                 .foregroundColor(VPalette.text)
                 .tint(VPalette.primary)
                 .textInputAutocapitalization(.words)

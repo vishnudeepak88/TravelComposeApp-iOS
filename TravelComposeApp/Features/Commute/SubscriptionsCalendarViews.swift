@@ -33,7 +33,7 @@ struct MySubscriptionsView: View {
                 VPolishedNavBar(title: "My Subscriptions", onBack: onBack) {
                     Button(action: onOpenCalendar) {
                         Image(systemName: "calendar")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.callout.weight(.bold))
                             .foregroundColor(VPalette.primary)
                             .frame(width: 40, height: 40)
                             .background(VPalette.primaryContainer)
@@ -275,7 +275,7 @@ struct SubscriptionCard: View {
                     if item.subscription.status != .cancelled {
                         Button(action: onCancel) {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 20))
+                                .font(.title3)
                                 .foregroundColor(VoygoTheme.danger.opacity(0.7))
                                 .frame(width: 44, height: 44)
                         }

@@ -46,7 +46,7 @@ struct AuthPhoneView: View {
                         Spacer()
                         ZStack {
                             VPalette.primaryGradient
-                            Image(systemName: "car.fill").font(.system(size: 26)).foregroundColor(.white)
+                            Image(systemName: "car.fill").font(.title2).foregroundColor(.white)
                         }
                         .frame(width: 58, height: 58)
                         .clipShape(Circle())
@@ -74,8 +74,8 @@ struct AuthPhoneView: View {
                         VKicker(text: "Phone number")
                         HStack(spacing: 0) {
                             HStack(spacing: 6) {
-                                Text("🇲🇾").font(.system(size: 16))
-                                Text("+60").font(.system(size: 15, weight: .heavy))
+                                Text("🇲🇾").font(.callout)
+                                Text("+60").font(.subheadline.weight(.heavy))
                             }
                             .foregroundColor(VPalette.text)
                             .frame(height: 54)
@@ -88,7 +88,7 @@ struct AuthPhoneView: View {
                                 .textContentType(.telephoneNumber)
                                 .autocorrectionDisabled(true)
                                 .textInputAutocapitalization(.never)
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(.body.weight(.semibold))
                                 .tint(VPalette.primary)
                                 .foregroundColor(VPalette.text)
                                 .padding(.horizontal, 14)
@@ -182,7 +182,7 @@ struct AuthPhoneView: View {
                             .foregroundColor(VPalette.primary)
                             .fontWeight(.semibold)
                     }
-                    .font(.system(size: 11))
+                    .font(.caption2)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
 
@@ -206,7 +206,7 @@ struct AuthPhoneView: View {
             HStack(spacing: 10) {
                 Rectangle().fill(VPalette.border).frame(height: 1).frame(maxWidth: .infinity)
                 Text("DEV ONLY")
-                    .font(.system(size: 9, weight: .black))
+                    .font(.caption2.weight(.black))
                     .tracking(1.4)
                     .foregroundColor(VPalette.textHint)
                 Rectangle().fill(VPalette.border).frame(height: 1).frame(maxWidth: .infinity)
@@ -218,9 +218,9 @@ struct AuthPhoneView: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "hammer.fill")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.footnote.weight(.bold))
                     Text("Skip login → home screen")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                 }
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .foregroundColor(VPalette.accent)
@@ -234,7 +234,7 @@ struct AuthPhoneView: View {
             .buttonStyle(.plain)
 
             Text("Server-backed actions (subscribe, charge, KYC) won't work without a real session.")
-                .font(.system(size: 10))
+                .font(.caption2)
                 .foregroundColor(VPalette.textHint)
                 .multilineTextAlignment(.center)
         }
@@ -324,8 +324,8 @@ struct AuthPhoneView: View {
 
     private func featureChip(icon: String, label: String) -> some View {
         VStack(spacing: 4) {
-            Image(systemName: icon).font(.system(size: 14, weight: .heavy))
-            Text(label).font(.system(size: 11, weight: .heavy))
+            Image(systemName: icon).font(.subheadline.weight(.heavy))
+            Text(label).font(.caption2.weight(.heavy))
         }
         .foregroundColor(VPalette.primary)
         .frame(maxWidth: .infinity)
@@ -362,25 +362,25 @@ struct AuthOtpView: View {
                             ZStack {
                                 Circle().fill(VPalette.primaryContainer).frame(width: 76, height: 76)
                                 Image(systemName: "message.fill")
-                                    .font(.system(size: 32))
+                                    .font(.title)
                                     .foregroundColor(VPalette.primary)
                             }
                             VStack(spacing: 6) {
                                 Text("Verify Phone Number")
-                                    .font(.system(size: 22, weight: .black))
+                                    .font(.title3.weight(.black))
                                     .tracking(-0.4)
                                     .foregroundColor(VPalette.text)
                                 Group {
                                     Text("Enter the 6-digit code sent to ")
                                     + Text(phoneNumber).fontWeight(.heavy).foregroundColor(VPalette.text)
                                 }
-                                .font(.system(size: 14))
+                                .font(.subheadline)
                                 .foregroundColor(VPalette.textSec)
                                 .multilineTextAlignment(.center)
 
                                 if let dev = store.devOtpCode {
                                     Text("Dev code: \(dev)")
-                                        .font(.system(size: 11, weight: .heavy))
+                                        .font(.caption2.weight(.heavy))
                                         .foregroundColor(VPalette.textHint)
                                 }
                             }
@@ -422,10 +422,10 @@ struct AuthOtpView: View {
                             if timeLeft > 0 {
                                 (Text("Resend code in ").foregroundColor(VPalette.textHint)
                                  + Text("0:\(String(format: "%02d", timeLeft))").fontWeight(.heavy).foregroundColor(VPalette.text))
-                                    .font(.system(size: 13))
+                                    .font(.footnote)
                             } else {
                                 Text(isResending ? "Resending…" : "Resend Code")
-                                    .font(.system(size: 13, weight: .heavy))
+                                    .font(.footnote.weight(.heavy))
                                     .foregroundColor(VPalette.primary)
                             }
                         }

@@ -324,9 +324,9 @@ struct RouteDetailsView: View {
                                         } label: {
                                             VStack(spacing: 1) {
                                                 Text(tier.label)
-                                                    .font(.system(size: 13, weight: .heavy))
+                                                    .font(.footnote.weight(.heavy))
                                                 Text(tier == .daily ? "Try it" : tier == .monthly ? "10% off" : "15% off")
-                                                    .font(.system(size: 10, weight: .semibold))
+                                                    .font(.caption2.weight(.semibold))
                                                     .opacity(0.85)
                                             }
                                             .frame(maxWidth: .infinity, minHeight: 50)
@@ -396,11 +396,11 @@ struct RouteDetailsView: View {
                                     } label: {
                                         HStack(spacing: 8) {
                                             Image(systemName: "person.fill.checkmark")
-                                                .font(.system(size: 13, weight: .heavy))
+                                                .font(.footnote.weight(.heavy))
                                                 .foregroundColor(VoygoTheme.accent)
                                             VStack(alignment: .leading, spacing: 1) {
                                                 Text("Book solo for a day")
-                                                    .font(.system(size: 13, weight: .heavy))
+                                                    .font(.footnote.weight(.heavy))
                                                     .foregroundColor(VoygoTheme.textPrimary)
                                                 Text("RM \(route.pricePerSeat * 2) — whole car, no other passengers")
                                                     .font(.caption2)

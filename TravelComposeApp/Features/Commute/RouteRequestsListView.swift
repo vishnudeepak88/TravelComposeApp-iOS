@@ -57,7 +57,7 @@ struct RouteRequestsListView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text("\(req.origin) → \(req.destination)")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.text)
                         .lineLimit(1)
                     statusPill(req.status)
@@ -80,7 +80,7 @@ struct RouteRequestsListView: View {
                     Task { await store.withdrawRouteRequest(req.id) }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 20))
+                        .font(.title3)
                         .foregroundColor(VPalette.textHint)
                 }
                 .buttonStyle(.plain)

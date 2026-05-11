@@ -39,7 +39,7 @@ struct BookingConfirmedView: View {
                 Spacer()
                 Button(action: onDone) {
                     Text("Done")
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(.white)
                         .padding(.horizontal, 18)
                         .padding(.vertical, 8)
@@ -74,7 +74,7 @@ struct BookingConfirmedView: View {
                         .frame(width: 88, height: 88)
                         .overlay(Circle().stroke(.white.opacity(0.45), lineWidth: 2))
                     Image(systemName: "checkmark")
-                        .font(.system(size: 38, weight: .bold))
+                        .font(.largeTitle.weight(.bold))
                         .foregroundColor(.white)
                 }
                 .padding(.top, 60)
@@ -84,7 +84,7 @@ struct BookingConfirmedView: View {
                     .padding(.top, 12)
 
                 Text("Subscription confirmed")
-                    .font(.system(size: 28, weight: .black))
+                    .font(.title.weight(.black))
                     .tracking(-0.8)
                     .foregroundColor(.white)
 
@@ -93,7 +93,7 @@ struct BookingConfirmedView: View {
                         .foregroundColor(.white.opacity(0.92))
                     + Text(pickup).fontWeight(.heavy).foregroundColor(.white)
                 }
-                .font(.system(size: 13))
+                .font(.footnote)
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 40)
                 .padding(.horizontal, 24)
@@ -107,9 +107,9 @@ struct BookingConfirmedView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     VKicker(text: "Subscription", size: 10)
                     Text("Subang Jaya → KLCC")
-                        .font(.system(size: 17, weight: .heavy)).tracking(-0.3).foregroundColor(VPalette.text)
+                        .font(.body.weight(.heavy)).tracking(-0.3).foregroundColor(VPalette.text)
                     Text("Booking #\(bookingId)")
-                        .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                        .font(.caption2).foregroundColor(VPalette.textSec)
                 }
                 Spacer()
                 VBadge(text: "Active", color: VPalette.success, container: VPalette.successContainer)
@@ -127,12 +127,12 @@ struct BookingConfirmedView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
             HStack(spacing: 10) {
-                Text("💳").font(.system(size: 20))
+                Text("💳").font(.title3)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Charged to DuitNow · Maybank ··4221")
-                        .font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.primary)
+                        .font(.caption.weight(.heavy)).foregroundColor(VPalette.primary)
                     Text("First charge on Jun 17 — auto-renews monthly")
-                        .font(.system(size: 11)).foregroundColor(VPalette.primary.opacity(0.85))
+                        .font(.caption2).foregroundColor(VPalette.primary.opacity(0.85))
                 }
                 Spacer()
             }
@@ -150,7 +150,7 @@ struct BookingConfirmedView: View {
     private func stack(_ label: String, value: String, sub: String, subMono: Bool = false, valueColor: Color = VPalette.text, subColor: Color = VPalette.textSec) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             VKicker(text: label, size: 10)
-            Text(value).font(.system(size: 15, weight: .heavy)).foregroundColor(valueColor)
+            Text(value).font(.subheadline.weight(.heavy)).foregroundColor(valueColor)
             Text(sub)
                 .font(.system(size: 11, weight: subMono ? .semibold : .semibold, design: subMono ? .monospaced : .default))
                 .foregroundColor(subColor)
@@ -167,17 +167,17 @@ struct BookingConfirmedView: View {
             VKicker(text: "What's next").padding(.leading, 4)
             ForEach(items, id: \.title) { row in
                 HStack(spacing: 12) {
-                    Text(row.icon).font(.system(size: 17))
+                    Text(row.icon).font(.body)
                         .frame(width: 36, height: 36)
                         .background(row.color.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(row.title).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
-                        Text(row.subtitle).font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                        Text(row.title).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
+                        Text(row.subtitle).font(.caption2).foregroundColor(VPalette.textSec)
                     }
                     Spacer()
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.subheadline.weight(.semibold))
                         .foregroundColor(VPalette.textHint)
                 }
                 .padding(12)
@@ -212,7 +212,7 @@ struct BookingConfirmedView: View {
         HStack(spacing: 8) {
             Button(action: onViewReceipt) {
                 Text("View receipt")
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(.subheadline.weight(.heavy))
                     .frame(maxWidth: .infinity, minHeight: 50)
                     .foregroundColor(VPalette.text)
                     .background(VPalette.surface)

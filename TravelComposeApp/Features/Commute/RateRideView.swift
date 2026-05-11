@@ -29,7 +29,7 @@ struct RateRideView: View {
                 VPolishedNavBar(title: "Rate your ride", onBack: onBack) {
                     Button(action: onSkip) {
                         Text("Skip")
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.caption.weight(.bold))
                             .foregroundColor(VPalette.textSec)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
@@ -63,12 +63,12 @@ struct RateRideView: View {
         VStack(spacing: 10) {
             VAvatar(initial: driverInitial, size: 86)
             Text("How was your ride with \(driverName)?")
-                .font(.system(size: 18, weight: .heavy))
+                .font(.body.weight(.heavy))
                 .tracking(-0.3)
                 .foregroundColor(VPalette.text)
                 .multilineTextAlignment(.center)
             Text("\(routeSummary) · \(dateLabel) · \(durationLabel)")
-                .font(.system(size: 12)).foregroundColor(VPalette.textSec)
+                .font(.caption).foregroundColor(VPalette.textSec)
         }
     }
 
@@ -87,7 +87,7 @@ struct RateRideView: View {
                                 .frame(width: 48, height: 48)
                                 .overlay(Circle().strokeBorder(i <= rating ? VPalette.starGold : VPalette.border, lineWidth: 1.5))
                             Image(systemName: "star.fill")
-                                .font(.system(size: 22))
+                                .font(.title3)
                                 .foregroundColor(i <= rating ? VPalette.starGold : VPalette.outline)
                         }
                     }
@@ -133,9 +133,9 @@ struct RateRideView: View {
                     } label: {
                         HStack(spacing: 6) {
                             if on {
-                                Image(systemName: "checkmark").font(.system(size: 11, weight: .heavy))
+                                Image(systemName: "checkmark").font(.caption2.weight(.heavy))
                             }
-                            Text(tag).font(.system(size: 12, weight: .bold))
+                            Text(tag).font(.caption.weight(.bold))
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 9)
@@ -155,7 +155,7 @@ struct RateRideView: View {
             HStack(spacing: 4) {
                 VKicker(text: "Add a tip")
                 Text("· 100% goes to \(driverName)")
-                    .font(.system(size: 12))
+                    .font(.caption)
                     .foregroundColor(VPalette.textSec)
             }
             HStack(spacing: 8) {
@@ -181,11 +181,11 @@ struct RateRideView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
                 VKicker(text: "Note")
-                Text("· optional").font(.system(size: 12)).foregroundColor(VPalette.textSec)
+                Text("· optional").font(.caption).foregroundColor(VPalette.textSec)
             }
             VStack(alignment: .leading) {
                 Text("Always punctual and the EV ride is super smooth — already looking forward to Monday.")
-                    .font(.system(size: 13))
+                    .font(.footnote)
                     .foregroundColor(VPalette.textSec)
             }
             .padding(12)

@@ -25,7 +25,7 @@ struct SearchFiltersView: View {
 
             VStack(spacing: 0) {
                 VPolishedNavBar(title: "Find a route", onBack: onBack) {
-                    Text("Reset").font(.system(size: 12, weight: .bold)).foregroundColor(VPalette.primary)
+                    Text("Reset").font(.caption.weight(.bold)).foregroundColor(VPalette.primary)
                 }
 
                 ScrollView {
@@ -60,10 +60,10 @@ struct SearchFiltersView: View {
         HStack(spacing: 10) {
             Image(systemName: "mappin.circle.fill").foregroundColor(VPalette.primary)
             Text(routeQuery.isEmpty ? "Where are you commuting?" : routeQuery)
-                .font(.system(size: 14, weight: .heavy)).foregroundColor(VPalette.text)
+                .font(.subheadline.weight(.heavy)).foregroundColor(VPalette.text)
             Spacer()
             Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 12)).foregroundColor(VPalette.textHint)
+                .font(.caption).foregroundColor(VPalette.textHint)
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
         .background(VPalette.surface)
@@ -118,7 +118,7 @@ struct SearchFiltersView: View {
             HStack {
                 ForEach(["5:00", "7:00", "9:00", "11:00"], id: \.self) { t in
                     Text(t)
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.caption2.weight(.bold))
                         .foregroundColor(VPalette.textHint)
                         .frame(maxWidth: .infinity)
                 }
@@ -185,7 +185,7 @@ struct SearchFiltersView: View {
             ForEach(0..<dayPairs.count, id: \.self) { i in
                 let on = days[keyPath: dayPairs[i].1]
                 Text(dayPairs[i].0)
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .frame(maxWidth: .infinity, minHeight: 40)
                     .foregroundColor(on ? VPalette.primary : VPalette.textHint)
                     .background(on ? VPalette.primaryContainer : VPalette.surface)
@@ -235,8 +235,8 @@ struct SearchFiltersView: View {
     private func chip(icon: String, label: String, on: Binding<Bool>) -> some View {
         Button { on.wrappedValue.toggle() } label: {
             VStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 16, weight: .bold))
-                Text(label).font(.system(size: 11, weight: .heavy))
+                Image(systemName: icon).font(.callout.weight(.bold))
+                Text(label).font(.caption2.weight(.heavy))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
@@ -266,8 +266,8 @@ struct SearchFiltersView: View {
     private func prefRow(title: String, subtitle: String, on: Binding<Bool>) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
-                Text(subtitle).font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                Text(title).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
+                Text(subtitle).font(.caption2).foregroundColor(VPalette.textSec)
             }
             Spacer()
             VToggle(isOn: on)

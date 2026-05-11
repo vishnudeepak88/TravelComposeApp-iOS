@@ -97,7 +97,7 @@ struct PrimaryButton: View {
                     ProgressView().tint(.white)
                 } else {
                     Text(title)
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.subheadline.weight(.bold))
                         .tracking(-0.2)
                 }
             }
@@ -120,7 +120,7 @@ struct SecondaryButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 15, weight: .heavy))
+                .font(.subheadline.weight(.heavy))
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
                 .foregroundColor(VPalette.primary)
@@ -136,7 +136,7 @@ struct DestructiveButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 15, weight: .heavy))
+                .font(.subheadline.weight(.heavy))
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
                 .foregroundColor(VPalette.danger)
@@ -160,13 +160,13 @@ struct VoygoTextField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label.uppercased())
-                .font(.system(size: 11, weight: .heavy))
+                .font(.caption2.weight(.heavy))
                 .tracking(1.2)
                 .foregroundColor(VPalette.textHint)
             HStack(spacing: 8) {
                 if let prefix {
                     Text(prefix)
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.text)
                 }
                 TextField(placeholder, text: $text)
@@ -180,7 +180,7 @@ struct VoygoTextField: View {
                                 ProgressView().tint(VPalette.primary)
                             } else {
                                 Image(systemName: trailingIcon)
-                                    .font(.system(size: 17, weight: .semibold))
+                                    .font(.body.weight(.semibold))
                                     .foregroundColor(VPalette.primary)
                             }
                         }
@@ -209,7 +209,7 @@ struct StatusBadge: View {
     let color: Color
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: 10, weight: .black))
+            .font(.caption2.weight(.black))
             .tracking(0.6)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
@@ -253,19 +253,19 @@ struct EmptyStateView: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 44, weight: .semibold))
+                .font(.largeTitle.weight(.semibold))
                 .foregroundColor(VPalette.textHint)
             Text(title)
-                .font(.system(size: 15, weight: .heavy))
+                .font(.subheadline.weight(.heavy))
                 .foregroundColor(VPalette.textSec)
             Text(subtitle)
-                .font(.system(size: 13))
+                .font(.footnote)
                 .foregroundColor(VPalette.textHint)
                 .multilineTextAlignment(.center)
             if let ctaLabel, let ctaAction {
                 Button(action: ctaAction) {
                     Text(ctaLabel)
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(.white)
                         .padding(.horizontal, 22)
                         .padding(.vertical, 11)
@@ -285,7 +285,7 @@ struct LoadingView: View {
         VStack(spacing: 14) {
             ProgressView().tint(VPalette.primary).scaleEffect(1.3)
             Text("Loading…")
-                .font(.system(size: 13, weight: .heavy))
+                .font(.footnote.weight(.heavy))
                 .foregroundColor(VPalette.textSec)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -297,10 +297,10 @@ struct ErrorView: View {
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 36))
+                .font(.largeTitle)
                 .foregroundColor(VPalette.warning)
             Text(message)
-                .font(.system(size: 13))
+                .font(.footnote)
                 .foregroundColor(VPalette.textSec)
                 .multilineTextAlignment(.center)
         }
@@ -314,7 +314,7 @@ struct SectionHeader: View {
     let title: String
     var body: some View {
         Text(title.uppercased())
-            .font(.system(size: 11, weight: .heavy))
+            .font(.caption2.weight(.heavy))
             .tracking(1.2)
             .foregroundColor(VPalette.textHint)
             .padding(.horizontal, 4)
@@ -350,7 +350,7 @@ struct DayChip: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 13, weight: .heavy))
+                .font(.footnote.weight(.heavy))
                 .frame(width: 38, height: 38)
                 .foregroundColor(selected ? VPalette.primary : VPalette.textHint)
                 .background(selected ? VPalette.primaryContainer : VPalette.surface)
@@ -382,16 +382,16 @@ struct StepperHeaderView: View {
                             .frame(width: 32, height: 32)
                         if isDone {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .heavy))
+                                .font(.caption.weight(.heavy))
                                 .foregroundColor(.white)
                         } else {
                             Text("\(stepNum)")
-                                .font(.system(size: 12, weight: .heavy))
+                                .font(.caption.weight(.heavy))
                                 .foregroundColor(isActive ? .white : VPalette.textHint)
                         }
                     }
                     Text(i < titles.count ? titles[i] : "")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundColor(isActive ? VPalette.primary : VPalette.textHint)
                 }
                 if i < totalSteps - 1 {
@@ -439,9 +439,9 @@ struct PlaceAutocompleteField: View {
                             HStack {
                                 Image(systemName: "mappin.circle.fill")
                                     .foregroundColor(VPalette.primary)
-                                    .font(.system(size: 14, weight: .heavy))
+                                    .font(.subheadline.weight(.heavy))
                                 Text(s.displayName)
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(.subheadline.weight(.semibold))
                                     .foregroundColor(VPalette.text)
                                     .lineLimit(1)
                                 Spacer()

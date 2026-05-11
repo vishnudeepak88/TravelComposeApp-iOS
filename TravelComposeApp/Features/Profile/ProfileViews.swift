@@ -164,7 +164,7 @@ struct ProfileView: View {
                         .foregroundColor(VPalette.text)
                         .minimumScaleFactor(0.7)
                     Image(systemName: "pencil")
-                        .font(.system(size: 12, weight: .heavy))
+                        .font(.caption.weight(.heavy))
                         .foregroundColor(VPalette.textHint)
                 }
                 HStack(spacing: 6) {
@@ -175,18 +175,18 @@ struct ProfileView: View {
                     // shown to every freshly-installed user.
                     if store.currentUser.hasDisplayableRating, let rating = store.currentUser.rating {
                         Image(systemName: "star.fill")
-                            .font(.system(size: 12)).foregroundColor(VPalette.starGold)
+                            .font(.caption).foregroundColor(VPalette.starGold)
                         Text(String(format: "%.1f (%d)", rating, store.currentUser.ratingCount))
-                            .font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.textSec)
+                            .font(.caption.weight(.heavy)).foregroundColor(VPalette.textSec)
                     } else {
                         Image(systemName: "sparkles")
-                            .font(.system(size: 12)).foregroundColor(VPalette.primary)
+                            .font(.caption).foregroundColor(VPalette.primary)
                         Text("New rider")
-                            .font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.textSec)
+                            .font(.caption.weight(.heavy)).foregroundColor(VPalette.textSec)
                     }
                     Circle().fill(VPalette.textHint).frame(width: 3, height: 3)
                     // Real ride count from completed payments.
-                    Text("\(tripsCount) rides").font(.system(size: 12)).foregroundColor(VPalette.textSec)
+                    Text("\(tripsCount) rides").font(.caption).foregroundColor(VPalette.textSec)
                 }
             }
             Spacer()
@@ -200,8 +200,8 @@ struct ProfileView: View {
                 VIconBubble(systemName: kycIcon, color: kycColor, size: 44, iconSize: 18)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Identity Verification")
-                        .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
-                    Text(kycMessage).font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                        .font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
+                    Text(kycMessage).font(.caption2).foregroundColor(VPalette.textSec)
                 }
                 Spacer()
                 VBadge(text: kycBadge, color: kycColor, container: kycColor.opacity(0.15))
@@ -220,12 +220,12 @@ struct ProfileView: View {
                 VIconBubble(systemName: "creditcard.fill", color: VPalette.primary, size: 44, iconSize: 18)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Wallet & payment methods")
-                        .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                        .font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                     Text(walletSubtitle)
-                        .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                        .font(.caption2).foregroundColor(VPalette.textSec)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.textHint)
+                Image(systemName: "chevron.right").font(.footnote.weight(.heavy)).foregroundColor(VPalette.textHint)
             }
             .padding(14)
             .background(VPalette.surface)
@@ -274,10 +274,10 @@ struct ProfileView: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 4) {
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .heavy))
+                    .font(.body.weight(.heavy))
                     .foregroundColor(tint)
                 Text(title)
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Text(subtitle)
                     .font(.caption2)
@@ -329,7 +329,7 @@ struct ProfileView: View {
 
     private func statCell(_ value: String, _ label: String) -> some View {
         VStack(spacing: 3) {
-            Text(value).font(.system(size: 18, weight: .black)).tracking(-0.3).foregroundColor(VPalette.primary)
+            Text(value).font(.body.weight(.black)).tracking(-0.3).foregroundColor(VPalette.primary)
             VKicker(text: label, size: 10)
         }
         .frame(maxWidth: .infinity)
@@ -402,16 +402,16 @@ struct ProfileView: View {
         Button { action?() } label: {
             HStack(spacing: 12) {
                 VIconBubble(systemName: icon, color: color, size: 32, iconSize: 14)
-                Text(title).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                Text(title).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                 Spacer()
                 if let trailingText {
-                    Text(trailingText).font(.system(size: 11, weight: .bold)).foregroundColor(VPalette.textSec)
+                    Text(trailingText).font(.caption2.weight(.bold)).foregroundColor(VPalette.textSec)
                 }
                 if let trailing {
                     trailing
                 }
                 if chevron {
-                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.textHint)
+                    Image(systemName: "chevron.right").font(.footnote.weight(.heavy)).foregroundColor(VPalette.textHint)
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 12)
@@ -432,14 +432,14 @@ struct ProfileView: View {
                             color: VPalette.primary, size: 44, iconSize: 18)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(hasRoutes ? "Driver mode" : "Publish your first route")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.text)
                     Text(hasRoutes ? "Manage your routes & earnings" : "Your KYC is approved — start offering seats")
-                        .font(.system(size: 11))
+                        .font(.caption2)
                         .foregroundColor(VPalette.textSec)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.textHint)
+                Image(systemName: "chevron.right").font(.footnote.weight(.heavy)).foregroundColor(VPalette.textHint)
             }
             .padding(14)
             .background(VPalette.surface)
@@ -478,10 +478,10 @@ struct ProfileView: View {
                 )
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Your vehicle")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.text)
                     Text(vehicleSubtitle)
-                        .font(.system(size: 11))
+                        .font(.caption2)
                         .foregroundColor(VPalette.textSec)
                         .lineLimit(2)
                 }
@@ -490,7 +490,7 @@ struct ProfileView: View {
                     VBadge(text: "Set up", color: VPalette.warning, container: VPalette.warning.opacity(0.15))
                 } else {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.textHint)
                 }
             }
@@ -524,7 +524,7 @@ struct ProfileView: View {
         Button { showLogoutAlert = true } label: {
             HStack {
                 Image(systemName: "arrow.up.right.square.fill").foregroundColor(VPalette.danger)
-                Text("Log out").font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.danger)
+                Text("Log out").font(.footnote.weight(.heavy)).foregroundColor(VPalette.danger)
                 Spacer()
             }
             .padding(14)
@@ -757,8 +757,8 @@ struct PrivacySecurityView: View {
         HStack(spacing: 12) {
             VIconBubble(systemName: icon, color: color, size: 32, iconSize: 14)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
-                Text(subtitle).font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                Text(title).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
+                Text(subtitle).font(.caption2).foregroundColor(VPalette.textSec)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
@@ -784,10 +784,10 @@ struct PrivacySecurityView: View {
                 if blocks.isEmpty {
                     VStack(spacing: 6) {
                         Image(systemName: "person.slash")
-                            .font(.system(size: 22))
+                            .font(.title3)
                             .foregroundColor(VPalette.textHint)
                         Text("No blocked users")
-                            .font(.system(size: 12, weight: .heavy))
+                            .font(.caption.weight(.heavy))
                             .foregroundColor(VPalette.textSec)
                         Text("Block a driver from any route detail to stop being matched with them.")
                             .font(.caption2)
@@ -803,7 +803,7 @@ struct PrivacySecurityView: View {
                         HStack(spacing: 12) {
                             VAvatar(initial: String(b.displayName.prefix(1)), size: 32)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(b.displayName).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                                Text(b.displayName).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                                 if let reason = b.reason, !reason.isEmpty {
                                     Text(reason).font(.caption2).foregroundColor(VPalette.textSec).lineLimit(1)
                                 }
@@ -840,9 +840,9 @@ struct PrivacySecurityView: View {
                     VIconBubble(systemName: "square.and.arrow.down.fill", color: VPalette.primary, size: 32, iconSize: 14)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Download my data")
-                            .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                            .font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                         Text("We'll email a copy of your rides, payments and profile within 7 days (PDPA s.7)")
-                            .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                            .font(.caption2).foregroundColor(VPalette.textSec)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
@@ -850,7 +850,7 @@ struct PrivacySecurityView: View {
                         ProgressView().controlSize(.small)
                     } else {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .heavy))
+                            .font(.footnote.weight(.heavy))
                             .foregroundColor(VPalette.textHint)
                     }
                 }
@@ -876,9 +876,9 @@ struct PrivacySecurityView: View {
                     VIconBubble(systemName: "trash.fill", color: VPalette.danger, size: 32, iconSize: 14)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Delete account")
-                            .font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.danger)
+                            .font(.footnote.weight(.heavy)).foregroundColor(VPalette.danger)
                         Text("Permanently removes your account after 30 days. Required by App Store + PDPA.")
-                            .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                            .font(.caption2).foregroundColor(VPalette.textSec)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
@@ -886,7 +886,7 @@ struct PrivacySecurityView: View {
                         ProgressView().controlSize(.small)
                     } else {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .heavy))
+                            .font(.footnote.weight(.heavy))
                             .foregroundColor(VPalette.textHint)
                     }
                 }
@@ -1029,7 +1029,7 @@ struct HelpCenterView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         HStack {
-                            Image(systemName: "questionmark.bubble.fill").font(.system(size: 40)).foregroundStyle(VoygoTheme.primaryGradient)
+                            Image(systemName: "questionmark.bubble.fill").font(.largeTitle).foregroundStyle(VoygoTheme.primaryGradient)
                             VStack(alignment: .leading) {
                                 Text("Need Help?").font(.title3.bold()).foregroundColor(VoygoTheme.textPrimary)
                                 Text("We're here for you").font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
@@ -1210,7 +1210,7 @@ struct LiveTripView: View {
                     HStack {
                         Button(action: onBack) {
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(.callout.weight(.bold))
                                 .foregroundColor(VPalette.text)
                                 .frame(width: 40, height: 40)
                                 .background(.ultraThinMaterial)
@@ -1223,7 +1223,7 @@ struct LiveTripView: View {
 
                         HStack(spacing: 8) {
                             Circle().fill(VPalette.success).frame(width: 8, height: 8)
-                            Text("En route").font(.system(size: 12, weight: .heavy)).foregroundColor(VPalette.text)
+                            Text("En route").font(.caption.weight(.heavy)).foregroundColor(VPalette.text)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 8)
                         .background(.ultraThinMaterial)
@@ -1234,7 +1234,7 @@ struct LiveTripView: View {
 
                         Button { showShareSheet = true } label: {
                             Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 14, weight: .bold))
+                                .font(.subheadline.weight(.bold))
                                 .foregroundColor(VPalette.text)
                                 .frame(width: 40, height: 40)
                                 .background(.ultraThinMaterial)
@@ -1259,7 +1259,7 @@ struct LiveTripView: View {
                                 .overlay(Circle().stroke(.white, lineWidth: 3))
                                 .shadow(color: VPalette.primary.opacity(0.5), radius: 12, y: 4)
                             Image(systemName: "car.fill")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.footnote.weight(.bold))
                                 .foregroundColor(.white)
                         }
                         .position(
@@ -1273,7 +1273,7 @@ struct LiveTripView: View {
                             HStack(spacing: 4) {
                                 Circle().fill(VPalette.success).frame(width: 6, height: 6)
                                 Text("Live")
-                                    .font(.system(size: 9, weight: .black))
+                                    .font(.caption2.weight(.black))
                                     .tracking(0.6)
                                     .foregroundColor(.white)
                             }
@@ -1344,12 +1344,12 @@ struct LiveTripView: View {
                 // of presenting an empty sheet.
                 VStack(spacing: 16) {
                     Image(systemName: "iphone.slash")
-                        .font(.system(size: 40))
+                        .font(.largeTitle)
                         .foregroundColor(VPalette.textHint)
                     Text("This device can't send SMS")
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                     Text("Use another device with cellular service to send the SOS message.")
-                        .font(.system(size: 13))
+                        .font(.footnote)
                         .foregroundColor(VPalette.textSec)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
@@ -1405,7 +1405,7 @@ struct LiveTripView: View {
                         .foregroundStyle(VPalette.primaryGradient)
                         .accessibilityLabel("ETA \(etaMinutes) minutes")
                     Text(etaSubtitle)
-                        .font(.system(size: 12, weight: .semibold)).foregroundColor(VPalette.textSec)
+                        .font(.caption.weight(.semibold)).foregroundColor(VPalette.textSec)
                 }
                 Spacer()
                 HStack(spacing: 6) {
@@ -1427,11 +1427,11 @@ struct LiveTripView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     VStack(alignment: .leading, spacing: 1) {
                         VKicker(text: "Pickup", color: VPalette.success, size: 10)
-                        Text(pickupLabel).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                        Text(pickupLabel).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         VKicker(text: "Drop", color: VPalette.primary, size: 10)
-                        Text(dropoffLabel).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                        Text(dropoffLabel).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                     }
                 }
                 Spacer(minLength: 0)
@@ -1442,12 +1442,12 @@ struct LiveTripView: View {
             HStack(spacing: 12) {
                 VAvatar(initial: driverInitial, size: 42)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(driverDisplayName).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
+                    Text(driverDisplayName).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                     // Vehicle string isn't on the model yet; show the
                     // car type label which is, and leave a placeholder
                     // for plate. Honest > inventing "Tesla VEC 4123".
                     Text(driverCarLabel)
-                        .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                        .font(.caption2).foregroundColor(VPalette.textSec)
                 }
                 Spacer()
                 Button {
@@ -1463,7 +1463,7 @@ struct LiveTripView: View {
                     }
                 } label: {
                     Image(systemName: "phone.fill")
-                        .font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                        .font(.subheadline.weight(.bold)).foregroundColor(.white)
                         .frame(width: 38, height: 38)
                         .background(canCallDriver ? VPalette.success : VPalette.textHint)
                         .clipShape(Circle())
@@ -1474,7 +1474,7 @@ struct LiveTripView: View {
                 .disabled(!canCallDriver)
                 Button { onMessageDriver?() } label: {
                     Image(systemName: "bubble.left.fill")
-                        .font(.system(size: 14, weight: .bold)).foregroundColor(.white)
+                        .font(.subheadline.weight(.bold)).foregroundColor(.white)
                         .frame(width: 38, height: 38)
                         .background(VPalette.primary).clipShape(Circle())
                         .shadow(color: VPalette.primary.opacity(0.5), radius: 8, y: 3)
@@ -1502,9 +1502,9 @@ struct LiveTripView: View {
 
             Button { showSOSAlert = true } label: {
                 HStack(spacing: 8) {
-                    Text("SOS").font(.system(size: 18, weight: .black))
+                    Text("SOS").font(.body.weight(.black))
                     Text("Send SOS")
-                        .font(.system(size: 14, weight: .black))
+                        .font(.subheadline.weight(.black))
                         .tracking(0.3)
                 }
                 .frame(maxWidth: .infinity, minHeight: 50)
@@ -1533,9 +1533,9 @@ struct LiveTripView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: isSharingLocation ? "location.fill" : "location")
-                            .font(.system(size: 14, weight: .heavy))
+                            .font(.subheadline.weight(.heavy))
                         Text(isSharingLocation ? "Sharing live · keep app open" : "Share live location")
-                            .font(.system(size: 13, weight: .black))
+                            .font(.footnote.weight(.black))
                     }
                     .frame(maxWidth: .infinity, minHeight: 46)
                     .foregroundColor(isSharingLocation ? .white : VPalette.primary)
@@ -1565,7 +1565,7 @@ struct LiveTripView: View {
 
     private func iconButton(_ system: String, color: Color, bg: Color, action: @escaping () -> Void = {}) -> some View {
         Button(action: action) {
-            Image(systemName: system).font(.system(size: 14, weight: .bold)).foregroundColor(color)
+            Image(systemName: system).font(.subheadline.weight(.bold)).foregroundColor(color)
                 // 38pt is below 44pt tap-target spec — pad the surrounding
                 // hit area without changing the visual size.
                 .frame(width: 44, height: 44)
@@ -1779,13 +1779,13 @@ struct EditDisplayNameSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("Your name")
-                    .font(.system(size: 18, weight: .black))
+                    .font(.body.weight(.black))
                     .tracking(-0.3)
                     .foregroundColor(VPalette.text)
                 Spacer()
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.textSec)
                         .frame(width: 32, height: 32)
                         .background(VPalette.surfaceHigh)
@@ -1796,11 +1796,11 @@ struct EditDisplayNameSheet: View {
             }
 
             Text("This is how drivers and riders see you on receipts, chat threads and ride confirmations.")
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundColor(VPalette.textSec)
 
             TextField("e.g. Vishnu Kumar", text: $name)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundColor(VPalette.text)
                 .tint(VPalette.primary)
                 .padding(.horizontal, 14).padding(.vertical, 12)
@@ -1893,13 +1893,13 @@ struct EditVehicleSheet: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("Your vehicle")
-                    .font(.system(size: 18, weight: .black))
+                    .font(.body.weight(.black))
                     .tracking(-0.3)
                     .foregroundColor(VPalette.text)
                 Spacer()
                 Button(action: onCancel) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .heavy))
+                        .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.textSec)
                         .frame(width: 32, height: 32)
                         .background(VPalette.surfaceHigh)
@@ -1910,7 +1910,7 @@ struct EditVehicleSheet: View {
             }
 
             Text("Riders use your plate, colour and model to spot the right car at the pickup point. This is set once and applies to every route you publish.")
-                .font(.system(size: 12))
+                .font(.caption)
                 .foregroundColor(VPalette.textSec)
 
             field(label: "Plate number",
@@ -1959,7 +1959,7 @@ struct EditVehicleSheet: View {
                 .font(.caption.weight(.heavy))
                 .foregroundColor(VPalette.textSec)
             TextField(placeholder, text: text)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.callout.weight(.semibold))
                 .foregroundColor(VPalette.text)
                 .tint(VPalette.primary)
                 .padding(.horizontal, 14).padding(.vertical, 12)

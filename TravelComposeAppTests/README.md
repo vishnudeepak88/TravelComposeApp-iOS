@@ -8,6 +8,9 @@ Swift Testing tests for the pure model + policy layer.
 - **`SubscriptionPricingTests.swift`** — `SubscriptionPricing.discountedPricePerSeat`, `totalForTier`, `savingsVsDaily`, and `workingDaysBetween` (calendar-edge incl. weekend-only and inverted ranges).
 - **`CancellationPolicyTests.swift`** — every cell of the playbook §5.3 cancellation matrix (driver late-cancel × 30-day count, no-show, rider mid-month, rider no-show, force majeure).
 - **`DaysOfWeekFlagsTests.swift`** — `weekdays`/`allDays` presets, `enabled(for:)` mapping, `shortLabel` formatting.
+- **`SafeURLTests.swift`** — `URL.safe`, `URL.staticURL`, `URL.withQuery(base:items:)`: parsing edge cases, percent-encoding, empty-items short-circuit.
+- **`CapabilityFlagsTests.swift`** — pins the `AppCapabilities.*Available` flags so a Personal Team build doesn't accidentally enable SIWA / Push / Live Activities (would fail at runtime).
+- **`VoygoFocusStateTests.swift`** — `VoygoFocusState.current` ↔ `save()` round-trip; `voygoFocusStateChanged` notification fan-out.
 
 ## Wiring (one-time, manual)
 

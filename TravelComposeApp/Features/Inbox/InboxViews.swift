@@ -207,7 +207,7 @@ struct ChatThreadView: View {
                     Button(action: sendMessage) {
                         let isEmpty = newMessage.trimmingCharacters(in: .whitespaces).isEmpty
                         Image(systemName: "paperplane.circle.fill")
-                            .font(.system(size: 36))
+                            .font(.largeTitle)
                             .foregroundColor(isEmpty ? VPalette.textHint : VPalette.primary)
                     }
                     .disabled(newMessage.trimmingCharacters(in: .whitespaces).isEmpty)

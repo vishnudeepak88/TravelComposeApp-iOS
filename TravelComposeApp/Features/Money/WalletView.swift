@@ -92,7 +92,7 @@ struct WalletView: View {
                 VPolishedNavBar(title: "Wallet", kicker: "Payments & credits", onBack: onBack) {
                     Button { showComingSoonFor = "Wallet export" } label: {
                         Image(systemName: "arrow.up.right")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(.callout.weight(.bold))
                             .foregroundColor(VPalette.text)
                             .frame(width: 40, height: 40)
                             .background(VPalette.surface)
@@ -182,7 +182,7 @@ struct WalletView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         VKicker(text: "Voygo Credit", color: .white.opacity(0.8))
                         HStack(alignment: .lastTextBaseline, spacing: 6) {
-                            Text("RM").font(.system(size: 18, weight: .bold)).foregroundColor(.white.opacity(0.85))
+                            Text("RM").font(.body.weight(.bold)).foregroundColor(.white.opacity(0.85))
                             // Bind to the live credit derived from payment
                             // history. While the first sync is in flight
                             // we show a skeleton instead of "0.00" — the
@@ -192,24 +192,24 @@ struct WalletView: View {
                             // hadn't fetched yet.
                             if isPaymentsLoading && store.payments.isEmpty {
                                 Text("—")
-                                    .font(.system(size: 40, weight: .black))
+                                    .font(.largeTitle.weight(.black))
                                     .tracking(-1.4)
                                     .foregroundColor(.white.opacity(0.6))
                                     .accessibilityLabel("Loading wallet balance")
                             } else {
                                 Text(formattedCredit)
-                                    .font(.system(size: 40, weight: .black))
+                                    .font(.largeTitle.weight(.black))
                                     .tracking(-1.4)
                                     .foregroundColor(.white)
                             }
                         }
                         Text(creditSubtitle)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                             .foregroundColor(.white.opacity(0.85))
                     }
                     Spacer()
                     Text("VOYGO")
-                        .font(.system(size: 10, weight: .black))
+                        .font(.caption2.weight(.black))
                         .tracking(0.4)
                         .padding(.horizontal, 9).padding(.vertical, 4)
                         .background(.white.opacity(0.2))
@@ -225,7 +225,7 @@ struct WalletView: View {
                 // Billplz FPX top-up / DuitNow IBG withdraw land,
                 // restore both buttons.
                 Text("Credit accumulates from cancellation refunds and applies to your next ride automatically.")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundColor(.white.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -254,17 +254,17 @@ struct WalletView: View {
                     // header button.
                     VStack(spacing: 6) {
                         Image(systemName: "creditcard")
-                            .font(.system(size: 26))
+                            .font(.title2)
                             .foregroundColor(VPalette.textHint)
                         Text("Pay at checkout")
-                            .font(.system(size: 13, weight: .heavy))
+                            .font(.footnote.weight(.heavy))
                             .foregroundColor(VPalette.textSec)
                         // Honest: we use Billplz hosted checkout so
                         // the rider picks DuitNow / FPX / TNG /
                         // GrabPay at pay time. There's no "saved
                         // method" yet — old copy promised one.
                         Text("DuitNow, FPX, TNG and cards are selectable on the Billplz checkout page.")
-                            .font(.system(size: 11))
+                            .font(.caption2)
                             .foregroundColor(VPalette.textHint)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 12)
@@ -275,14 +275,14 @@ struct WalletView: View {
                     ForEach(Array(methods.enumerated()), id: \.element.id) { idx, m in
                         HStack(spacing: 12) {
                             Text(m.chip)
-                                .font(.system(size: 10, weight: .black)).tracking(0.4)
+                                .font(.caption2.weight(.black)).tracking(0.4)
                                 .frame(width: 44, height: 30)
                                 .foregroundColor(.white)
                                 .background(m.color)
                                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(m.brand).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
-                                Text(m.info).font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                                Text(m.brand).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
+                                Text(m.info).font(.caption2).foregroundColor(VPalette.textSec)
                             }
                             Spacer()
                             if m.isDefault { VBadge(text: "Default", color: VPalette.primary, container: VPalette.primaryContainer) }
@@ -305,7 +305,7 @@ struct WalletView: View {
             HStack {
                 VKicker(text: "Recent")
                 Spacer()
-                Text("See all").font(.system(size: 12, weight: .semibold)).foregroundColor(VPalette.primary)
+                Text("See all").font(.caption.weight(.semibold)).foregroundColor(VPalette.primary)
             }
             .padding(.horizontal, 4)
 
@@ -313,13 +313,13 @@ struct WalletView: View {
                 if txs.isEmpty {
                     VStack(spacing: 6) {
                         Image(systemName: "tray")
-                            .font(.system(size: 26))
+                            .font(.title2)
                             .foregroundColor(VPalette.textHint)
                         Text("No payments yet")
-                            .font(.system(size: 13, weight: .heavy))
+                            .font(.footnote.weight(.heavy))
                             .foregroundColor(VPalette.textSec)
                         Text("Subscribe to a route and your charges appear here")
-                            .font(.system(size: 11))
+                            .font(.caption2)
                             .foregroundColor(VPalette.textHint)
                             .multilineTextAlignment(.center)
                     }
@@ -329,14 +329,14 @@ struct WalletView: View {
                     ForEach(Array(txs.enumerated()), id: \.element.id) { idx, tx in
                         HStack(spacing: 12) {
                             Image(systemName: tx.kind == .credit ? "arrow.down" : "arrow.right")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.footnote.weight(.bold))
                                 .foregroundColor(tx.kind == .credit ? VPalette.success : VPalette.textSec)
                                 .frame(width: 32, height: 32)
                                 .background(tx.kind == .credit ? VPalette.successContainer : VPalette.surfaceHigh)
                                 .clipShape(Circle())
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(tx.title).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.text)
-                                Text(tx.subtitle).font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                                Text(tx.title).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
+                                Text(tx.subtitle).font(.caption2).foregroundColor(VPalette.textSec)
                             }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 2) {

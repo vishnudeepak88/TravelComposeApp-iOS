@@ -44,7 +44,7 @@ struct DriverDashboardView: View {
                         if let onOpenDemand {
                             Button(action: onOpenDemand) {
                                 Image(systemName: "hand.raised.fill")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.callout.weight(.bold))
                                     .foregroundColor(VPalette.primary)
                                     .frame(width: 40, height: 40)
                                     .background(VPalette.primaryContainer)
@@ -56,7 +56,7 @@ struct DriverDashboardView: View {
                         if let onOpenPayouts {
                             Button(action: onOpenPayouts) {
                                 Image(systemName: "banknote.fill")
-                                    .font(.system(size: 16, weight: .bold))
+                                    .font(.callout.weight(.bold))
                                     .foregroundColor(VPalette.primary)
                                     .frame(width: 40, height: 40)
                                     .background(VPalette.primaryContainer)
@@ -256,11 +256,11 @@ struct DriverRouteCard: View {
                 if !upcomingSolos.isEmpty {
                     HStack(spacing: 10) {
                         Image(systemName: "person.fill.checkmark")
-                            .font(.system(size: 14, weight: .heavy))
+                            .font(.subheadline.weight(.heavy))
                             .foregroundColor(VoygoTheme.accent)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(upcomingSolos.count) solo \(upcomingSolos.count == 1 ? "booking" : "bookings") ahead")
-                                .font(.system(size: 13, weight: .heavy))
+                                .font(.footnote.weight(.heavy))
                                 .foregroundColor(VoygoTheme.textPrimary)
                             Text(soloDatesSummary(upcomingSolos))
                                 .font(.caption2)
@@ -268,7 +268,7 @@ struct DriverRouteCard: View {
                         }
                         Spacer()
                         Text("RM \(upcomingSolos.compactMap { $0.soloPriceMyr }.reduce(0, +))")
-                            .font(.system(size: 13, weight: .black))
+                            .font(.footnote.weight(.black))
                             .foregroundColor(VoygoTheme.accent)
                     }
                     .padding(10)
@@ -761,7 +761,7 @@ struct CreateRouteView: View {
                                 // signature.
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text("DEPARTURE TIME")
-                                        .font(.system(size: 11, weight: .heavy))
+                                        .font(.caption2.weight(.heavy))
                                         .tracking(1.2)
                                         .foregroundColor(VPalette.textHint)
                                     DatePicker(
@@ -855,7 +855,7 @@ struct CreateRouteView: View {
                                     HStack(spacing: 10) {
                                         Image(systemName: "exclamationmark.triangle.fill")
                                             .foregroundColor(VPalette.warning)
-                                            .font(.system(size: 14, weight: .heavy))
+                                            .font(.subheadline.weight(.heavy))
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("Add your vehicle to Profile")
                                                 .font(.caption.weight(.heavy))
@@ -873,7 +873,7 @@ struct CreateRouteView: View {
                                     HStack(spacing: 8) {
                                         Image(systemName: "car.side.fill")
                                             .foregroundColor(VPalette.primary)
-                                            .font(.system(size: 14, weight: .heavy))
+                                            .font(.subheadline.weight(.heavy))
                                         Text(vehicleHint)
                                             .font(.caption2)
                                             .foregroundColor(VPalette.textSec)
@@ -1080,7 +1080,7 @@ struct NumericStepperRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 11, weight: .heavy))
+                .font(.caption2.weight(.heavy))
                 .tracking(1.2)
                 .foregroundColor(VPalette.textHint)
             HStack(spacing: 0) {
@@ -1107,10 +1107,10 @@ struct NumericStepperRow: View {
         ZStack {
             if isEditing {
                 HStack(spacing: 4) {
-                    if let suffix { Text(suffix).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.textSec) }
+                    if let suffix { Text(suffix).font(.footnote.weight(.heavy)).foregroundColor(VPalette.textSec) }
                     TextField("", text: $editingText)
                         .keyboardType(.numberPad)
-                        .font(.system(size: 18, weight: .heavy))
+                        .font(.body.weight(.heavy))
                         .foregroundColor(VPalette.text)
                         .multilineTextAlignment(.center)
                         .focused($fieldFocused)
@@ -1127,9 +1127,9 @@ struct NumericStepperRow: View {
                     fieldFocused = true
                 } label: {
                     HStack(spacing: 4) {
-                        if let suffix { Text(suffix).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.textSec) }
+                        if let suffix { Text(suffix).font(.footnote.weight(.heavy)).foregroundColor(VPalette.textSec) }
                         Text("\(value)")
-                            .font(.system(size: 18, weight: .heavy))
+                            .font(.body.weight(.heavy))
                             .foregroundColor(VPalette.text)
                             .contentTransition(.numericText(value: Double(value)))
                             .animation(.spring(response: 0.25, dampingFraction: 0.85), value: value)
@@ -1145,7 +1145,7 @@ struct NumericStepperRow: View {
     private func stepperButton(systemName: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .heavy))
+                .font(.subheadline.weight(.heavy))
                 .foregroundColor(enabled ? VPalette.primary : VPalette.textHint.opacity(0.5))
                 .frame(width: 48, height: 48)
                 .contentShape(Rectangle())
@@ -1201,7 +1201,7 @@ private struct LocationPickerRow: View {
             Button(action: onTap) {
                 HStack(spacing: 12) {
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.body.weight(.semibold))
                         .foregroundColor(iconColor)
                     VStack(alignment: .leading, spacing: 2) {
                         if value.isEmpty {
@@ -1219,7 +1219,7 @@ private struct LocationPickerRow: View {
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.footnote.weight(.bold))
                         .foregroundColor(VoygoTheme.textHint)
                 }
                 .padding(.horizontal, 14)
@@ -1337,7 +1337,7 @@ private struct StopsCard: View {
                                         .lineLimit(1)
                                     if isPopular {
                                         Text("Popular")
-                                            .font(.system(size: 9, weight: .black))
+                                            .font(.caption2.weight(.black))
                                             .tracking(0.3)
                                             .padding(.horizontal, 5)
                                             .padding(.vertical, 1)

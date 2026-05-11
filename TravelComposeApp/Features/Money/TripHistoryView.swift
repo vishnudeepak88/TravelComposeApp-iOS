@@ -106,13 +106,13 @@ struct TripHistoryView: View {
                         }
                         if filteredTrips.isEmpty {
                             VStack(spacing: 8) {
-                                Image(systemName: "tray").font(.system(size: 32)).foregroundColor(VPalette.textHint)
+                                Image(systemName: "tray").font(.title).foregroundColor(VPalette.textHint)
                                 Text(emptyStateTitle)
-                                    .font(.system(size: 13, weight: .heavy))
+                                    .font(.footnote.weight(.heavy))
                                     .foregroundColor(VPalette.textSec)
                                 if trips.isEmpty {
                                     Text("Your completed and cancelled trips will appear here.")
-                                        .font(.system(size: 12))
+                                        .font(.caption)
                                         .foregroundColor(VPalette.textHint)
                                         .multilineTextAlignment(.center)
                                         .padding(.horizontal, 40)
@@ -222,7 +222,7 @@ struct TripHistoryView: View {
     private func stat(_ label: String, value: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             VKicker(text: label, size: 9)
-            Text(value).font(.system(size: 16, weight: .black)).tracking(-0.3).foregroundColor(color)
+            Text(value).font(.callout.weight(.black)).tracking(-0.3).foregroundColor(color)
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -238,7 +238,7 @@ struct TripHistoryView: View {
                     let on = f == filter
                     Button { filter = f } label: {
                         Text(f)
-                            .font(.system(size: 12, weight: .bold))
+                            .font(.caption.weight(.bold))
                             .padding(.horizontal, 13).padding(.vertical, 7)
                             .foregroundColor(on ? .white : VPalette.textSec)
                             .background(on ? VPalette.text : VPalette.surface)
@@ -255,11 +255,11 @@ struct TripHistoryView: View {
     private func tripRow(_ t: Trip) -> some View {
         HStack(spacing: 12) {
             VStack(spacing: 2) {
-                Text(t.dow).font(.system(size: 9, weight: .black)).tracking(0.6)
+                Text(t.dow).font(.caption2.weight(.black)).tracking(0.6)
                     .foregroundColor(t.cancelled ? VPalette.textHint : VPalette.primary)
-                Text(t.day).font(.system(size: 18, weight: .black)).tracking(-0.4).lineLimit(1)
+                Text(t.day).font(.body.weight(.black)).tracking(-0.4).lineLimit(1)
                     .foregroundColor(t.cancelled ? VPalette.textHint : VPalette.primary)
-                Text(t.mo).font(.system(size: 9, weight: .black)).tracking(0.5)
+                Text(t.mo).font(.caption2.weight(.black)).tracking(0.5)
                     .foregroundColor(t.cancelled ? VPalette.textHint : VPalette.primary)
             }
             .frame(width: 50)
@@ -269,16 +269,16 @@ struct TripHistoryView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(t.route)
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.text)
                     .strikethrough(t.cancelled, color: VPalette.textHint)
                 Text("\(t.driver) · \(t.dur)")
-                    .font(.system(size: 11)).foregroundColor(VPalette.textSec)
+                    .font(.caption2).foregroundColor(VPalette.textSec)
                 if !t.cancelled, t.rating > 0 {
                     HStack(spacing: 2) {
                         ForEach(0..<5, id: \.self) { i in
                             Image(systemName: "star.fill")
-                                .font(.system(size: 10))
+                                .font(.caption2)
                                 .foregroundColor(i < t.rating ? VPalette.starGold : VPalette.border)
                         }
                     }
@@ -291,9 +291,9 @@ struct TripHistoryView: View {
                     .font(.system(size: 14, weight: .heavy, design: .monospaced))
                     .foregroundColor(t.cancelled ? VPalette.textHint : VPalette.text)
                 if t.cancelled {
-                    Text("Cancelled").font(.system(size: 10, weight: .heavy)).foregroundColor(VPalette.danger)
+                    Text("Cancelled").font(.caption2.weight(.heavy)).foregroundColor(VPalette.danger)
                 } else {
-                    Text("Receipt ›").font(.system(size: 10, weight: .heavy)).foregroundColor(VPalette.primary)
+                    Text("Receipt ›").font(.caption2.weight(.heavy)).foregroundColor(VPalette.primary)
                 }
             }
         }

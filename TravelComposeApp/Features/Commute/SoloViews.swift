@@ -93,11 +93,11 @@ struct SoloPickRouteView: View {
     private var explainerCard: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "person.fill.checkmark")
-                .font(.system(size: 18, weight: .heavy))
+                .font(.body.weight(.heavy))
                 .foregroundColor(VPalette.accentCoral)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Book the whole car")
-                    .font(.system(size: 14, weight: .black))
+                    .font(.subheadline.weight(.black))
                     .foregroundColor(VPalette.text)
                 Text("Pay ~2× the seat price for an exclusive ride. Same trusted driver, no other passengers, no detours.")
                     .font(.caption)
@@ -147,10 +147,10 @@ struct SoloPickRouteView: View {
                     VAvatar(initial: String(route.driverName.prefix(1)), size: 40)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(route.driverName)
-                            .font(.system(size: 14, weight: .black))
+                            .font(.subheadline.weight(.black))
                             .foregroundColor(VPalette.text)
                         Text("\(route.startLocation) → \(route.endLocation)")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                             .foregroundColor(VPalette.textSec)
                             .lineLimit(1)
                         Text("\(route.departureTime) · RM \(route.pricePerSeat * 2)/solo")
@@ -159,7 +159,7 @@ struct SoloPickRouteView: View {
                     }
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 13, weight: .heavy))
+                        .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.textHint)
                 }
                 .padding(14)
@@ -194,7 +194,7 @@ struct SoloPickRouteView: View {
         HStack(spacing: 10) {
             VStack(spacing: 0) {
                 Text(date, format: .dateTime.day())
-                    .font(.system(size: 16, weight: .black))
+                    .font(.callout.weight(.black))
                     .foregroundColor(VPalette.text)
                 Text(date, format: .dateTime.month(.abbreviated))
                     .font(.caption2.weight(.bold))
@@ -203,7 +203,7 @@ struct SoloPickRouteView: View {
             .frame(width: 40)
             VStack(alignment: .leading, spacing: 2) {
                 Text(date, format: .dateTime.weekday(.wide))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundColor(VPalette.text)
                 Text("Departs \(time)")
                     .font(.caption2)
@@ -211,7 +211,7 @@ struct SoloPickRouteView: View {
             }
             Spacer()
             Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .heavy))
+                .font(.footnote.weight(.heavy))
                 .foregroundColor(VPalette.textHint)
         }
         .padding(.horizontal, 14)
@@ -296,13 +296,13 @@ struct SoloConfirmView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(q.startLocation)
-                        .font(.system(size: 16, weight: .heavy))
+                        .font(.callout.weight(.heavy))
                         .foregroundColor(VPalette.text)
                     Image(systemName: "arrow.down")
-                        .font(.system(size: 11, weight: .black))
+                        .font(.caption2.weight(.black))
                         .foregroundColor(VPalette.textHint)
                     Text(q.endLocation)
-                        .font(.system(size: 16, weight: .heavy))
+                        .font(.callout.weight(.heavy))
                         .foregroundColor(VPalette.text)
                 }
                 Spacer()
@@ -311,7 +311,7 @@ struct SoloConfirmView: View {
                         .font(.caption2.weight(.bold))
                         .foregroundColor(VPalette.textHint)
                     Text(q.departureTime)
-                        .font(.system(size: 18, weight: .black))
+                        .font(.body.weight(.black))
                         .foregroundColor(VPalette.primary)
                     Text(q.date)
                         .font(.caption2)
@@ -321,20 +321,20 @@ struct SoloConfirmView: View {
             Divider().background(VPalette.border)
             HStack {
                 Text("Seat price")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundColor(VPalette.textSec)
                 Spacer()
                 Text("RM \(q.pricePerSeatMyr)")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundColor(VPalette.textSec)
             }
             HStack {
                 Text("Solo (×\(q.soloMultiplier))")
-                    .font(.system(size: 15, weight: .black))
+                    .font(.subheadline.weight(.black))
                     .foregroundColor(VPalette.text)
                 Spacer()
                 Text("RM \(q.soloPriceMyr)")
-                    .font(.system(size: 18, weight: .black))
+                    .font(.body.weight(.black))
                     .foregroundColor(VPalette.primary)
             }
             if !q.available {
@@ -367,10 +367,10 @@ struct SoloConfirmView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 13, weight: .black))
+                    .font(.footnote.weight(.black))
                     .foregroundColor(VPalette.textSec)
                 Text("Cancellation policy")
-                    .font(.system(size: 13, weight: .black))
+                    .font(.footnote.weight(.black))
                     .foregroundColor(VPalette.text)
             }
             policyRow("Cancel ≥ \(p.fullRefundUntilHours)h before depart", "Full refund")

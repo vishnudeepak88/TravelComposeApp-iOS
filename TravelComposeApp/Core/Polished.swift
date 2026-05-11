@@ -148,7 +148,7 @@ struct VBadge: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: 10, weight: .black))
+            .font(.caption2.weight(.black))
             .tracking(0.6)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
@@ -224,8 +224,8 @@ struct VPrimaryButton: View {
                 if isLoading {
                     ProgressView().tint(.white)
                 } else {
-                    Text(title).font(.system(size: 15, weight: .bold)).tracking(-0.2)
-                    if let icon { Image(systemName: icon).font(.system(size: 15, weight: .bold)) }
+                    Text(title).font(.subheadline.weight(.bold)).tracking(-0.2)
+                    if let icon { Image(systemName: icon).font(.subheadline.weight(.bold)) }
                 }
             }
             .frame(maxWidth: .infinity)
@@ -256,7 +256,7 @@ struct VSecondaryButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 13, weight: .bold))
+                .font(.footnote.weight(.bold))
                 .padding(.horizontal, 16)
                 .frame(height: 44)
                 .foregroundColor(color)
@@ -288,7 +288,7 @@ struct VPolishedCard<Content: View>: View {
                     Spacer()
                     if let action {
                         Text(action)
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                             .foregroundColor(VPalette.primary)
                     }
                 }
@@ -339,7 +339,7 @@ struct VPolishedNavBar<Trailing: View>: View {
             if let onBack {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .bold))
+                        .font(.body.weight(.bold))
                         .foregroundColor(VPalette.text)
                         .frame(width: 44, height: 44) // Apple HIG 44pt minimum
                         .background(VPalette.surface)
@@ -421,8 +421,8 @@ struct VRouteGlyph: View {
 // a semantic font that scales with the user's accessibility setting.
 //
 // Migration: callsites swap
-//   .font(.system(size: 13, weight: .heavy)) → .font(.voygoLabel)
-//   .font(.system(size: 11)) → .font(.voygoCaption)
+//   .font(.footnote.weight(.heavy)) → .font(.voygoLabel)
+//   .font(.caption2) → .font(.voygoCaption)
 // New code should always reach for these (or native `.body` / `.headline`).
 extension Font {
     /// Big page-title text (≈ 22pt at default sizing). Used in nav-
@@ -489,7 +489,7 @@ struct VPolishedTabBar: View {
                             .font(.system(size: 22, weight: on ? .bold : .regular))
                             .foregroundColor(on ? VPalette.primary : VPalette.textHint)
                         Text(item.label)
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.caption2.weight(.bold))
                             .tracking(0.2)
                             .foregroundColor(on ? VPalette.primary : VPalette.textHint)
                     }
@@ -517,7 +517,7 @@ struct VStatBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(value)
-                .font(.system(size: 18, weight: .black))
+                .font(.body.weight(.black))
                 .tracking(-0.4)
                 .foregroundColor(color)
             VKicker(text: label, size: 10)
@@ -661,15 +661,15 @@ struct VErrorBanner: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .bold))
+                .font(.callout.weight(.bold))
                 .foregroundColor(VPalette.danger)
                 .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Text(error.errorDescription ?? "Try again in a moment.")
-                    .font(.system(size: 12))
+                    .font(.caption)
                     .foregroundColor(VPalette.textSec)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -691,7 +691,7 @@ struct VErrorBanner: View {
         if case .unauthorized = error, let onSignIn {
             Button(action: onSignIn) {
                 Text("Sign in")
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(.caption.weight(.heavy))
                     .foregroundColor(VPalette.primary)
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(VPalette.primaryContainer)
@@ -701,7 +701,7 @@ struct VErrorBanner: View {
         } else if isRetryable, let onRetry {
             Button(action: onRetry) {
                 Text("Retry")
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(.caption.weight(.heavy))
                     .foregroundColor(VPalette.primary)
                     .padding(.horizontal, 10).padding(.vertical, 6)
                     .background(VPalette.primaryContainer)
@@ -748,11 +748,11 @@ struct VErrorBanner: View {
 // system can scale within reason while preserving the design weight.
 //
 // Use sites convert mechanically:
-//   .font(.system(size: 28, weight: .black))    → .font(.vTitle)
-//   .font(.system(size: 18, weight: .heavy))    → .font(.vHeadline)
-//   .font(.system(size: 13, weight: .heavy))    → .font(.vBodyHeavy)
-//   .font(.system(size: 13))                    → .font(.vBody)
-//   .font(.system(size: 11))                    → .font(.vCaption)
+//   .font(.title.weight(.black))    → .font(.vTitle)
+//   .font(.body.weight(.heavy))    → .font(.vHeadline)
+//   .font(.footnote.weight(.heavy))    → .font(.vBodyHeavy)
+//   .font(.footnote)                    → .font(.vBody)
+//   .font(.caption2)                    → .font(.vCaption)
 //   .font(.system(size: 14, design: .monospaced).weight(.heavy))
 //                                              → .font(.vMonoSmall)
 //

@@ -88,18 +88,18 @@ struct LongHaulTripDetailView: View {
                     .font(.caption)
                     .foregroundColor(VPalette.accentAmber)
                 Text(formatDeparture(trip.departAt))
-                    .font(.system(size: 12, weight: .heavy))
+                    .font(.caption.weight(.heavy))
                     .foregroundColor(VPalette.textSec)
             }
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text(trip.origin)
-                    .font(.system(size: 22, weight: .black))
+                    .font(.title3.weight(.black))
                     .foregroundColor(VPalette.text)
                 Image(systemName: "arrow.right")
                     .font(.title3.weight(.heavy))
                     .foregroundColor(VPalette.textHint)
                 Text(trip.destination)
-                    .font(.system(size: 22, weight: .black))
+                    .font(.title3.weight(.black))
                     .foregroundColor(VPalette.text)
             }
         }
@@ -115,11 +115,11 @@ struct LongHaulTripDetailView: View {
             VAvatar(initial: String((trip.driverName ?? "D").prefix(1)), size: 44)
             VStack(alignment: .leading, spacing: 2) {
                 Text(trip.driverName ?? "Driver")
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(.subheadline.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 if let rating = trip.driverRating, rating > 0 {
                     Label(String(format: "%.1f", rating), systemImage: "star.fill")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption2.weight(.semibold))
                         .foregroundColor(VPalette.warning)
                 }
             }
@@ -135,7 +135,7 @@ struct LongHaulTripDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Seats")
-                    .font(.system(size: 13, weight: .heavy))
+                    .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Spacer()
                 Text("\(trip.seatsAvailable) available")
@@ -146,11 +146,11 @@ struct LongHaulTripDetailView: View {
                 Stepper("Seats: \(seats)", value: $seats, in: 1...min(trip.seatsAvailable, 8))
                     .labelsHidden()
                 Text("\(seats) seat\(seats == 1 ? "" : "s")")
-                    .font(.system(size: 14, weight: .heavy))
+                    .font(.subheadline.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Spacer()
                 Text("RM \(trip.pricePerSeatMyr * seats)")
-                    .font(.system(size: 18, weight: .black))
+                    .font(.body.weight(.black))
                     .foregroundColor(VPalette.primary)
             }
         }
@@ -166,7 +166,7 @@ struct LongHaulTripDetailView: View {
                 .font(.caption.weight(.heavy))
                 .foregroundColor(VPalette.textHint)
             Text(notes)
-                .font(.system(size: 13))
+                .font(.footnote)
                 .foregroundColor(VPalette.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
