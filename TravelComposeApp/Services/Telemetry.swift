@@ -15,6 +15,20 @@ protocol TelemetryClient {
     func reset()
 }
 
+enum TelemetryConsent {
+    private static let key = "voygo.privacy.analyticsEnabled"
+
+    static var isEnabled: Bool {
+        get {
+            guard UserDefaults.standard.object(forKey: key) != nil else { return true }
+            return UserDefaults.standard.bool(forKey: key)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: key)
+        }
+    }
+}
+
 struct TelemetryEvent {
     var name: String
     var properties: [String: TelemetryValue]
@@ -69,6 +83,7 @@ final class ConsoleTelemetryClient: TelemetryClient {
     }
 
     func track(_ event: TelemetryEvent) {
+        guard TelemetryConsent.isEnabled else { return }
         let payload = event.properties.mapValues { $0.jsonValue }
         let serialized = (try? JSONSerialization.data(withJSONObject: payload))
             .flatMap { String(data: $0, encoding: .utf8) }
@@ -174,6 +189,7 @@ final class RemoteTelemetryClient: TelemetryClient {
     }
 
     func track(_ event: TelemetryEvent) {
+        guard TelemetryConsent.isEnabled else { return }
         console.track(event)
         var props = event.properties.mapValues { $0.jsonValue }
         if let uid = userId { props["user_id"] = uid }

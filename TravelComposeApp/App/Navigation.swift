@@ -29,7 +29,7 @@ struct RootView: View {
         // signed-in, then re-register on every subsequent
         // authenticated launch so token rotations get picked up.
         .task(id: store.isAuthenticated) {
-            if store.isAuthenticated {
+            if store.isAuthenticated && AppCapabilities.pushNotificationsAvailable {
                 await requestPushAuthorizationIfNeeded()
             }
         }
@@ -157,6 +157,9 @@ struct MainTabView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRoute)) { _ in
             selectedTab = .search
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRide)) { _ in
+            selectedTab = .calendar
         }
     }
 }
@@ -299,6 +302,14 @@ struct TripsTab: View {
                 filtersDays: $filtersDays
             )
             .navigationBarHidden(true)
+            .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRide)) { note in
+                guard let info = note.userInfo,
+                      let rideId = info["rideId"] as? String,
+                      !rideId.isEmpty else { return }
+                if path.last != .liveTrip(tripId: rideId, isDriver: false) {
+                    path.append(.liveTrip(tripId: rideId, isDriver: false))
+                }
+            }
         }
     }
 }

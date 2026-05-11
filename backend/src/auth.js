@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { config } = require("./config");
+const { pool } = require("./db");
 
 function base64urlEncode(input) {
   const buf = input instanceof Buffer ? input : Buffer.from(input);
@@ -53,7 +54,7 @@ function verifyJwt(token, secret = config.authJwtSecret) {
   }
 }
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const header = req.get("Authorization") || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
   const token = match ? match[1].trim() : null;
@@ -66,8 +67,29 @@ function requireAuth(req, res, next) {
     res.status(401).json({ detail: "invalid or expired token" });
     return;
   }
-  req.user = { id: String(payload.sub), phone: payload.phone || "" };
-  next();
+  const userId = String(payload.sub);
+  try {
+    const userRes = await pool.query(
+      "SELECT id, phone, deleted_at FROM users WHERE id = $1 LIMIT 1",
+      [userId]
+    );
+    const user = userRes.rows[0];
+    if (!user) {
+      res.status(401).json({ detail: "user not found" });
+      return;
+    }
+    if (user.deleted_at) {
+      res.status(410).json({
+        detail: "account_deleted",
+        deletedAt: new Date(user.deleted_at).toISOString()
+      });
+      return;
+    }
+    req.user = { id: userId, phone: user.phone || payload.phone || "" };
+    next();
+  } catch (err) {
+    next(err);
+  }
 }
 
 function generateOtp() {

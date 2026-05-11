@@ -6,6 +6,8 @@ struct ReceiptView: View {
     let bookingId: String
     var onBack: () -> Void
     @Environment(AppStore.self) private var store
+    @State private var showShareSheet = false
+    @State private var actionMessage: String? = nil
 
     /// Look up the payment record by id (the bookingId we're handed is the
     /// payment id when navigating from Trip History or Wallet). Falls
@@ -20,7 +22,7 @@ struct ReceiptView: View {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
                 VPolishedNavBar(title: "Receipt", onBack: onBack) {
-                    Button {} label: {
+                    Button { showShareSheet = true } label: {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(VPalette.primary)
@@ -41,6 +43,22 @@ struct ReceiptView: View {
             }
         }
         .navigationBarHidden(true)
+        .sheet(isPresented: $showShareSheet) {
+            ActivityShareSheet(items: [receiptShareText])
+                .presentationDetents([.medium])
+        }
+        .alert(
+            "Coming soon",
+            isPresented: Binding(
+                get: { actionMessage != nil },
+                set: { if !$0 { actionMessage = nil } }
+            ),
+            presenting: actionMessage
+        ) { _ in
+            Button("OK", role: .cancel) { actionMessage = nil }
+        } message: { message in
+            Text(message)
+        }
     }
 
     private var receiptCard: some View {
@@ -286,9 +304,16 @@ struct ReceiptView: View {
         return Formatters.time(drop)
     }
 
+    private var receiptShareText: String {
+        guard let p = payment else {
+            return "Voygo receipt \(bookingId)"
+        }
+        return "Voygo receipt \(p.id): \(routeLine), RM \(p.amountMyr), \(p.status.rawValue)"
+    }
+
     private var actions: some View {
         HStack(spacing: 8) {
-            Button {} label: {
+            Button { actionMessage = "PDF email delivery is not enabled yet. Use the share button for this pilot." } label: {
                 Text("Email PDF")
                     .font(.system(size: 13, weight: .heavy))
                     .frame(maxWidth: .infinity, minHeight: 46)
@@ -297,7 +322,7 @@ struct ReceiptView: View {
                     .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(VPalette.border, lineWidth: 1))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }.buttonStyle(.plain)
-            Button {} label: {
+            Button { actionMessage = "Expense export is not enabled yet." } label: {
                 Text("Add to expenses")
                     .font(.system(size: 13, weight: .heavy))
                     .frame(maxWidth: .infinity, minHeight: 46)

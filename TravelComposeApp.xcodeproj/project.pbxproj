@@ -606,9 +606,10 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TravelComposeApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Voygo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Voygo uses your location to suggest nearby commute pickup and drop-off points.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Voygo uses your location to suggest pickup and drop-off points, show live trip progress, and let drivers share location during active rides.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Voygo needs access to your photo library to upload identity documents for verification.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -640,9 +641,10 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TravelComposeApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Voygo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Voygo uses your location to suggest nearby commute pickup and drop-off points.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Voygo uses your location to suggest pickup and drop-off points, show live trip progress, and let drivers share location during active rides.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Voygo needs access to your photo library to upload identity documents for verification.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
