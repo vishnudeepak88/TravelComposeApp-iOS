@@ -324,8 +324,10 @@ private struct InfoBanner: View {
     var startLocation = ""
     var endLocation   = ""
     var departureTime = "08:00"
-    var seatCount     = "3"
-    var pricePerSeat  = "8"
+    // Int-typed so the stepper controls don't have to parse on every
+    // tap. The submit path converts to the API model below.
+    var seatCount: Int = 3
+    var pricePerSeat: Int = 8
     var carType: CarType = .sedan
     var monday = true; var tuesday = true; var wednesday = true
     var thursday = true; var friday = true; var saturday = false; var sunday = false
@@ -423,9 +425,18 @@ private struct InfoBanner: View {
         pickupSuggestionTask?.cancel()
         guard let coord = startCoordinate else { pickupSuggestions = []; return }
         let target = CLLocationCoordinate2D(latitude: coord.lat, longitude: coord.lon)
+        // Corridor anchor: when the driver has also picked an endpoint,
+        // pass it so suggestions include waypoints between start and
+        // end — not just hubs clustered around start.
+        let corridor: CLLocationCoordinate2D? = endCoordinate.map {
+            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+        }
         pickupSuggestionTask = Task { [weak self] in
             await MainActor.run { self?.isLoadingPickupSuggestions = true }
-            let hubs = (try? await VoygoLocationService.shared.searchNearbyHubs(near: target)) ?? []
+            let hubs = (try? await VoygoLocationService.shared.searchNearbyHubs(
+                near: target,
+                corridorAnchor: corridor
+            )) ?? []
             await MainActor.run {
                 guard let self else { return }
                 self.isLoadingPickupSuggestions = false
@@ -440,9 +451,17 @@ private struct InfoBanner: View {
         dropSuggestionTask?.cancel()
         guard let coord = endCoordinate else { dropSuggestions = []; return }
         let target = CLLocationCoordinate2D(latitude: coord.lat, longitude: coord.lon)
+        // Symmetric: drops benefit from the same midpoint sampling so a
+        // "between source and destination" mall shows up on both rails.
+        let corridor: CLLocationCoordinate2D? = startCoordinate.map {
+            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+        }
         dropSuggestionTask = Task { [weak self] in
             await MainActor.run { self?.isLoadingDropSuggestions = true }
-            let hubs = (try? await VoygoLocationService.shared.searchNearbyHubs(near: target)) ?? []
+            let hubs = (try? await VoygoLocationService.shared.searchNearbyHubs(
+                near: target,
+                corridorAnchor: corridor
+            )) ?? []
             await MainActor.run {
                 guard let self else { return }
                 self.isLoadingDropSuggestions = false
@@ -487,11 +506,9 @@ private struct InfoBanner: View {
     func createRoute() {
         guard let store else { return }
         createState = .loading
-        let seats = Int(seatCount) ?? 0
-        let price = Int(pricePerSeat) ?? 0
         Task {
             let result = await store.createRoute(startLocation: startLocation, endLocation: endLocation,
-                                                departureTime: departureTime, seatCount: seats, pricePerSeat: price,
+                                                departureTime: departureTime, seatCount: seatCount, pricePerSeat: pricePerSeat,
                                                 carType: carType, daysOfWeek: daysOfWeek,
                                                 pickupNames: pickupPoints, dropNames: dropPoints)
             switch result {
@@ -578,22 +595,20 @@ struct CreateRouteView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                                 }
                                 HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        VoygoTextField(label: "Seats", text: $vm.seatCount, placeholder: "3", keyboardType: .numberPad)
-                                        if (Int(vm.seatCount) ?? 0) <= 0 {
-                                            Text("Must be 1 or more")
-                                                .font(.system(size: 11))
-                                                .foregroundColor(VPalette.danger)
-                                        }
-                                    }
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        VoygoTextField(label: "Price/Seat (RM)", text: $vm.pricePerSeat, placeholder: "8", keyboardType: .numberPad)
-                                        if (Int(vm.pricePerSeat) ?? 0) <= 0 {
-                                            Text("Must be RM 1 or more")
-                                                .font(.system(size: 11))
-                                                .foregroundColor(VPalette.danger)
-                                        }
-                                    }
+                                    NumericStepperRow(
+                                        label: "SEATS",
+                                        value: $vm.seatCount,
+                                        range: 1...20,
+                                        step: 1,
+                                        suffix: nil
+                                    )
+                                    NumericStepperRow(
+                                        label: "PRICE/SEAT",
+                                        value: $vm.pricePerSeat,
+                                        range: 1...500,
+                                        step: 1,
+                                        suffix: "RM"
+                                    )
                                 }
                             }
                             .padding(16)
@@ -702,8 +717,17 @@ struct CreateRouteView: View {
         .onChange(of: { if case .success(let id) = vm.createState { return id }; return "" }()) { _, id in
             if !id.isEmpty { onCreated(id) }
         }
-        .onChange(of: vm.startCoordinate) { _, _ in vm.refreshPickupSuggestions() }
-        .onChange(of: vm.endCoordinate) { _, _ in vm.refreshDropSuggestions() }
+        // Both endpoints feed both rails now (corridor sampling), so a
+        // change to either coordinate refreshes both pickup AND drop
+        // suggestion lists. Cheap — MKLocalSearch results cache.
+        .onChange(of: vm.startCoordinate) { _, _ in
+            vm.refreshPickupSuggestions()
+            vm.refreshDropSuggestions()
+        }
+        .onChange(of: vm.endCoordinate) { _, _ in
+            vm.refreshPickupSuggestions()
+            vm.refreshDropSuggestions()
+        }
         // If the user clears the Start/Destination text fields manually
         // (e.g. by retyping a different address), wipe the captured
         // coordinate too — otherwise the suggestion rail keeps proposing
@@ -763,8 +787,132 @@ struct CreateRouteView: View {
         guard parts.count == 2,
               let h = Int(parts[0]), let m = Int(parts[1]),
               (0...23).contains(h), (0...59).contains(m) else { return false }
-        return (Int(vm.seatCount) ?? 0) > 0 && (Int(vm.pricePerSeat) ?? 0) > 0
+        return vm.seatCount > 0 && vm.pricePerSeat > 0
     }
+}
+
+// MARK: - NumericStepperRow
+//
+// Card-shaped Int picker with a tappable label, big −/+ buttons, AND
+// a tappable centre number that opens a numeric keyboard for fast
+// jumps (e.g. RM 50 instead of tapping + fifty times). Used on the
+// Create Route form for both Seats and Price/Seat.
+
+struct NumericStepperRow: View {
+    let label: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+    /// Optional unit suffix shown to the left of the number ("RM 50").
+    let suffix: String?
+
+    @State private var isEditing: Bool = false
+    @State private var editingText: String = ""
+    @FocusState private var fieldFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(1.2)
+                .foregroundColor(VPalette.textHint)
+            HStack(spacing: 0) {
+                stepperButton(systemName: "minus", enabled: value > range.lowerBound) {
+                    value = max(range.lowerBound, value - step)
+                }
+                centre
+                stepperButton(systemName: "plus", enabled: value < range.upperBound) {
+                    value = min(range.upperBound, value + step)
+                }
+            }
+            .frame(height: 48)
+            .background(VPalette.surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(VPalette.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var centre: some View {
+        ZStack {
+            if isEditing {
+                HStack(spacing: 4) {
+                    if let suffix { Text(suffix).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.textSec) }
+                    TextField("", text: $editingText)
+                        .keyboardType(.numberPad)
+                        .font(.system(size: 18, weight: .heavy))
+                        .foregroundColor(VPalette.text)
+                        .multilineTextAlignment(.center)
+                        .focused($fieldFocused)
+                        .frame(minWidth: 40)
+                        .onSubmit(commitEdit)
+                        .onChange(of: fieldFocused) { _, focused in
+                            if !focused { commitEdit() }
+                        }
+                }
+            } else {
+                Button {
+                    editingText = String(value)
+                    isEditing = true
+                    fieldFocused = true
+                } label: {
+                    HStack(spacing: 4) {
+                        if let suffix { Text(suffix).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.textSec) }
+                        Text("\(value)")
+                            .font(.system(size: 18, weight: .heavy))
+                            .foregroundColor(VPalette.text)
+                            .contentTransition(.numericText(value: Double(value)))
+                            .animation(.spring(response: 0.25, dampingFraction: 0.85), value: value)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(label) \(value). Tap to type.")
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func stepperButton(systemName: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundColor(enabled ? VPalette.primary : VPalette.textHint.opacity(0.5))
+                .frame(width: 48, height: 48)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    private func commitEdit() {
+        defer { isEditing = false }
+        let trimmed = editingText.trimmingCharacters(in: .whitespaces)
+        guard let parsed = Int(trimmed) else { return }
+        value = min(range.upperBound, max(range.lowerBound, parsed))
+    }
+}
+
+#Preview("NumericStepperRow") {
+    StatefulPreviewWrapper(3) { value in
+        VStack(spacing: 16) {
+            NumericStepperRow(label: "SEATS",      value: value,           range: 1...20, step: 1, suffix: nil)
+            NumericStepperRow(label: "PRICE/SEAT", value: .constant(8),    range: 1...500, step: 1, suffix: "RM")
+        }
+        .padding()
+    }
+}
+
+private struct StatefulPreviewWrapper<Value, Content: View>: View {
+    @State var value: Value
+    let content: (Binding<Value>) -> Content
+    init(_ initial: Value, @ViewBuilder content: @escaping (Binding<Value>) -> Content) {
+        self._value = State(initialValue: initial)
+        self.content = content
+    }
+    var body: some View { content($value) }
 }
 
 /// Tappable row that looks like a VoygoTextField but, instead of accepting

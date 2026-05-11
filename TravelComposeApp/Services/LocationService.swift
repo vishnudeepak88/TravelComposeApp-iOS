@@ -128,27 +128,64 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
         return try await mapKitSearch(query: cleaned, near: coordinate, limit: limit)
     }
 
-    /// Suggests transit hubs and major waypoints close to a coordinate.
-    /// Drives the "Suggested pickups" / "Suggested drops" pill rows on
-    /// Create Route — once a driver has picked Start/Destination, this
-    /// returns the obvious LRT/MRT/bus stops within ~5km so they don't
-    /// have to type each one out.
-    func searchNearbyHubs(near coordinate: CLLocationCoordinate2D, radiusMeters: Double = 5_000, limit: Int = 5) async throws -> [PlaceSuggestion] {
-        // MKLocalSearch's "natural language" query handles synonyms surprisingly
-        // well: "LRT" returns Klang Valley LRT stations, "MRT" returns MRT
-        // ones, "transit" widens to bus + rail. Combining a few queries gives
-        // a richer pool than any single phrasing.
-        let queries = ["LRT station", "MRT station", "bus station"]
+    /// Suggests pickup / drop candidates near a coordinate AND along
+    /// the corridor between two coordinates when both are given.
+    /// Combines transit hubs, malls, shopping centres, and well-known
+    /// landmarks — the places Malaysian commuters actually meet
+    /// drivers ("see you at Sunway Pyramid"). Drives the "Suggested
+    /// pickups" / "Suggested drops" pill rows on Create Route.
+    ///
+    /// When `corridorAnchor` is provided, we also sample a query at
+    /// the midpoint between `coordinate` and `corridorAnchor` so the
+    /// rail surfaces waypoints riders along the route can join from,
+    /// not just hubs clustered around the endpoints.
+    func searchNearbyHubs(near coordinate: CLLocationCoordinate2D,
+                          corridorAnchor: CLLocationCoordinate2D? = nil,
+                          radiusMeters: Double = 5_000,
+                          limit: Int = 8) async throws -> [PlaceSuggestion] {
+        // Each query phrase pulls a distinct category MapKit indexes well.
+        // Transit first (the most common meeting point), then high-traffic
+        // landmarks riders use as casual reference ("pick me up at AEON").
+        let queries = [
+            "LRT station",
+            "MRT station",
+            "bus station",
+            "shopping mall",
+            "university"
+        ]
+
+        // Sample anchors: the start coord, the corridor midpoint when we
+        // have both endpoints, and the corridor anchor itself. Midpoint
+        // surfaces "places along the way" rather than only at endpoints.
+        var anchors: [CLLocationCoordinate2D] = [coordinate]
+        if let other = corridorAnchor {
+            let mid = CLLocationCoordinate2D(
+                latitude:  (coordinate.latitude  + other.latitude)  / 2.0,
+                longitude: (coordinate.longitude + other.longitude) / 2.0
+            )
+            anchors.append(mid)
+        }
+        // Per-anchor search radius — widen slightly when corridor is
+        // active so the midpoint catches a bigger slice.
+        let perAnchorRadius = corridorAnchor == nil ? radiusMeters : max(radiusMeters, 7_000)
+
         var seen: Set<String> = []
         var results: [PlaceSuggestion] = []
-        for q in queries {
-            let chunk = (try? await mapKitSearch(query: q, near: coordinate, limit: limit, radiusMeters: radiusMeters)) ?? []
-            for item in chunk {
-                let key = item.displayName.lowercased()
-                if seen.insert(key).inserted {
-                    results.append(item)
+        outer: for anchor in anchors {
+            for q in queries {
+                let chunk = (try? await mapKitSearch(
+                    query: q,
+                    near: anchor,
+                    limit: 3,
+                    radiusMeters: perAnchorRadius
+                )) ?? []
+                for item in chunk {
+                    let key = item.displayName.lowercased()
+                    if seen.insert(key).inserted {
+                        results.append(item)
+                    }
+                    if results.count >= limit { break outer }
                 }
-                if results.count >= limit { return results }
             }
         }
         return results
