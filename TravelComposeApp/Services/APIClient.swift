@@ -72,6 +72,55 @@ struct VoygoAPIClient {
         _ = try await putVoid(body, to: baseURL.appendingPathComponent("users/me"))
     }
 
+    // MARK: - Privacy & Security
+    //
+    // Backs the Profile → Privacy & Security screen. All four
+    // surfaces required for App Store 5.1.1(v) + Malaysia PDPA:
+    //   - read/write toggles (push, phone-visibility, biometric)
+    //   - block list (list/add/remove)
+    //   - account deletion
+    //   - data export request
+
+    static func getPreferences() async throws -> UserPreferencesDTO {
+        try await get(baseURL.appendingPathComponent("users/me/preferences"), as: UserPreferencesDTO.self)
+    }
+
+    static func updatePreferences(_ patch: UpdatePreferencesRequest) async throws {
+        _ = try await putVoid(patch, to: baseURL.appendingPathComponent("users/me/preferences"))
+    }
+
+    static func listBlocks() async throws -> [BlockedUserDTO] {
+        try await get(baseURL.appendingPathComponent("users/me/blocks"), as: [BlockedUserDTO].self)
+    }
+
+    static func addBlock(userId: String, reason: String? = nil) async throws {
+        let body = AddBlockRequest(userId: userId, reason: reason)
+        _ = try await postVoid(body, to: baseURL.appendingPathComponent("users/me/blocks"))
+    }
+
+    static func removeBlock(userId: String) async throws {
+        // URL-encode in case targetId ever contains anything unsafe;
+        // current ids are UUID strings but defending against future
+        // schema changes is cheap.
+        let safe = userId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? userId
+        let url = baseURL.appendingPathComponent("users/me/blocks/\(safe)")
+        let req = authedRequest(url, method: "DELETE")
+        let (data, response) = try await session.data(for: req)
+        try validate(response, data: data, url: url)
+    }
+
+    /// Schedules account deletion. Server soft-deletes immediately and
+    /// returns a `scheduledFor` 30 days out. iOS clears the JWT after
+    /// this call so subsequent requests 401.
+    static func deleteAccount() async throws -> DeleteAccountResponse {
+        try await post(EmptyRequest(), to: baseURL.appendingPathComponent("users/me/delete"), as: DeleteAccountResponse.self)
+    }
+
+    /// PDPA right of access — server queues a data-export email job.
+    static func requestDataExport() async throws -> DataExportResponse {
+        try await post(EmptyRequest(), to: baseURL.appendingPathComponent("users/me/data-export"), as: DataExportResponse.self)
+    }
+
     /// Sets the driver's vehicle identity on their profile. Returns
     /// the trimmed/saved values so the client can store exactly what
     /// the server persisted (e.g. server may strip trailing spaces).
@@ -805,6 +854,14 @@ struct AuthUserDTO: Decodable {
     var plateNumber: String?
     var carColor: String?
     var carModel: String?
+    /// Real average rating + how many ratings back it. Both nil until
+    /// the user has ratings. Profile shows "New" until ratingCount
+    /// >= 3 to avoid the previous "fake 5.0 for everyone" trap.
+    var averageRating: Double?
+    var ratingCount: Int?
+    /// Account creation date (ISO-8601). Drives the "Member since"
+    /// stat that replaced the old fake on-time/savings columns.
+    var memberSince: String?
 
     var kyc: KycStatus { KycStatus(rawValue: kycStatus) ?? .notStarted }
 }
@@ -829,6 +886,54 @@ struct UpdateVehicleResponse: Decodable {
 // with an empty body and always lands on PENDING.
 struct KycResponse: Decodable { var kycStatus: String }
 struct UpdateDisplayNameRequest: Encodable { var displayName: String }
+
+// MARK: - Privacy & Security DTOs
+
+/// Whitelisted toggles for `/users/me/preferences`. Server merges these
+/// into the user's JSONB preferences column — fields you don't supply
+/// stay as they were. Defaults at the iOS side mirror the server-side
+/// defaults so the UI never lies before the first GET completes.
+struct UserPreferencesDTO: Decodable {
+    var pushEnabled: Bool
+    var phoneVisibleToSubscribers: Bool
+    var biometricLock: Bool
+    var marketingEmails: Bool
+}
+
+struct UpdatePreferencesRequest: Encodable {
+    var pushEnabled: Bool?
+    var phoneVisibleToSubscribers: Bool?
+    var biometricLock: Bool?
+    var marketingEmails: Bool?
+}
+
+struct BlockedUserDTO: Decodable, Identifiable, Equatable {
+    /// Compound id is fine — combo of user id + (no createdAt-changes
+    /// after first block) makes the SwiftUI ForEach stable.
+    var userId: String
+    var displayName: String
+    var reason: String?
+    var createdAt: String?
+    var id: String { userId }
+}
+
+struct AddBlockRequest: Encodable {
+    var userId: String
+    var reason: String?
+}
+
+struct DeleteAccountResponse: Decodable {
+    /// ISO-8601 timestamp 30 days out — when the soft-delete becomes
+    /// permanent. iOS surfaces this in the confirmation copy.
+    var scheduledFor: String
+    var message: String
+}
+
+struct DataExportResponse: Decodable {
+    var acknowledged: Bool
+    var slaDays: Int
+    var message: String
+}
 struct EmptyRequest: Encodable {}
 
 struct CreateLongHaulTripRequest: Encodable {

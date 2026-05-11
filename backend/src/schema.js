@@ -21,6 +21,52 @@ async function initSchema(pool) {
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS car_color   TEXT NULL");
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS car_model   TEXT NULL");
 
+  // Aggregate rating + count. Default NULL so iOS can render "New
+  // rider" until ratingCount crosses the social-proof threshold
+  // (3, defined client-side in User.minRatingsForDisplay). The
+  // previous version hardcoded 5.0 for every freshly-installed user
+  // — a fake stat that made every rating elsewhere in the app feel
+  // theatrical. These columns are populated by the reviews fan-out
+  // when ride_reviews lands; until then they stay NULL and Profile
+  // shows the honest empty state.
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS average_rating DOUBLE PRECISION NULL");
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS rating_count INTEGER NOT NULL DEFAULT 0");
+
+  // PDPA / App Store 5.1.1(v) account deletion. We soft-delete first
+  // (deleted_at != NULL) so a misclick can be reversed within a 30-day
+  // grace window. After the grace window an ops sweep anonymizes
+  // display_name and scrubs phone — that runs separately, here we
+  // just store the timestamp.
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL");
+
+  // User preferences. Simple JSONB so we can add new toggles without
+  // a migration per setting. Defaults to '{}' so every existing user
+  // gets sensible "everything on" behavior.
+  await pool.query(
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb"
+  );
+
+  // Block list — who has this user blocked from matching with them?
+  // Used by /commute/search and /commute/route-requests to filter
+  // routes whose driver the rider has blocked. Bidirectional: if
+  // either side blocked the other, no match. Soft cap at 200 entries
+  // per user (enforced in the POST handler).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_blocks (
+      blocker_id TEXT NOT NULL,
+      blocked_id TEXT NOT NULL,
+      reason     TEXT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (blocker_id, blocked_id)
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_user_blocks_blocker ON user_blocks(blocker_id, created_at DESC)"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_user_blocks_blocked ON user_blocks(blocked_id)"
+  );
+
   // Plate uniqueness. Case-insensitive partial index so two drivers
   // can't both claim "PEN 1234". Partial-WHERE excludes NULLs so users
   // who haven't set a plate yet don't collide on the empty-key.

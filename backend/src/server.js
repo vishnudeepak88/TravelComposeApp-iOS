@@ -403,7 +403,8 @@ app.get(
   asyncHandler(async (req, res) => {
     const userRes = await pool.query(
       `SELECT id, phone, display_name, kyc_status,
-              plate_number, car_color, car_model
+              plate_number, car_color, car_model,
+              average_rating, rating_count, created_at, deleted_at
          FROM users
         WHERE id = $1`,
       [req.user.id]
@@ -411,6 +412,17 @@ app.get(
     const user = userRes.rows[0];
     if (!user) {
       res.status(404).json({ detail: "user not found" });
+      return;
+    }
+    // PDPA: a deleted account stays in the DB during the 30-day
+    // grace window so the user can recover via re-sign-in. While
+    // deleted, /auth/me returns 410 Gone — iOS uses this to clear
+    // session and bounce to the auth screen.
+    if (user.deleted_at) {
+      res.status(410).json({
+        detail: "account_deleted",
+        deletedAt: new Date(user.deleted_at).toISOString()
+      });
       return;
     }
     res.json({
@@ -424,7 +436,15 @@ app.get(
       // fills them in.
       plateNumber: user.plate_number || null,
       carColor: user.car_color || null,
-      carModel: user.car_model || null
+      carModel: user.car_model || null,
+      // Real rating + count. Both null/0 until the reviews fan-out
+      // populates them — iOS shows "New rider" in that case. We
+      // never invent a default like the old hardcoded 5.0; the lie
+      // was visible to every user looking at their own profile.
+      averageRating: user.average_rating != null ? Number(user.average_rating) : null,
+      ratingCount: Number(user.rating_count || 0),
+      // ISO-8601 created_at for the "Member since" line on Profile.
+      memberSince: user.created_at ? new Date(user.created_at).toISOString() : null
     });
   })
 );
@@ -538,6 +558,217 @@ app.put(
       plateNumber: plate || null,
       carColor: color || null,
       carModel: model || null
+    });
+  })
+);
+
+// ─── Privacy & Security ──────────────────────────────────────────────
+//
+// Backs the Profile → Privacy & Security screen. The previous version
+// was a static brochure with no actual controls; this endpoint group
+// powers the four real surfaces the user expects there:
+//   1. /users/me/preferences  — push toggle, phone visibility
+//   2. /users/me/blocks       — block list (list/add/remove)
+//   3. /users/me/delete       — account deletion (PDPA + App Store 5.1.1(v))
+//   4. /users/me/data-export  — PDPA Section 7 right of access
+//
+// All require auth + rate limit on writes; reads are uncapped beyond
+// the global per-IP bucket.
+
+app.get(
+  "/users/me/preferences",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const r = await pool.query(
+      "SELECT preferences FROM users WHERE id = $1",
+      [req.user.id]
+    );
+    const prefs = r.rows[0]?.preferences || {};
+    // Defaults — never invent a value the user didn't set, just
+    // describe what the absence means.
+    res.json({
+      pushEnabled: prefs.pushEnabled !== false,             // default ON
+      phoneVisibleToSubscribers: prefs.phoneVisibleToSubscribers !== false, // default ON
+      biometricLock: prefs.biometricLock === true,          // default OFF
+      marketingEmails: prefs.marketingEmails === true       // default OFF (PDPA: opt-in)
+    });
+  })
+);
+
+app.put(
+  "/users/me/preferences",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    // Whitelist the keys we accept. A future toggle gets added to
+    // this list explicitly — prevents a malicious client from
+    // injecting arbitrary preference keys.
+    const allowed = ["pushEnabled", "phoneVisibleToSubscribers", "biometricLock", "marketingEmails"];
+    const patch = {};
+    for (const key of allowed) {
+      if (typeof body[key] === "boolean") patch[key] = body[key];
+    }
+    if (Object.keys(patch).length === 0) {
+      res.status(400).json({ detail: "no_valid_preferences" });
+      return;
+    }
+    await pool.query(
+      `UPDATE users
+          SET preferences = COALESCE(preferences, '{}'::jsonb) || $2::jsonb,
+              updated_at = NOW()
+        WHERE id = $1`,
+      [req.user.id, JSON.stringify(patch)]
+    );
+    res.status(204).send();
+  })
+);
+
+// Block list — riders can block drivers (and vice versa) so that
+// future search results filter them out. Bidirectional matching is
+// enforced in findCommuteMatches via a NOT EXISTS subquery.
+app.get(
+  "/users/me/blocks",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const r = await pool.query(
+      `SELECT b.blocked_id::text AS blocked_id,
+              u.display_name AS display_name,
+              b.reason, b.created_at
+         FROM user_blocks b
+         LEFT JOIN users u ON u.id::text = b.blocked_id
+        WHERE b.blocker_id = $1
+        ORDER BY b.created_at DESC
+        LIMIT 200`,
+      [req.user.id]
+    );
+    res.json(r.rows.map((row) => ({
+      userId: String(row.blocked_id),
+      displayName: row.display_name || "Voygo user",
+      reason: row.reason || null,
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null
+    })));
+  })
+);
+
+app.post(
+  "/users/me/blocks",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const targetId = String(body.userId || body.user_id || "").trim();
+    const reason = String(body.reason || "").slice(0, 200) || null;
+    if (!targetId) {
+      res.status(400).json({ detail: "userId required" });
+      return;
+    }
+    if (targetId === String(req.user.id)) {
+      res.status(400).json({ detail: "cannot_block_self" });
+      return;
+    }
+    // Cap at 200 to keep the table from growing unbounded per user
+    // and limit the cost of the NOT EXISTS subquery on search.
+    const count = (await pool.query(
+      "SELECT COUNT(*)::int AS n FROM user_blocks WHERE blocker_id = $1",
+      [req.user.id]
+    )).rows[0]?.n || 0;
+    if (count >= 200) {
+      res.status(409).json({ detail: "block_list_full" });
+      return;
+    }
+    await pool.query(
+      `INSERT INTO user_blocks (blocker_id, blocked_id, reason)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (blocker_id, blocked_id) DO UPDATE SET reason = EXCLUDED.reason`,
+      [req.user.id, targetId, reason]
+    );
+    res.status(204).send();
+  })
+);
+
+app.delete(
+  "/users/me/blocks/:targetId",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    await pool.query(
+      "DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2",
+      [req.user.id, req.params.targetId]
+    );
+    res.status(204).send();
+  })
+);
+
+// PDPA + App Store 5.1.1(v) — account deletion. Soft-deletes (sets
+// deleted_at) so a misclick can be recovered within a 30-day grace
+// window; ops job anonymises display_name + phone after the grace
+// expires. Active subscriptions are PAUSED so the rider isn't
+// charged on a cancelled account. The current JWT is invalidated by
+// flagging deleted_at — requireAuth checks it on every request.
+app.post(
+  "/users/me/delete",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      // Pause everything the rider has running so we don't keep
+      // charging or notifying a "deleted" account.
+      await client.query(
+        `UPDATE route_subscriptions SET status = 'PAUSED'
+          WHERE rider_id = $1 AND status = 'ACTIVE'`,
+        [req.user.id]
+      );
+      // If the user is also a driver, pause their routes so riders
+      // don't see ghost routes from someone with no account.
+      await client.query(
+        `UPDATE recurring_routes SET active_status = FALSE, updated_at = NOW()
+          WHERE driver_id = $1 AND active_status = TRUE`,
+        [req.user.id]
+      );
+      await client.query(
+        "UPDATE users SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1",
+        [req.user.id]
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+    res.json({
+      scheduledFor: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      message: "Account deletion scheduled. Sign in again within 30 days to cancel."
+    });
+  })
+);
+
+// PDPA Section 7 right of access — caller requests an email export
+// of their data. For pilot we just notify ops; the actual file
+// generation runs offline.
+app.post(
+  "/users/me/data-export",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    // Track who asked + when so ops can de-duplicate within 7 days.
+    await pool.query(
+      `INSERT INTO notifications (id, user_id, type, title, body, created_at)
+         VALUES ($1, $2, 'DATA_EXPORT_REQUESTED', $3, $4, NOW())`,
+      [
+        crypto.randomUUID(),
+        req.user.id,
+        "Data export requested",
+        "We'll email you a copy of your Voygo data within 7 working days."
+      ]
+    );
+    res.json({
+      acknowledged: true,
+      slaDays: 7,
+      message: "We'll email you a copy of your Voygo data within 7 working days."
     });
   })
 );

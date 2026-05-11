@@ -34,7 +34,7 @@ final class AppStore {
     private(set) var isAuthenticated = false
     private(set) var phoneNumber = ""
     var kycStatus: KycStatus = .notStarted
-    var currentUser = User(id: "", name: "", rating: 5.0)
+    var currentUser = User(id: "", name: "")
     private(set) var riderId = ""
     private(set) var driverId = ""
     private(set) var isSyncing = false
@@ -206,7 +206,7 @@ final class AppStore {
         riderId = id
         driverId = id
         phoneNumber = "+60 12-3456789"
-        currentUser = User(id: id, name: "Dev User", rating: 4.9)
+        currentUser = User(id: id, name: "Dev User", rating: 4.9, ratingCount: 12)
         kycStatus = .pending
         SessionStorage.authToken = "DEV"
         UserDefaults.standard.set(id, forKey: SessionKeys.userId)
@@ -1589,12 +1589,19 @@ final class AppStore {
         riderId = id
         driverId = id
         let displayName = user.displayName.isEmpty ? defaultDisplayName(for: user.phone) : user.displayName
-        // Hydrate vehicle identity from /auth/me so Profile + Create
-        // Route both see the same source of truth as other clients.
+        // Hydrate vehicle + rating from /auth/me. Rating fields stay
+        // nil for a fresh user; Profile renders "New rider" until
+        // ratingCount >= 3 — eliminates the hardcoded "5.0 for
+        // everyone" lie the previous code introduced.
+        let memberSinceDate: Date? = user.memberSince.flatMap {
+            ISO8601DateFormatter().date(from: $0)
+        }
         currentUser = User(
             id: id,
             name: displayName,
-            rating: currentUser.rating > 0 ? currentUser.rating : 5.0,
+            rating: user.averageRating,
+            ratingCount: user.ratingCount ?? 0,
+            memberSince: memberSinceDate,
             plateNumber: user.plateNumber,
             carColor: user.carColor,
             carModel: user.carModel
@@ -1654,7 +1661,10 @@ final class AppStore {
         let phone = defaults.string(forKey: SessionKeys.phone) ?? ""
         phoneNumber = phone
         let name = defaults.string(forKey: SessionKeys.displayName) ?? defaultDisplayName(for: phone)
-        currentUser = User(id: id, name: name, rating: 5.0)
+        // Rebuilt from disk on cold-launch; rating + memberSince stay
+        // nil until /auth/me runs and hydrates them. UI handles the
+        // missing values via "New rider" copy.
+        currentUser = User(id: id, name: name)
         if let raw = defaults.string(forKey: SessionKeys.kycStatus),
            let status = KycStatus(rawValue: raw) {
             kycStatus = status

@@ -356,7 +356,22 @@ struct ChatMessage: Codable, Equatable, Identifiable {
 struct User: Equatable {
     var id: String
     var name: String
-    var rating: Double
+    /// Average rating. **Nil until the user has actually been rated**.
+    /// Previously this was hardcoded to 5.0 for every freshly-installed
+    /// user — a transparently-fake number that undermined trust in
+    /// every other rating elsewhere in the app. Profile now renders
+    /// "New rider" when this is nil or when `ratingCount` is below the
+    /// social-proof threshold.
+    var rating: Double? = nil
+    /// Number of ratings backing `rating`. Profile shows "New" until
+    /// `ratingCount >= 3` so a single 5.0 review doesn't read as
+    /// authoritative.
+    var ratingCount: Int = 0
+    /// When the account was created. Used as a substitute for the
+    /// fake on-time/savings stats — "Member since Mar 2026" is
+    /// honest and useful trust info that doesn't require pretending
+    /// to know something we don't.
+    var memberSince: Date? = nil
     /// Driver vehicle identity, mirrored from /auth/me. All nil until
     /// the driver fills the Profile → Vehicle form. Profile reads
     /// these to render the vehicle tile; we never use them as inputs
@@ -365,6 +380,14 @@ struct User: Equatable {
     var carColor: String? = nil
     var carModel: String? = nil
     var initial: String { String(name.prefix(1)).uppercased() }
+    /// Threshold at which we show a numeric rating instead of "New".
+    /// A single 5★ review is not statistically meaningful; three is
+    /// the minimum that conveys "more than one person agrees".
+    static let minRatingsForDisplay: Int = 3
+    var hasDisplayableRating: Bool {
+        guard let rating else { return false }
+        return ratingCount >= Self.minRatingsForDisplay && rating > 0
+    }
 }
 
 struct PlaceSuggestion: Codable, Identifiable, Equatable {

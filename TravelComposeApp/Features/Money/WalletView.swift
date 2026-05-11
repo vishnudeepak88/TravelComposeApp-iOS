@@ -217,26 +217,17 @@ struct WalletView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
 
-                HStack(spacing: 8) {
-                    Button { showComingSoonFor = "Top-up" } label: {
-                        Text("+ Top up")
-                            .font(.system(size: 12, weight: .heavy))
-                            .frame(maxWidth: .infinity, minHeight: 38)
-                            .background(.white.opacity(0.18))
-                            .foregroundColor(.white)
-                            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(.white.opacity(0.25)))
-                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    }.buttonStyle(.plain)
-
-                    Button { showComingSoonFor = "Withdraw to bank" } label: {
-                        Text("Withdraw")
-                            .font(.system(size: 12, weight: .heavy))
-                            .frame(maxWidth: .infinity, minHeight: 38)
-                            .background(.white)
-                            .foregroundColor(VPalette.primary)
-                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    }.buttonStyle(.plain)
-                }
+                // Top-up + Withdraw removed — both opened "Coming soon"
+                // alerts with no real flow behind them. Shipping a
+                // primary CTA on the hero that does nothing is a
+                // trust hit. The card now describes how credit
+                // actually flows in today: refunds. When real
+                // Billplz FPX top-up / DuitNow IBG withdraw land,
+                // restore both buttons.
+                Text("Credit accumulates from cancellation refunds and applies to your next ride automatically.")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(18)
         }
@@ -248,9 +239,10 @@ struct WalletView: View {
             HStack {
                 VKicker(text: "Payment methods")
                 Spacer()
-                Button { showComingSoonFor = "Add payment method" } label: {
-                    Text("+ Add").font(.system(size: 12, weight: .semibold)).foregroundColor(VPalette.primary)
-                }.buttonStyle(.plain)
+                // "+ Add" removed — pressed a coming-soon alert with
+                // no real flow. Until /users/me/payment-methods ships,
+                // the empty-state copy below explains how checkout
+                // actually works (Billplz host page picks the method).
             }
             .padding(.horizontal, 4)
 
@@ -264,13 +256,18 @@ struct WalletView: View {
                         Image(systemName: "creditcard")
                             .font(.system(size: 26))
                             .foregroundColor(VPalette.textHint)
-                        Text("No payment methods yet")
+                        Text("Pay at checkout")
                             .font(.system(size: 13, weight: .heavy))
                             .foregroundColor(VPalette.textSec)
-                        Text("Add a card or e-wallet to subscribe to routes")
+                        // Honest: we use Billplz hosted checkout so
+                        // the rider picks DuitNow / FPX / TNG /
+                        // GrabPay at pay time. There's no "saved
+                        // method" yet — old copy promised one.
+                        Text("DuitNow, FPX, TNG and cards are selectable on the Billplz checkout page.")
                             .font(.system(size: 11))
                             .foregroundColor(VPalette.textHint)
                             .multilineTextAlignment(.center)
+                            .padding(.horizontal, 12)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 22)

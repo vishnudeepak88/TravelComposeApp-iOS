@@ -43,6 +43,16 @@ struct KycVerificationView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         statusCard
+                        // Stuck-PENDING escape hatch — a driver whose
+                        // docs are sitting in the review queue for
+                        // more than 48 hours can email support
+                        // directly. Without this they have no
+                        // recourse; the previous "We typically respond
+                        // within 24 hours" copy promised a SLA that
+                        // had no real path behind it.
+                        if store.kycStatus == .pending {
+                            pendingSupportBanner
+                        }
                         roleSwitcher
                         progressBar
                         if let error { VErrorBanner(message: error) }
@@ -345,10 +355,46 @@ struct KycVerificationView: View {
     private var statusSubtitle: String {
         switch store.kycStatus {
         case .approved: return "MyKad on file · trusted account"
-        case .pending:  return "We typically respond within 24 hours"
+        case .pending:  return "Most reviews finish in 24–48 hours"
         case .rejected: return "Resubmit the rejected docs below to retry"
         default:        return "MyKad + selfie covers riders. Drivers add license + vehicle."
         }
+    }
+
+    /// Escape hatch for stuck-PENDING users. Without it the rider /
+    /// driver has no recourse beyond refreshing the screen. mailto
+    /// is enough for pilot; once we have in-app support chat the
+    /// link can switch to that AppRoute.
+    private var pendingSupportBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "envelope.fill")
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundColor(VPalette.warning)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Stuck for over 48 hours?")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundColor(VPalette.text)
+                Text("Email support@voygo.app with your name and we'll prioritise your review.")
+                    .font(.system(size: 11))
+                    .foregroundColor(VPalette.textSec)
+                Button {
+                    if let url = URL(string: "mailto:support@voygo.app?subject=KYC%20review%20stuck") {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Text("Email support →")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundColor(VPalette.warning)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(VPalette.warning.opacity(0.08))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(VPalette.warning.opacity(0.3)))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
