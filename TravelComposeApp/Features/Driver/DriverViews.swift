@@ -502,7 +502,7 @@ private struct InfoBanner: View {
     /// for both pickup and drop rails.
     private func filteredDefaults(against existing: [String]) -> [PlaceSuggestion] {
         let lower = Set(existing.map { $0.lowercased() })
-        return VoygoLocationService.popularKlangValleyHubs.filter {
+        return VoygoLocationService.popularLocalHubs.filter {
             !lower.contains($0.displayName.lowercased())
         }
     }
@@ -587,7 +587,7 @@ struct CreateRouteView: View {
                                 SectionHeader(title: "Route Info")
                                 LocationPickerRow(
                                     label: "Start Location",
-                                    placeholder: "Pick on map · e.g. Damansara",
+                                    placeholder: "Pick on map · e.g. Komtar",
                                     icon: "mappin.circle.fill",
                                     iconColor: VoygoTheme.success,
                                     value: vm.startLocation,
@@ -595,7 +595,7 @@ struct CreateRouteView: View {
                                 )
                                 LocationPickerRow(
                                     label: "Destination",
-                                    placeholder: "Pick on map · e.g. KLCC",
+                                    placeholder: "Pick on map · e.g. Bayan Lepas",
                                     icon: "flag.checkered.circle.fill",
                                     iconColor: VoygoTheme.primary,
                                     value: vm.endLocation,
@@ -1061,7 +1061,7 @@ private struct StopsCard: View {
                 }
 
                 HStack(spacing: 8) {
-                    VoygoTextField(label: "Add stop", text: $newStop, placeholder: "e.g. Masjid Jamek")
+                    VoygoTextField(label: "Add stop", text: $newStop, placeholder: "e.g. Komtar")
                     Button(action: onAdd) {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2).foregroundColor(color)

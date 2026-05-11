@@ -156,7 +156,140 @@ function normalize(value) {
     .join(" ");
 }
 
+// Penang-first: the pilot region. Klang Valley / JB / Kuching entries
+// still live below for the eventual rollout but the autocomplete sorts
+// these to the top so a Penang user picking "Bayan Lepas" hits a known
+// hub immediately instead of relying on the OSM fallback.
 const KNOWN_PLACES = [
+  {
+    id: "known-komtar",
+    name: "Komtar",
+    displayName: "Komtar, Georgetown, Penang, Malaysia",
+    lat: 5.4148,
+    lon: 100.3299,
+    terms: ["komtar", "georgetown", "penang central", "1st avenue", "first avenue"],
+    address: {
+      road: "Jalan Penang",
+      suburb: "Georgetown",
+      city: "Georgetown",
+      state: "Penang",
+      postcode: "10000",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-gurney-plaza",
+    name: "Gurney Plaza",
+    displayName: "Gurney Plaza, Georgetown, Penang, Malaysia",
+    lat: 5.4382,
+    lon: 100.3094,
+    terms: ["gurney plaza", "gurney drive", "gurney paragon", "gurney"],
+    address: {
+      road: "Persiaran Gurney",
+      suburb: "Pulau Tikus",
+      city: "Georgetown",
+      state: "Penang",
+      postcode: "10250",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-queensbay-mall",
+    name: "Queensbay Mall",
+    displayName: "Queensbay Mall, Bayan Lepas, Penang, Malaysia",
+    lat: 5.3318,
+    lon: 100.3068,
+    terms: ["queensbay mall", "queensbay", "bayan baru"],
+    address: {
+      suburb: "Bayan Lepas",
+      city: "Bayan Lepas",
+      state: "Penang",
+      postcode: "11900",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-penang-sentral",
+    name: "Penang Sentral",
+    displayName: "Penang Sentral, Butterworth, Penang, Malaysia",
+    lat: 5.4014,
+    lon: 100.3623,
+    terms: ["penang sentral", "butterworth", "butterworth ferry", "butterworth train"],
+    address: {
+      city: "Butterworth",
+      state: "Penang",
+      postcode: "12000",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-usm",
+    name: "Universiti Sains Malaysia",
+    displayName: "Universiti Sains Malaysia (USM), Gelugor, Penang, Malaysia",
+    lat: 5.3556,
+    lon: 100.3015,
+    terms: ["usm", "universiti sains malaysia", "gelugor"],
+    address: {
+      suburb: "Gelugor",
+      city: "Gelugor",
+      state: "Penang",
+      postcode: "11800",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-penang-airport",
+    name: "Penang International Airport",
+    displayName: "Penang International Airport (PEN), Bayan Lepas, Penang, Malaysia",
+    lat: 5.2974,
+    lon: 100.2734,
+    terms: ["penang airport", "pen", "penang international airport", "bayan lepas airport"],
+    address: {
+      suburb: "Bayan Lepas",
+      city: "Bayan Lepas",
+      state: "Penang",
+      postcode: "11900",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-bayan-lepas-fiz",
+    name: "Bayan Lepas FIZ",
+    displayName: "Bayan Lepas Free Industrial Zone, Penang, Malaysia",
+    lat: 5.3267,
+    lon: 100.2787,
+    terms: ["bayan lepas fiz", "bayan lepas free industrial zone", "bayan lepas industrial", "free industrial zone"],
+    address: {
+      suburb: "Bayan Lepas",
+      city: "Bayan Lepas",
+      state: "Penang",
+      postcode: "11900",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
+  {
+    id: "known-sunway-carnival",
+    name: "Sunway Carnival Mall",
+    displayName: "Sunway Carnival Mall, Seberang Jaya, Penang, Malaysia",
+    lat: 5.3925,
+    lon: 100.4017,
+    terms: ["sunway carnival", "sunway carnival mall", "seberang jaya", "seberang perai"],
+    address: {
+      suburb: "Seberang Jaya",
+      city: "Perai",
+      state: "Penang",
+      postcode: "13700",
+      country: "Malaysia",
+      country_code: "my"
+    }
+  },
   {
     id: "known-motorola-solutions-bayan-lepas",
     name: "Motorola Solutions",

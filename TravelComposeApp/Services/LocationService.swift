@@ -123,8 +123,9 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
         }
 
         // 2) MKLocalSearch fallback. Bias the search region to the caller's
-        // anchor coordinate when present; otherwise default to a Klang Valley
-        // box so the demo and Malaysian users get reasonable results.
+        // anchor coordinate when present; otherwise default to Komtar
+        // (central Penang) — the pilot region — so first-launch
+        // autocomplete returns sensible Penang results.
         return try await mapKitSearch(query: cleaned, near: coordinate, limit: limit)
     }
 
@@ -139,20 +140,23 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
     /// the midpoint between `coordinate` and `corridorAnchor` so the
     /// rail surfaces waypoints riders along the route can join from,
     /// not just hubs clustered around the endpoints.
-    /// Klang Valley commute hubs — used as the default suggestion set
-    /// when no Start/Destination has been picked yet, so the Create
-    /// Route form always has something for the driver to one-tap-add.
-    /// Pulled from the busiest LRT/MRT interchanges and the malls
-    /// Malaysian commuters reflexively name as meet-points.
-    static let popularKlangValleyHubs: [PlaceSuggestion] = [
-        PlaceSuggestion(displayName: "KL Sentral",          lat: 3.1338, lon: 101.6869),
-        PlaceSuggestion(displayName: "KLCC",                lat: 3.1579, lon: 101.7123),
-        PlaceSuggestion(displayName: "Mid Valley",          lat: 3.1175, lon: 101.6770),
-        PlaceSuggestion(displayName: "Sunway Pyramid",      lat: 3.0728, lon: 101.6075),
-        PlaceSuggestion(displayName: "Bangsar South",       lat: 3.1102, lon: 101.6679),
-        PlaceSuggestion(displayName: "USJ 9 LRT",           lat: 3.0445, lon: 101.5850),
-        PlaceSuggestion(displayName: "Pavilion KL",         lat: 3.1492, lon: 101.7129),
-        PlaceSuggestion(displayName: "Subang Parade",       lat: 3.0850, lon: 101.5824)
+    /// Penang commute hubs — Voygo's pilot region is Penang, so these
+    /// are the meet-points drivers and riders actually use day-to-day.
+    /// Mix of the central Georgetown transit hubs, the Bayan Lepas
+    /// industrial cluster (where the bulk of the commute flow goes),
+    /// and the two big mainland-side gateways (Penang Sentral,
+    /// Sunway Carnival). Renamed from `popularKlangValleyHubs` to
+    /// `popularLocalHubs` so a future region rotation doesn't need
+    /// another call-site rename.
+    static let popularLocalHubs: [PlaceSuggestion] = [
+        PlaceSuggestion(displayName: "Komtar",                 lat: 5.4148, lon: 100.3299),
+        PlaceSuggestion(displayName: "Gurney Plaza",           lat: 5.4382, lon: 100.3094),
+        PlaceSuggestion(displayName: "Queensbay Mall",         lat: 5.3318, lon: 100.3068),
+        PlaceSuggestion(displayName: "Penang Sentral",         lat: 5.4014, lon: 100.3623),
+        PlaceSuggestion(displayName: "USM",                    lat: 5.3556, lon: 100.3015),
+        PlaceSuggestion(displayName: "Penang International Airport", lat: 5.2974, lon: 100.2734),
+        PlaceSuggestion(displayName: "Bayan Lepas FIZ",        lat: 5.3267, lon: 100.2787),
+        PlaceSuggestion(displayName: "Sunway Carnival Mall",   lat: 5.3925, lon: 100.4017)
     ]
 
     func searchNearbyHubs(near coordinate: CLLocationCoordinate2D,
@@ -216,7 +220,10 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         request.resultTypes = [.address, .pointOfInterest]
-        let anchor = coordinate ?? CLLocationCoordinate2D(latitude: 3.139, longitude: 101.6869)
+        // Penang-centred default — Komtar in central Georgetown. Replaces
+        // the previous KL Sentral anchor so first-launch MapKit search
+        // (before the user has picked a Start coord) returns Penang POIs.
+        let anchor = coordinate ?? CLLocationCoordinate2D(latitude: 5.4148, longitude: 100.3299)
         request.region = MKCoordinateRegion(
             center: anchor,
             latitudinalMeters: radiusMeters,
