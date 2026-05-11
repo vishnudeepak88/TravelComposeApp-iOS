@@ -29,17 +29,17 @@ struct APIClientDateDecoderTests {
         let when: Date
     }
 
-    private static let isoWithFraction: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let isoWithFraction: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
-    private static let isoNoFraction: ISO8601DateFormatter = {
+    nonisolated(unsafe) private static let isoNoFraction: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
-    private static let dateOnly: DateFormatter = {
+    nonisolated(unsafe) private static let dateOnly: DateFormatter = {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .iso8601)
         f.locale = Locale(identifier: "en_US_POSIX")

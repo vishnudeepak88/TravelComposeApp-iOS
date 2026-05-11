@@ -424,11 +424,19 @@ async function createSubscription(pool, payload) {
       throw error;
     }
 
+    // Defence in depth: the `FOR UPDATE` on `recurring_routes` above
+    // serializes all createSubscription() calls for the same route, so
+    // the count below is consistent across concurrent inserters. We
+    // also `FOR UPDATE` the active rows themselves — that way a
+    // hypothetical future code path that mutates `route_subscriptions`
+    // without first locking the parent route (e.g. an admin reassign
+    // helper) must wait, instead of silently letting us oversell.
     const activeCountRes = await client.query(
       `SELECT COUNT(*)::int AS active_count
        FROM route_subscriptions
        WHERE route_id = $1
-         AND status = 'ACTIVE'`,
+         AND status = 'ACTIVE'
+       FOR UPDATE`,
       [routeId]
     );
     const activeCount = Number(activeCountRes.rows[0]?.active_count || 0);

@@ -743,10 +743,35 @@ final class AppStore {
             for route in remoteRoutes { nextRoutes[route.id] = route }
             // Subscriptions can reference routes the user doesn't drive; fetch
             // any missing ones so the subscription UI can resolve them.
-            for sub in remoteSubs where nextRoutes[sub.routeId] == nil {
-                if let route = try? await VoygoAPIClient.getRoute(id: sub.routeId).toModel() {
-                    nextRoutes[route.id] = route
+            //
+            // Hydrate in parallel via a TaskGroup. The previous serial loop
+            // was an N+1 — every subscription with a missing route added
+            // one full network round-trip in series, which on a flaky cell
+            // network turned the home-screen refresh into a multi-second
+            // stall as the count grew. The group caps concurrency at the
+            // task system's natural fan-out and ignores failures (best
+            // effort hydration — we already replaced the routes list with
+            // the driver-side routes above).
+            let missingRouteIds: [String] = remoteSubs
+                .map(\.routeId)
+                .filter { nextRoutes[$0] == nil }
+                .reduce(into: []) { acc, id in
+                    if !acc.contains(id) { acc.append(id) }
                 }
+            if !missingRouteIds.isEmpty {
+                let hydrated: [RecurringRoute] = await withTaskGroup(of: RecurringRoute?.self) { group in
+                    for id in missingRouteIds {
+                        group.addTask {
+                            try? await VoygoAPIClient.getRoute(id: id).toModel()
+                        }
+                    }
+                    var out: [RecurringRoute] = []
+                    for await maybeRoute in group {
+                        if let r = maybeRoute { out.append(r) }
+                    }
+                    return out
+                }
+                for route in hydrated { nextRoutes[route.id] = route }
             }
             routes = Array(nextRoutes.values)
             subscriptions = remoteSubs

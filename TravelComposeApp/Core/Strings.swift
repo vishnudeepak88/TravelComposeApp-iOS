@@ -132,6 +132,11 @@ enum S {
         return String(format: template, time)
     }
     static var homePerSeat: String { Self.t("home.perSeat", "per seat") }
+    static var homeServiceCarpool: String { Self.t("home.service.carpool", "Carpool") }
+    static var homeServiceSolo: String { Self.t("home.service.solo", "Ride solo") }
+    static var homeServiceSchedule: String { Self.t("home.service.schedule", "Schedule") }
+    static var homeServiceLongHaul: String { Self.t("home.service.longHaul", "Long-haul") }
+    static var homeServiceNewBadge: String { Self.t("home.service.newBadge", "NEW") }
 
     // MARK: Wallet (additional)
 

@@ -50,7 +50,11 @@ const {
   rateLimitSearch,
   rateLimitAuth,
   rateLimitOtpByPhone,
-  rateLimitWrite
+  rateLimitWrite,
+  rateLimitSafety,
+  rateLimitLocation,
+  rateLimitAiSupport,
+  rateLimitTelemetry
 } = require("./middleware");
 const {
   buildKycObjectKey,
@@ -954,7 +958,37 @@ app.post(
       res.status(400).json({ detail: "invalid document kind" });
       return;
     }
-    const storageUrl = bodyValue(body, "storageUrl", "storage_url") || null;
+    const rawStorageUrl = bodyValue(body, "storageUrl", "storage_url") || null;
+
+    // SECURITY: clients used to be able to supply any URL string here
+    // and it would be stamped onto the user's KYC record. That meant
+    // an attacker could (a) point the admin reviewer at a phishing
+    // page that mimics KYC, (b) impersonate another user by pointing
+    // at the legitimate-looking URL of someone else's upload, or (c)
+    // poison the record with a known-bad URL after the fact.
+    //
+    // The legitimate flow is: client uploads bytes via
+    // `/users/me/kyc-documents/upload` → server returns a
+    // `storageUri` → client immediately submits that uri here. So
+    // any non-null storage_url MUST match a `kyc_uploads` row owned
+    // by the same user. If it doesn't, treat the submission as
+    // tampered: reject hard rather than persisting an attacker
+    // controlled URL.
+    let storageUrl = null;
+    if (rawStorageUrl) {
+      const provenance = await pool.query(
+        `SELECT 1 FROM kyc_uploads
+          WHERE user_id = $1 AND storage_uri = $2
+          LIMIT 1`,
+        [req.user.id, rawStorageUrl]
+      );
+      if (provenance.rowCount === 0) {
+        res.status(400).json({ detail: "storageUrl must reference a prior upload owned by this user" });
+        return;
+      }
+      storageUrl = rawStorageUrl;
+    }
+
     const id = crypto.randomUUID();
     await pool.query(
       `INSERT INTO kyc_documents (id, user_id, kind, storage_url)
@@ -1036,6 +1070,7 @@ app.put(
 app.post(
   "/rides/:rideId/location",
   requireAuth,
+  rateLimitLocation,
   asyncHandler(async (req, res) => {
     const rideId = String(req.params.rideId);
     const lat = Number(req.body?.lat);
@@ -1271,6 +1306,7 @@ app.post(
 app.post(
   "/safety/sos",
   requireAuth,
+  rateLimitSafety,
   asyncHandler(async (req, res) => {
     const rideId = req.body?.rideId ? String(req.body.rideId).slice(0, 80) : null;
     const routeId = req.body?.routeId ? String(req.body.routeId).slice(0, 80) : null;
@@ -1280,11 +1316,71 @@ app.post(
     const lng = Number.isFinite(parsedLng) ? parsedLng : null;
     const message = String(req.body?.message || "").slice(0, 4000);
 
+    // Ownership check: an SOS that names a ride/route must come from
+    // someone actually on that ride/route. Without this, an
+    // authenticated attacker could stamp arbitrary `routeId` strings,
+    // pollute another driver's incident record, and harass on-call
+    // (since each SOS pages PagerDuty with `severity=critical`).
+    //
+    // Membership rules:
+    //   - rideId: caller is the route's driver, the ride's solo
+    //     booker, or an ACTIVE subscriber on that route
+    //   - routeId (no rideId): caller is the driver, or an ACTIVE
+    //     subscriber on that route
+    //
+    // If neither id is supplied we accept the alert as-is — a rider
+    // might fire SOS before any ride is matched (e.g. walking to the
+    // pickup spot) and we don't want a schema artefact blocking that.
+    let scopedRideId = rideId;
+    let scopedRouteId = routeId;
+    if (rideId) {
+      const owns = await pool.query(
+        `SELECT 1
+           FROM commute_ride_instances ri
+           JOIN recurring_routes r ON r.id = ri.route_id
+           LEFT JOIN route_subscriptions rs
+             ON rs.route_id = r.id
+            AND rs.rider_id = $2
+            AND rs.status = 'ACTIVE'
+          WHERE ri.id = $1
+            AND (
+              r.driver_id = $2
+              OR rs.rider_id = $2
+              OR ri.solo_rider_id = $2
+            )
+          LIMIT 1`,
+        [rideId, req.user.id]
+      );
+      if (owns.rowCount === 0) {
+        // Drop the bogus ride/route reference but still record the
+        // alert — we never want to swallow a real SOS just because
+        // the client sent a stale id.
+        scopedRideId = null;
+        scopedRouteId = null;
+      }
+    } else if (routeId) {
+      const owns = await pool.query(
+        `SELECT 1
+           FROM recurring_routes r
+           LEFT JOIN route_subscriptions rs
+             ON rs.route_id = r.id
+            AND rs.rider_id = $2
+            AND rs.status = 'ACTIVE'
+          WHERE r.id = $1
+            AND (r.driver_id = $2 OR rs.rider_id = $2)
+          LIMIT 1`,
+        [routeId, req.user.id]
+      );
+      if (owns.rowCount === 0) {
+        scopedRouteId = null;
+      }
+    }
+
     const id = crypto.randomUUID();
     await pool.query(
       `INSERT INTO safety_alerts (id, user_id, ride_id, route_id, lat, lng, message)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [id, req.user.id, rideId, routeId, lat, lng, message]
+      [id, req.user.id, scopedRideId, scopedRouteId, lat, lng, message]
     );
 
     const dispatchedTo = [];
@@ -1292,8 +1388,8 @@ app.post(
     const summary = [
       `Voygo SOS ${id}`,
       `user=${req.user.id}`,
-      rideId ? `ride=${rideId}` : null,
-      routeId ? `route=${routeId}` : null,
+      scopedRideId ? `ride=${scopedRideId}` : null,
+      scopedRouteId ? `route=${scopedRouteId}` : null,
       Number.isFinite(lat) && Number.isFinite(lng) ? `loc=${lat},${lng}` : null
     ].filter(Boolean).join(" · ");
 
@@ -1323,7 +1419,7 @@ app.post(
               summary,
               severity: "critical",
               source: "voygo-api",
-              custom_details: { alertId: id, userId: req.user.id, rideId, routeId, lat, lng, message }
+              custom_details: { alertId: id, userId: req.user.id, rideId: scopedRideId, routeId: scopedRouteId, lat, lng, message }
             }
           })
         });
@@ -1644,38 +1740,46 @@ app.post(
   requireAdmin,
   asyncHandler(async (_req, res) => {
     const lookaheadHours = Number(process.env.RIDE_REMINDER_HOURS || 12);
+    // The audit caught two column bugs that made this endpoint throw
+    // on first call:
+    //   1. `commute_ride_instances` has no `scheduled_at` column —
+    //      ride time is `date + departure_time` from the route. We
+    //      construct it inline via `(i.date + r.departure_time::time)`.
+    //   2. `commute_ride_passengers.user_id` is actually `rider_id`.
     const result = await pool.query(
-      `SELECT i.id AS ride_id, i.route_id, i.scheduled_at,
+      `SELECT i.id AS ride_id, i.route_id,
+              (i.date + r.departure_time::time) AT TIME ZONE 'Asia/Kuala_Lumpur' AS scheduled_at,
               r.start_location, r.end_location, r.departure_time,
-              p.user_id
+              p.rider_id AS user_id
          FROM commute_ride_instances i
          JOIN recurring_routes r ON r.id = i.route_id
          JOIN commute_ride_passengers p ON p.instance_id = i.id
-        WHERE i.scheduled_at BETWEEN NOW()
-                                   AND NOW() + INTERVAL '1 hour' * $1
+        WHERE (i.date + r.departure_time::time) AT TIME ZONE 'Asia/Kuala_Lumpur'
+              BETWEEN NOW() AND NOW() + INTERVAL '1 hour' * $1
           AND p.status = 'CONFIRMED'
           AND NOT EXISTS (
             SELECT 1 FROM notifications n
-             WHERE n.user_id = p.user_id
-               AND n.ride_instance_id = i.id
+             WHERE n.user_id = p.rider_id
+               AND n.ride_instance_id::text = i.id::text
                AND n.type = 'RIDE_REMINDER'
           )`,
       [lookaheadHours]
     );
 
-    let dispatched = 0;
-    for (const row of result.rows) {
-      await createNotification({
+    // Fan-out in parallel — N×createNotification was the audit's other
+    // perf complaint here. Promise.all keeps total time at ~max-rtt
+    // not sum-rtt.
+    await Promise.all(result.rows.map((row) =>
+      createNotification({
         userId: row.user_id,
         type: "RIDE_REMINDER",
         title: "Pickup tomorrow",
         body: `${row.start_location} → ${row.end_location} at ${row.departure_time}`,
         routeId: row.route_id,
         rideInstanceId: row.ride_id
-      });
-      dispatched += 1;
-    }
-    res.json({ dispatched, lookaheadHours });
+      }).catch((e) => console.warn(`[reminder] failed for ${row.ride_id}: ${e.message}`))
+    ));
+    res.json({ dispatched: result.rows.length, lookaheadHours });
   })
 );
 
@@ -1685,6 +1789,7 @@ app.post(
 app.post(
   "/telemetry/events",
   express.json({ limit: "32kb" }),
+  rateLimitTelemetry,
   asyncHandler(async (req, res) => {
     let userId = null;
     const header = req.get("Authorization") || "";
@@ -1765,6 +1870,7 @@ app.get(
 app.post(
   "/ai/support",
   requireAuth,
+  rateLimitAiSupport,
   asyncHandler(async (req, res) => {
     const message = String(req.body?.message || "").trim();
     if (!message) {
@@ -4265,10 +4371,13 @@ app.post(
       // notification regardless of which path closes the loop. The
       // payment row carries `user_id` even before `markPaymentPaid`
       // runs.
+      // Schema column is `billplz_bill_id` (payments.js:30,40,154,168).
+      // Previous `billplz_id` typo silently swallowed every PAYMENT_SUCCEEDED
+      // notification — riders never knew their card cleared. Audit catch.
       const lookup = await pool.query(
         `SELECT user_id, route_id, subscription_id, amount_myr
            FROM payments
-          WHERE billplz_id = $1
+          WHERE billplz_bill_id = $1
           LIMIT 1`,
         [billId]
       );

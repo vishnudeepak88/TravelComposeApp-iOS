@@ -132,6 +132,11 @@
 "home.to" = "Ke";
 "home.departs" = "Bertolak %@";
 "home.perSeat" = "setiap tempat duduk";
+"home.service.carpool" = "Berkongsi";
+"home.service.solo" = "Solo";
+"home.service.schedule" = "Jadual";
+"home.service.longHaul" = "Antarabandar";
+"home.service.newBadge" = "BARU";
 
 /* Wallet — extras */
 "wallet.paymentMethods" = "Kaedah pembayaran";

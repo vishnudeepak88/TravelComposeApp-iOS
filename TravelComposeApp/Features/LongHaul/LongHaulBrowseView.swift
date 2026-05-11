@@ -210,7 +210,7 @@ struct LongHaulTripRow: View {
             }
             Spacer(minLength: 0)
             VStack(alignment: .trailing, spacing: 4) {
-                Text("RM \(trip.pricePerSeatMyr)")
+                Text(Formatters.ringgit(trip.pricePerSeatMyr))
                     .font(.body.weight(.black))
                     .foregroundColor(VPalette.primary)
                 Text("per seat")

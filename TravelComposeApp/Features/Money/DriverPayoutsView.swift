@@ -187,7 +187,7 @@ private struct HeaderCard: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(VoygoTheme.textSecondary)
                     Spacer()
-                    Text("RM \(payout.netMyr)")
+                    Text(Formatters.ringgit(payout.netMyr))
                         // Semantic font scales with Dynamic Type — the
                         // previous hardcoded 36pt would clip mid-character
                         // at AX5.
@@ -222,16 +222,16 @@ private struct BreakdownCard: View {
                 row("Rides completed", "\(payout.ridesCount)")
                 row("Seats filled", "\(payout.seatsFilled)")
                 Divider().background(VoygoTheme.cardBorder)
-                row("Gross earnings", "RM \(payout.grossMyr)")
-                row("Voygo fee", "−RM \(payout.voygoFeeMyr)", isNegative: true)
+                row("Gross earnings", Formatters.ringgit(payout.grossMyr))
+                row("Voygo fee", Formatters.ringgitSigned(payout.voygoFeeMyr, debit: true), isNegative: true)
                 if payout.penaltyMyr > 0 {
-                    row("Penalties held", "−RM \(payout.penaltyMyr)", isNegative: true)
+                    row("Penalties held", Formatters.ringgitSigned(payout.penaltyMyr, debit: true), isNegative: true)
                 }
                 if payout.streakBonusMyr > 0 {
-                    row("Streak bonus", "+RM \(payout.streakBonusMyr)", isPositive: true)
+                    row("Streak bonus", Formatters.ringgitSigned(payout.streakBonusMyr, debit: false), isPositive: true)
                 }
                 Divider().background(VoygoTheme.cardBorder)
-                row("Net payout", "RM \(payout.netMyr)", isBold: true)
+                row("Net payout", Formatters.ringgit(payout.netMyr), isBold: true)
             }
             .padding(16)
         }

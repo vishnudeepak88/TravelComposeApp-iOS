@@ -1,8 +1,16 @@
 // Driver payouts.
 //
-// Per playbook §3.2: 15% take rate, capped at MYR 2 per seat. Streak bonus
-// of MYR 50 if a driver completed >= 20 on-time rides in the calendar week.
-// Penalties (from cancellation_records) reduce the net payout.
+// Voygo's revenue is a FLAT per-seat platform fee — not a percentage
+// commission. A commission model walks like an e-hailing take rate
+// and quacks like an e-hailing take rate, which is exactly the
+// framing LPKP uses to argue a service has crossed the line from
+// "cost-sharing carpool" (no PSV licence required) into "commercial
+// e-hailing" (Class-E PSV required, regulated under APAD). Charging
+// a fixed MYR per filled seat is the clean defence: our revenue does
+// not scale with fare, so we're a matching platform, not a fare
+// taker. Streak bonus of MYR 50 if a driver completed >= 20 on-time
+// rides in the calendar week. Penalties (from cancellation_records)
+// reduce the net payout.
 //
 // This module is read-only at the moment: the client calls `GET /payouts/me`
 // and we synthesize the current week's statement on the fly. The `payouts`
@@ -33,9 +41,22 @@ function isoDay(d) {
 }
 
 function voygoFee(grossMyr, seatsFilled) {
-  const rate = config.voygoTakeRate;
-  const cap = config.voygoTakeCapMyrPerSeat * Math.max(1, seatsFilled);
-  return Math.min(Math.round(grossMyr * rate), cap);
+  // Primary model: flat MYR per filled seat. Independent of fare so
+  // the LPKP "commission" framing doesn't apply. A driver with
+  // `seatsFilled = 0` pays nothing — they only owe us when we matched
+  // them with riders.
+  const flat = config.voygoFlatFeeMyrPerSeat * Math.max(0, seatsFilled);
+
+  // Belt-and-braces: even if a deployment knob accidentally sets the
+  // legacy percentage rate above 0, cap the result at the per-seat
+  // ceiling so we never charge more than the documented envelope.
+  const cap = config.voygoTakeCapMyrPerSeat * Math.max(0, seatsFilled);
+
+  if (config.voygoTakeRate > 0) {
+    const legacy = Math.round(grossMyr * config.voygoTakeRate);
+    return Math.min(Math.max(flat, legacy), cap);
+  }
+  return Math.min(flat, cap);
 }
 
 /// Compute the current-week payout snapshot for a single driver.

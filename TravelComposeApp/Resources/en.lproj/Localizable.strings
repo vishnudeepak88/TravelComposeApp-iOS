@@ -131,6 +131,11 @@
 "home.to" = "To";
 "home.departs" = "Departs %@";
 "home.perSeat" = "per seat";
+"home.service.carpool" = "Carpool";
+"home.service.solo" = "Ride solo";
+"home.service.schedule" = "Schedule";
+"home.service.longHaul" = "Long-haul";
+"home.service.newBadge" = "NEW";
 
 /* Wallet — extras */
 "wallet.paymentMethods" = "Payment methods";

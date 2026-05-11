@@ -231,7 +231,7 @@ struct ReceiptView: View {
 
     private var baseFareString: String {
         guard let p = payment else { return "—" }
-        return "RM \(p.amountMyr).00"
+        return Formatters.ringgit(Double(p.amountMyr))
     }
 
     /// Cancellation refunds reduce the rider's bill via Voygo Credit. Until
@@ -245,7 +245,7 @@ struct ReceiptView: View {
 
     private var totalChargedString: String {
         guard let p = payment else { return "—" }
-        return "RM \(p.amountMyr).00"
+        return Formatters.ringgit(Double(p.amountMyr))
     }
 
     /// Resolves the route from `payment.routeId`. Nil when the

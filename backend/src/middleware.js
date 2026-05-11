@@ -102,6 +102,82 @@ function rateLimitWrite(req, res, next) {
   next();
 }
 
+/// Per-USER (when authenticated) rate limit for the SOS endpoint.
+/// SOS dispatch costs real money — each alert can fan out to Twilio
+/// SMS + PagerDuty P1 page. A malicious or buggy client looping on
+/// /safety/sos can: (a) burn SMS spend, (b) page on-call every few
+/// seconds, (c) pollute incident records. 3 in 10 minutes is loud
+/// enough for a genuine emergency (one taps, one retries on bad
+/// signal, one for follow-up) but quickly chokes abuse.
+function rateLimitSafety(req, res, next) {
+  const userKey = req.user?.id ? `user:${req.user.id}` : `ip:${req.ip || "unknown"}`;
+  const key = `safety:${userKey}`;
+  let bucket = buckets.get(key);
+  if (!bucket) {
+    bucket = new TokenBucket(3, 3 / 600); // 3 burst, 3 per 10 minutes sustained
+    buckets.set(key, bucket);
+  }
+  if (!bucket.tryConsume()) {
+    res.status(429).json({ detail: "Too many SOS alerts in a short window. If this is a real emergency, call 999." });
+    return;
+  }
+  next();
+}
+
+/// Driver breadcrumb upload (/rides/:id/location). One push/sec is
+/// the natural rhythm of a sane client; cap at 120/min so a bug that
+/// loops too fast doesn't drown the DB or fan-out broadcast.
+function rateLimitLocation(req, res, next) {
+  const userKey = req.user?.id ? `user:${req.user.id}` : `ip:${req.ip || "unknown"}`;
+  const key = `location:${userKey}`;
+  let bucket = buckets.get(key);
+  if (!bucket) {
+    bucket = new TokenBucket(120, 2.0); // 120 burst, 2/sec sustained
+    buckets.set(key, bucket);
+  }
+  if (!bucket.tryConsume()) {
+    res.status(429).json({ detail: "Too many location updates — slow the push cadence" });
+    return;
+  }
+  next();
+}
+
+/// AI support endpoint. Each call hits the LLM (real cost) and we
+/// don't want a stuck client looping. 10 per 5 min is roomy for a
+/// real support session, tight enough to bound a runaway.
+function rateLimitAiSupport(req, res, next) {
+  const userKey = req.user?.id ? `user:${req.user.id}` : `ip:${req.ip || "unknown"}`;
+  const key = `ai:${userKey}`;
+  let bucket = buckets.get(key);
+  if (!bucket) {
+    bucket = new TokenBucket(10, 10 / 300); // 10 burst, 10 per 5 minutes
+    buckets.set(key, bucket);
+  }
+  if (!bucket.tryConsume()) {
+    res.status(429).json({ detail: "Too many support questions in a short window — try again shortly" });
+    return;
+  }
+  next();
+}
+
+/// Telemetry firehose. Per-IP so an unauthenticated client can't
+/// flood. 60 burst / 60 per minute is in line with /telemetry/events
+/// accepting batches up to 50 — that's enough for a busy session
+/// without letting one bad client wedge the writer.
+function rateLimitTelemetry(req, res, next) {
+  const key = bucketKey(req, "telemetry");
+  let bucket = buckets.get(key);
+  if (!bucket) {
+    bucket = new TokenBucket(60, 1.0); // 60 burst, 60/min sustained
+    buckets.set(key, bucket);
+  }
+  if (!bucket.tryConsume()) {
+    res.status(429).json({ detail: "Too many telemetry events" });
+    return;
+  }
+  next();
+}
+
 /// Per-PHONE OTP rate limit. Layered on top of `rateLimitAuth` (which
 /// is per-IP) to stop a rotating-IP attacker from enumerating phone
 /// numbers or driving up SMS spend. Caps a single phone at 1 OTP per
@@ -135,5 +211,9 @@ module.exports = {
   rateLimitSearch,
   rateLimitAuth,
   rateLimitOtpByPhone,
-  rateLimitWrite
+  rateLimitWrite,
+  rateLimitSafety,
+  rateLimitLocation,
+  rateLimitAiSupport,
+  rateLimitTelemetry
 };

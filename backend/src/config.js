@@ -125,9 +125,29 @@ const config = {
   otpMaxAttempts: Number(process.env.AUTH_OTP_MAX_ATTEMPTS || 5),
   authDevMode,
 
-  // Driver economics — playbook §3.2.
-  voygoTakeRate: Number(process.env.VOYGO_TAKE_RATE || 0.15),
+  // Driver economics — LPKP-safe.
+  //
+  // The original model — 15% commission of fare — looks identical to
+  // an e-hailing take rate, which is exactly the framing LPKP uses to
+  // determine whether you're a transportation operator subject to PSV
+  // licensing. The current model is therefore a per-seat platform fee
+  // (a flat MYR amount, NOT a percentage of the fare). Operators
+  // still profit when prices rise (because they take more seats), but
+  // Voygo's revenue per seat is FIXED — which is consistent with a
+  // SaaS / matching fee under cost-sharing, not a commission.
+  //
+  // Defaults:
+  //   - voygoFlatFeeMyrPerSeat = 1   (RM 1 per filled seat)
+  //   - voygoTakeCapMyrPerSeat = 2   (legacy hard cap — kept as
+  //                                   belt-and-braces ceiling so the
+  //                                   compute path can't accidentally
+  //                                   exceed the safe envelope)
+  //   - voygoTakeRate = 0            (DEPRECATED — kept for telemetry
+  //                                   and the staging/dev knob; should
+  //                                   remain 0 in prod)
+  voygoFlatFeeMyrPerSeat: Number(process.env.VOYGO_FLAT_FEE_MYR_PER_SEAT || 1),
   voygoTakeCapMyrPerSeat: Number(process.env.VOYGO_TAKE_CAP_MYR || 2),
+  voygoTakeRate: Number(process.env.VOYGO_TAKE_RATE || 0),
 
   // Billplz hosted-checkout integration. Mock mode is dev-only; the
   // production guards above prevent it from ever running with a

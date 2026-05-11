@@ -794,7 +794,15 @@ struct VoygoAPIClient {
         return s
     }
 
-    private static var decoder: JSONDecoder {
+    // Cached singletons. The previous `var` computed-property version
+    // rebuilt a fresh JSONDecoder/JSONEncoder on *every* request, which
+    // showed up in Instruments as a measurable fraction of cold-start
+    // overhead once the home-feed fan-out grew to ~12 parallel calls.
+    // Both types are thread-safe for concurrent decode/encode once
+    // their configuration has been set, so a single static instance is
+    // the right shape. `nonisolated(unsafe)` is the same incantation
+    // already used for the static ISO formatters below.
+    nonisolated(unsafe) private static let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.keyDecodingStrategy = .convertFromSnakeCase
         d.dateDecodingStrategy = .custom { decoder in
@@ -806,8 +814,8 @@ struct VoygoAPIClient {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(value)")
         }
         return d
-    }
-    private static var encoder: JSONEncoder {
+    }()
+    nonisolated(unsafe) private static let encoder: JSONEncoder = {
         let e = JSONEncoder()
         e.keyEncodingStrategy = .convertToSnakeCase
         e.dateEncodingStrategy = .custom { date, encoder in
@@ -815,7 +823,7 @@ struct VoygoAPIClient {
             try container.encode(isoDateFormatter.string(from: date))
         }
         return e
-    }
+    }()
 
     nonisolated(unsafe) private static let isoDateTimeFormatter: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()

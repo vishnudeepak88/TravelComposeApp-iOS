@@ -1,11 +1,14 @@
-# Build the Voygo iOS app on every push/PR to main.
+# Build + test the Voygo iOS app and backend on every push/PR to main.
 #
-# Uses xcodebuild because this is an Xcode project (no Package.swift).
-# Build-only for now — there's no test target wired into the project yet.
-# When tests land, add a `test` step with `-destination` pointing at a
-# concrete simulator (e.g. iPhone 15) and `-enableCodeCoverage YES`.
+# iOS: xcodebuild build-for-testing followed by test-without-building
+# pinned to a concrete simulator so we never block on CI runner-side
+# device selection. Coverage is enabled to keep the trend line visible
+# even when individual tests skip.
+#
+# Backend: a separate Node job runs `npm test` (node --test) against
+# the suites under `backend/test/`.
 
-name: iOS Build
+name: iOS + Backend CI
 
 on:
   push:
@@ -14,7 +17,7 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build:
+  ios:
     runs-on: macos-15
 
     steps:
@@ -23,7 +26,7 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Build
+      - name: Build for testing
         # `IPHONEOS_DEPLOYMENT_TARGET=18.0` overrides the project's iOS
         # 26 setting just for CI — the GitHub macos-15 runner ships
         # Xcode 16.x (max iOS 18.5 SDK), so 26 is rejected with
@@ -34,8 +37,46 @@ jobs:
           xcodebuild \
             -project TravelComposeApp.xcodeproj \
             -scheme TravelComposeApp \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
             -configuration Debug \
+            -enableCodeCoverage YES \
             CODE_SIGNING_ALLOWED=NO \
             IPHONEOS_DEPLOYMENT_TARGET=18.0 \
-            build
+            build-for-testing
+
+      - name: Test
+        # `test-without-building` reuses the products from build-for-testing
+        # so any compile failure surfaces in the build step, and the test
+        # step shows a clean pass/fail summary.
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project TravelComposeApp.xcodeproj \
+            -scheme TravelComposeApp \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -configuration Debug \
+            -enableCodeCoverage YES \
+            CODE_SIGNING_ALLOWED=NO \
+            IPHONEOS_DEPLOYMENT_TARGET=18.0 \
+            test-without-building
+
+  backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci --no-audit --no-fund
+
+      - name: Run backend tests
+        working-directory: backend
+        run: npm test

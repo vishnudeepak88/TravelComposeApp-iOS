@@ -585,6 +585,97 @@ async function initSchema(pool) {
   await pool.query(
     "CREATE INDEX IF NOT EXISTS ix_telemetry_events_user ON telemetry_events(user_id, created_at DESC)"
   );
+
+  // --- Targeted indexes & CHECK constraints (audit hardening) -----
+  //
+  // The bulk of read paths under load were missed by the original
+  // table DDLs. Adding them idempotently below means existing
+  // production rows keep their old plans until the indexes are
+  // built; new queries (and EXPLAIN ANALYZE) pick the index from
+  // the next boot onwards.
+
+  // PostGIS spatial lookup. `route_points.geom` is the keystone for
+  // "find routes that pass near my pickup" — without a GIST index,
+  // the nearest-neighbour ST_DWithin / KNN operators fall back to a
+  // sequential scan once route_points grows past a few thousand
+  // rows. iOS Search calls this on every keystroke.
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_route_points_geom ON route_points USING GIST (geom)"
+  );
+
+  // Subscription -> pickup/drop joins. We resolve the rider's chosen
+  // pickup point on every ride-instance hydrate; indexing the FK
+  // columns turns a nested-loop scan into an index-only step.
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_route_subscriptions_pickup ON route_subscriptions(selected_pickup_point_id)"
+  );
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_route_subscriptions_drop ON route_subscriptions(selected_drop_point_id)"
+  );
+
+  // Notifications: the unread badge query is the hottest read on
+  // this table. A partial index over the predicate it actually uses
+  // (read_at IS NULL) is dramatically smaller than the existing full
+  // composite and lets the planner answer "do you have unread?"
+  // with an index-only scan.
+  await pool.query(
+    `CREATE INDEX IF NOT EXISTS ix_notifications_unread
+       ON notifications(user_id, created_at DESC)
+       WHERE read_at IS NULL`
+  );
+
+  // CHECK constraints on status enum columns. These pin the allowed
+  // string set at the DB layer so a stray code path can't stamp a
+  // nonsense status. All wrapped in DO blocks so the migration is
+  // idempotent across redeploys.
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'route_subscriptions_status_check'
+      ) THEN
+        ALTER TABLE route_subscriptions
+          ADD CONSTRAINT route_subscriptions_status_check
+          CHECK (status IN ('ACTIVE','CANCELED','EXPIRED','PENDING'));
+      END IF;
+    END $$;
+  `);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'commute_ride_instances_status_check'
+      ) THEN
+        ALTER TABLE commute_ride_instances
+          ADD CONSTRAINT commute_ride_instances_status_check
+          CHECK (ride_status IN ('SCHEDULED','IN_PROGRESS','COMPLETED','CANCELED'));
+      END IF;
+    END $$;
+  `);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'commute_ride_passengers_status_check'
+      ) THEN
+        ALTER TABLE commute_ride_passengers
+          ADD CONSTRAINT commute_ride_passengers_status_check
+          CHECK (status IN ('CONFIRMED','CANCELED','NO_SHOW'));
+      END IF;
+    END $$;
+  `);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'safety_alerts_status_check'
+      ) THEN
+        ALTER TABLE safety_alerts
+          ADD CONSTRAINT safety_alerts_status_check
+          CHECK (status IN ('OPEN','DISPATCHED','RESOLVED','FALSE_ALARM'));
+      END IF;
+    END $$;
+  `);
 }
 
 module.exports = { initSchema };

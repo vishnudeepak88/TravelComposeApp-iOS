@@ -580,10 +580,10 @@ struct HomeView: View {
                 .frame(width: 36, height: 36)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("To")
+                    Text(S.homeTo)
                         .font(.caption2.weight(.semibold))
                         .foregroundColor(VPalette.textHint)
-                    Text("Where are you heading?")
+                    Text(S.homeDestPlaceholder)
                         .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.text)
                         .lineLimit(1)
@@ -617,31 +617,27 @@ struct HomeView: View {
     // MARK: Service grid
 
     private var serviceGrid: some View {
+        // Labels are localized via Strings.swift, but each tile keeps a
+        // `kind` so the tap router doesn't have to substring-match the
+        // (now translated) label. Avoids the bug where switching the
+        // device to Bahasa Malaysia would silently re-route every
+        // non-Carpool tile through the coming-soon alert.
         let tiles: [ServiceTile] = [
-            .init(icon: "car.fill",            label: "Carpool",   fg: VPalette.primary,      bg: VPalette.primaryContainer,      isPrimary: true,  badge: "NEW"),
-            .init(icon: "person.fill",         label: "Ride solo", fg: VPalette.accentCoral,  bg: VPalette.accentCoralContainer),
-            .init(icon: "calendar",            label: "Schedule",  fg: VPalette.accentPurple, bg: VPalette.accentPurpleContainer),
+            .init(kind: .carpool,  icon: "car.fill",            label: S.homeServiceCarpool,  fg: VPalette.primary,      bg: VPalette.primaryContainer,      isPrimary: true,  badge: S.homeServiceNewBadge),
+            .init(kind: .solo,     icon: "person.fill",         label: S.homeServiceSolo,     fg: VPalette.accentCoral,  bg: VPalette.accentCoralContainer),
+            .init(kind: .schedule, icon: "calendar",            label: S.homeServiceSchedule, fg: VPalette.accentPurple, bg: VPalette.accentPurpleContainer),
             // Long-haul is the second real surface (after Carpool):
             // tapping it pushes onto the long-haul browse view.
-            // `isLongHaul` peels it out of the coming-soon path.
-            .init(icon: "location.north.fill", label: "Long-haul", fg: VPalette.accentAmber,  bg: VPalette.accentAmberContainer, isLongHaul: true)
+            .init(kind: .longHaul, icon: "location.north.fill", label: S.homeServiceLongHaul, fg: VPalette.accentAmber,  bg: VPalette.accentAmberContainer, isLongHaul: true)
         ]
         return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 14) {
             ForEach(tiles) { tile in
                 Button {
-                    // Defense in depth: route by both the explicit flag
-                    // AND the label. If a future edit drops `isLongHaul`
-                    // off the literal, the label check still gets us to
-                    // the right destination instead of falling through
-                    // to the coming-soon alert.
-                    if tile.isPrimary || tile.label == "Carpool" {
-                        onCarpoolTapped()
-                    } else if tile.isLongHaul || tile.label == "Long-haul" {
-                        onLongHaulTapped()
-                    } else if tile.label == "Ride solo" {
-                        onSoloTapped()
-                    } else {
-                        showComingSoonFor = tile.label
+                    switch tile.kind {
+                    case .carpool:  onCarpoolTapped()
+                    case .longHaul: onLongHaulTapped()
+                    case .solo:     onSoloTapped()
+                    case .schedule: showComingSoonFor = tile.label
                     }
                 } label: {
                     serviceTileBody(tile)
@@ -783,7 +779,7 @@ struct HomeView: View {
                 }
                 Spacer(minLength: 0)
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("RM \(row.priceMyr)")
+                    Text(Formatters.ringgit(row.priceMyr))
                         .font(.headline.weight(.black))
                         .foregroundColor(VPalette.primary)
                         .minimumScaleFactor(0.8)
@@ -829,14 +825,16 @@ struct HomeView: View {
 }
 
 private struct ServiceTile: Identifiable {
+    enum Kind { case carpool, solo, schedule, longHaul }
     let id = UUID()
+    let kind: Kind
     let icon: String
     let label: String
     let fg: Color
     let bg: Color
     var isPrimary: Bool = false
-    /// Routes this tile to the long-haul browse flow instead of the
-    /// coming-soon alert. Mutually exclusive with `isPrimary` today.
+    /// Retained for source compatibility with older call-sites; the
+    /// tap router keys off `kind` now.
     var isLongHaul: Bool = false
     var badge: String? = nil
 }

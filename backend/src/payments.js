@@ -39,6 +39,40 @@ async function ensurePaymentsSchema(pool) {
   await pool.query(
     "CREATE UNIQUE INDEX IF NOT EXISTS ix_payments_billplz ON payments(billplz_bill_id) WHERE billplz_bill_id IS NOT NULL"
   );
+  // Subscription reconciliation reads payments by `subscription_id`
+  // (e.g. when cancelling a subscription we look up the most recent
+  // PAID row to decide refund eligibility). Without this index every
+  // such lookup degenerates to a full scan once payments grows.
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_payments_subscription ON payments(subscription_id, created_at DESC) WHERE subscription_id IS NOT NULL"
+  );
+  // Restrict status to the documented lifecycle so a bug or a
+  // tampered webhook can't stamp an arbitrary string. Idempotent —
+  // only added when absent and named the same so re-runs are no-ops.
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'payments_status_check'
+      ) THEN
+        ALTER TABLE payments
+          ADD CONSTRAINT payments_status_check
+          CHECK (status IN ('PENDING','PAID','FAILED','REFUNDED','CANCELED'));
+      END IF;
+    END $$;
+  `);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'payments_amount_check'
+      ) THEN
+        ALTER TABLE payments
+          ADD CONSTRAINT payments_amount_check
+          CHECK (amount_myr >= 0);
+      END IF;
+    END $$;
+  `);
 
   // Per-driver weekly payout aggregate. Computed by `payouts.js` on demand.
   await pool.query(`
