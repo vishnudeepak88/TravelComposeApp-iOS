@@ -24,6 +24,20 @@ enum CarType: String, CaseIterable, Identifiable, Codable {
         case .ev: "bolt.car.fill"
         }
     }
+
+    /// Realistic maximum number of passenger seats per car body — i.e.
+    /// excluding the driver. Drives the Create Route seat-count cap
+    /// so a driver can't accidentally list 8 seats in a hatchback.
+    /// SUV covers the popular 7-seater segment (Honda CR-V, Toyota
+    /// Innova, Proton X70 with the third row up).
+    var maxPassengerSeats: Int {
+        switch self {
+        case .sedan: 4
+        case .suv:   6
+        case .hatch: 4
+        case .ev:    4
+        }
+    }
 }
 
 enum RouteActiveStatus: String, Codable { case active = "ACTIVE", paused = "PAUSED" }

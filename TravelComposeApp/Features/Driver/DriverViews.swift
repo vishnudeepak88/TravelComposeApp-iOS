@@ -596,9 +596,14 @@ struct CreateRouteView: View {
                                 }
                                 HStack(spacing: 12) {
                                     NumericStepperRow(
+                                        // Stepper cap tracks the car body —
+                                        // sedan/hatch/EV: 4, SUV: 6. Drivers
+                                        // physically can't seat 8 in a Myvi,
+                                        // so the form shouldn't let them list
+                                        // that many.
                                         label: "SEATS",
                                         value: $vm.seatCount,
-                                        range: 1...20,
+                                        range: 1...vm.carType.maxPassengerSeats,
                                         step: 1,
                                         suffix: nil
                                     )
@@ -610,6 +615,13 @@ struct CreateRouteView: View {
                                         suffix: "RM"
                                     )
                                 }
+                                // Small hint that the cap depends on the car
+                                // they picked — surfaces the rule without a
+                                // disabled-state mystery.
+                                Text("Up to \(vm.carType.maxPassengerSeats) passengers in a \(vm.carType.label)")
+                                    .font(.caption2)
+                                    .foregroundColor(VPalette.textHint)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .padding(16)
                         }
@@ -620,7 +632,17 @@ struct CreateRouteView: View {
                                 SectionHeader(title: "Car Type")
                                 HStack(spacing: 8) {
                                     ForEach(CarType.allCases) { type in
-                                        Button(action: { vm.carType = type }) {
+                                        Button(action: {
+                                            vm.carType = type
+                                            // Clamp seats if the new body is smaller. A
+                                            // driver who set 6 seats for an SUV then
+                                            // switched to a Sedan should see seats drop
+                                            // to 4 automatically instead of a silent
+                                            // server-side validation failure.
+                                            if vm.seatCount > type.maxPassengerSeats {
+                                                vm.seatCount = type.maxPassengerSeats
+                                            }
+                                        }) {
                                             VStack(spacing: 4) {
                                                 Image(systemName: type.icon)
                                                     .font(.title3)
