@@ -855,7 +855,7 @@ enum APIError: LocalizedError {
         case .serverError(let code): return "Server error \(code)."
         case .decodingError: return "Could not read server data."
         case .networkError: return "Network unavailable."
-        case .unauthorized: return "Your session has expired. Please sign in again."
+        case .unauthorized: return S.sessionExpired
         }
     }
 }

@@ -30,7 +30,7 @@ struct MySubscriptionsView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "My Subscriptions", onBack: onBack) {
+                VPolishedNavBar(title: S.subscriptionsTitle, onBack: onBack) {
                     Button(action: onOpenCalendar) {
                         Image(systemName: "calendar")
                             .font(.callout.weight(.bold))

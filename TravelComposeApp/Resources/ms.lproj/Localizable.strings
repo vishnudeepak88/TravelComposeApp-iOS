@@ -12,7 +12,7 @@
 "common.back" = "Kembali";
 "common.error.unknown" = "Sesuatu telah berlaku. Cuba lagi sebentar lagi.";
 "common.error.network" = "Anda tidak dalam talian. Sambung semula dan cuba lagi.";
-"common.error.sessionExpired" = "Sesi anda telah tamat. Sila log masuk semula.";
+"common.error.sessionExpired" = "Sila log masuk untuk teruskan.";
 
 "auth.enterPhone" = "Masukkan nombor telefon anda";
 "auth.enterOtp" = "Masukkan kod 6 digit";
@@ -137,6 +137,16 @@
 "home.service.schedule" = "Jadual";
 "home.service.longHaul" = "Antarabandar";
 "home.service.newBadge" = "BARU";
+"home.when.today" = "Hari ini";
+"home.when.tomorrow" = "Esok";
+"home.action.calendar" = "Jadual";
+"home.action.message" = "Mesej";
+"home.action.inbox" = "Mesej";
+"home.action.details" = "Butiran";
+"home.status.confirmed" = "Disahkan";
+"home.status.paused" = "Dijeda";
+"home.status.completed" = "Selesai";
+"home.status.cancelled" = "Dibatalkan";
 
 /* Wallet — extras */
 "wallet.paymentMethods" = "Kaedah pembayaran";
@@ -182,3 +192,13 @@
 "common.refresh" = "Muat semula";
 "common.search" = "Cari";
 "common.settings" = "Tetapan";
+
+/* Tab bar */
+"tab.home" = "Utama";
+"tab.search" = "Cari";
+"tab.calendar" = "Jadual";
+"tab.inbox" = "Mesej";
+"tab.profile" = "Profil";
+
+/* Subscriptions list */
+"subs.title" = "Perjalanan harian saya";

@@ -361,6 +361,9 @@ struct FindCommuteRoutesView: View {
                         PopularCorridorsRow(corridors: PopularCorridor.penangPicks) { corridor in
                             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                             vm.applyPopularCorridor(corridor)
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                proxy.scrollTo("results", anchor: .top)
+                            }
                         }
                         .padding(.horizontal, 16)
 
@@ -386,6 +389,13 @@ struct FindCommuteRoutesView: View {
                             onSearch: {
                                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                 vm.searchRoutes()
+                                // Scroll into the results section so the
+                                // outcome (matches OR empty-state CTA)
+                                // is immediately visible instead of
+                                // sitting silently below the fold.
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    proxy.scrollTo("results", anchor: .top)
+                                }
                             }
                         )
                         .padding(.horizontal, 16)
@@ -422,6 +432,12 @@ struct FindCommuteRoutesView: View {
                             .padding(.horizontal, 16)
                             .padding(.top, 6)
                         }
+
+                        // Anchor for the post-search scroll-to. Without
+                        // this the empty state / results section renders
+                        // below the fold and the search button looks
+                        // like a no-op.
+                        Color.clear.frame(height: 0).id("results")
 
                         // Results
                         if vm.isSearching {

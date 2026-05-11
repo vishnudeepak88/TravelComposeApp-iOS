@@ -89,28 +89,28 @@ struct MainTabView: View {
             // accessibility sizes. AccessibilityXXL still works;
             // we cap at the third accessibility size to balance
             // readability and the existing fixed-size layouts.
-            Tab("Home", systemImage: "house.fill", value: VoygoTab.home) {
+            Tab(S.tabHome, systemImage: "house.fill", value: VoygoTab.home) {
                 HomeTab()
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Home tab")
             .accessibilityHint("Your next commute and quick actions")
 
-            Tab("Search", systemImage: "magnifyingglass", value: VoygoTab.search) {
+            Tab(S.tabSearch, systemImage: "magnifyingglass", value: VoygoTab.search) {
                 CommuteTab(pendingRouteDeepLink: $pendingRouteDeepLink)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Search tab")
             .accessibilityHint("Find a carpool route")
 
-            Tab("Calendar", systemImage: "calendar", value: VoygoTab.calendar) {
+            Tab(S.tabCalendar, systemImage: "calendar", value: VoygoTab.calendar) {
                 TripsTab()
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Calendar tab")
             .accessibilityHint("Your subscriptions and upcoming rides")
 
-            Tab("Inbox", systemImage: "bubble.left.fill", value: VoygoTab.inbox) {
+            Tab(S.tabInbox, systemImage: "bubble.left.fill", value: VoygoTab.inbox) {
                 InboxView()
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
@@ -122,7 +122,7 @@ struct MainTabView: View {
             .accessibilityLabel("Inbox tab")
             .accessibilityHint("Chats with your drivers and notifications")
 
-            Tab("Profile", systemImage: "person.fill", value: VoygoTab.profile) {
+            Tab(S.tabProfile, systemImage: "person.fill", value: VoygoTab.profile) {
                 ProfileView()
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }

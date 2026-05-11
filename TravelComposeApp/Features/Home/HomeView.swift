@@ -209,7 +209,7 @@ struct HomeView: View {
             }
         }
         .alert(
-            "Coming soon",
+            S.comingSoonTitle,
             isPresented: Binding(
                 get: { showComingSoonFor != nil },
                 set: { if !$0 { showComingSoonFor = nil } }
@@ -218,7 +218,7 @@ struct HomeView: View {
         ) { _ in
             Button("OK", role: .cancel) { showComingSoonFor = nil }
         } message: { feature in
-            Text("\(feature) is on the roadmap. We'll let you know when it lands.")
+            Text(S.comingSoonMessage(feature: feature))
         }
     }
 
@@ -380,10 +380,10 @@ struct HomeView: View {
 
     private func nextCommuteActions(_ nc: NextCommute) -> some View {
         HStack(spacing: 8) {
-            actionPill(icon: "calendar", label: "Calendar", action: onOpenCalendar)
+            actionPill(icon: "calendar", label: S.homeActionCalendar, action: onOpenCalendar)
             actionPill(icon: "bubble.left.fill", label: messageLabel(nc),
                        action: { onMessageDriver(nc.route.id) })
-            actionPill(icon: "info.circle.fill", label: "Details",
+            actionPill(icon: "info.circle.fill", label: S.homeActionDetails,
                        action: { onOpenRoute(nc.route.id) })
         }
     }
@@ -414,11 +414,13 @@ struct HomeView: View {
 
     private func whenLabel(_ nc: NextCommute) -> String {
         let cal = Calendar.current
-        if cal.isDateInToday(nc.displayDate) { return "Today" }
-        if cal.isDateInTomorrow(nc.displayDate) { return "Tomorrow" }
+        if cal.isDateInToday(nc.displayDate) { return S.homeWhenToday }
+        if cal.isDateInTomorrow(nc.displayDate) { return S.homeWhenTomorrow }
         let f = DateFormatter()
-        f.locale = Locale(identifier: "en_MY")
-        // `EEE, d MMM` reads "Mon, 12 May"
+        // Locale.current picks up the device language so the weekday
+        // and month abbreviations honour the user's choice (e.g.
+        // "Isn, 12 Mei" in Bahasa) instead of being pinned to en_MY.
+        f.locale = Locale.current
         f.dateFormat = "EEE, d MMM"
         return f.string(from: nc.displayDate)
     }
@@ -438,10 +440,10 @@ struct HomeView: View {
 
     private func statusLabel(_ nc: NextCommute) -> String {
         switch nc.subscription.status {
-        case .active:    return "Confirmed"
-        case .paused:    return "Paused"
-        case .completed: return "Completed"
-        case .cancelled: return "Cancelled"
+        case .active:    return S.homeStatusConfirmed
+        case .paused:    return S.homeStatusPaused
+        case .completed: return S.homeStatusCompleted
+        case .cancelled: return S.homeStatusCancelled
         }
     }
 
@@ -459,7 +461,7 @@ struct HomeView: View {
         // for this route. The thread DTO uses `tripId` (which the
         // backend populates from `chat_threads.route_id`).
         let hasThread = store.threads.contains { $0.tripId == nc.route.id }
-        return hasThread ? "Message" : "Inbox"
+        return hasThread ? S.homeActionMessage : S.homeActionInbox
     }
 
     // MARK: Action-required banner

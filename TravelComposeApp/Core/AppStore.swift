@@ -1950,7 +1950,7 @@ enum AppError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .message(let m):    return m
-        case .unauthorized:      return "Your session has expired. Please sign in again."
+        case .unauthorized:      return S.sessionExpired
         case .network:           return "You're offline. Reconnect and try again."
         case .validation(let m): return m
         case .server(let code):  return "Server error \(code). Try again in a moment."

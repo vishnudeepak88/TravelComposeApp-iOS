@@ -133,7 +133,7 @@ struct WalletView: View {
             isPaymentsLoading = false
         }
         .alert(
-            "Coming soon",
+            S.comingSoonTitle,
             isPresented: Binding(
                 get: { showComingSoonFor != nil },
                 set: { if !$0 { showComingSoonFor = nil } }
@@ -142,7 +142,7 @@ struct WalletView: View {
         ) { _ in
             Button("OK", role: .cancel) { showComingSoonFor = nil }
         } message: { feature in
-            Text("\(feature) is on the roadmap. We'll let you know when it lands.")
+            Text(S.comingSoonMessage(feature: feature))
         }
     }
 

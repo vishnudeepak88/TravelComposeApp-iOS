@@ -30,7 +30,7 @@ enum S {
     static var back: String { Self.t("common.back", "Back") }
     static var unknownError: String { Self.t("common.error.unknown", "Something went wrong. Try again in a moment.") }
     static var networkError: String { Self.t("common.error.network", "You're offline. Reconnect and try again.") }
-    static var sessionExpired: String { Self.t("common.error.sessionExpired", "Your session has expired. Please sign in again.") }
+    static var sessionExpired: String { Self.t("common.error.sessionExpired", "Sign in to continue.") }
 
     // MARK: Auth
 
@@ -137,6 +137,16 @@ enum S {
     static var homeServiceSchedule: String { Self.t("home.service.schedule", "Schedule") }
     static var homeServiceLongHaul: String { Self.t("home.service.longHaul", "Long-haul") }
     static var homeServiceNewBadge: String { Self.t("home.service.newBadge", "NEW") }
+    static var homeWhenToday: String      { Self.t("home.when.today", "Today") }
+    static var homeWhenTomorrow: String   { Self.t("home.when.tomorrow", "Tomorrow") }
+    static var homeActionCalendar: String { Self.t("home.action.calendar", "Calendar") }
+    static var homeActionMessage: String  { Self.t("home.action.message", "Message") }
+    static var homeActionInbox: String    { Self.t("home.action.inbox", "Inbox") }
+    static var homeActionDetails: String  { Self.t("home.action.details", "Details") }
+    static var homeStatusConfirmed: String { Self.t("home.status.confirmed", "Confirmed") }
+    static var homeStatusPaused: String    { Self.t("home.status.paused", "Paused") }
+    static var homeStatusCompleted: String { Self.t("home.status.completed", "Completed") }
+    static var homeStatusCancelled: String { Self.t("home.status.cancelled", "Cancelled") }
 
     // MARK: Wallet (additional)
 
@@ -208,9 +218,18 @@ enum S {
 
     // MARK: Subscriptions list
 
+    static var subscriptionsTitle: String { Self.t("subs.title", "My commutes") }
     static var subscriptionsEmptyTitle: String { Self.t("subs.empty.title", "No subscriptions") }
     static var subscriptionsEmptyBody: String { Self.t("subs.empty.body", "Search for commute routes and subscribe to start riding") }
     static var subscriptionsEmptyCTA: String { Self.t("subs.empty.cta", "Find a route") }
+
+    // MARK: Tab bar
+
+    static var tabHome: String     { Self.t("tab.home",     "Home") }
+    static var tabSearch: String   { Self.t("tab.search",   "Search") }
+    static var tabCalendar: String { Self.t("tab.calendar", "Calendar") }
+    static var tabInbox: String    { Self.t("tab.inbox",    "Inbox") }
+    static var tabProfile: String  { Self.t("tab.profile",  "Profile") }
 
     // MARK: Driver dashboard
 

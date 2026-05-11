@@ -11,7 +11,7 @@
 "common.back" = "Back";
 "common.error.unknown" = "Something went wrong. Try again in a moment.";
 "common.error.network" = "You're offline. Reconnect and try again.";
-"common.error.sessionExpired" = "Your session has expired. Please sign in again.";
+"common.error.sessionExpired" = "Sign in to continue.";
 
 "auth.enterPhone" = "Enter your phone number";
 "auth.enterOtp" = "Enter the 6-digit code";
@@ -136,6 +136,16 @@
 "home.service.schedule" = "Schedule";
 "home.service.longHaul" = "Long-haul";
 "home.service.newBadge" = "NEW";
+"home.when.today" = "Today";
+"home.when.tomorrow" = "Tomorrow";
+"home.action.calendar" = "Calendar";
+"home.action.message" = "Message";
+"home.action.inbox" = "Inbox";
+"home.action.details" = "Details";
+"home.status.confirmed" = "Confirmed";
+"home.status.paused" = "Paused";
+"home.status.completed" = "Completed";
+"home.status.cancelled" = "Cancelled";
 
 /* Wallet — extras */
 "wallet.paymentMethods" = "Payment methods";
@@ -181,3 +191,13 @@
 "common.refresh" = "Refresh";
 "common.search" = "Search";
 "common.settings" = "Settings";
+
+/* Tab bar */
+"tab.home" = "Home";
+"tab.search" = "Search";
+"tab.calendar" = "Calendar";
+"tab.inbox" = "Inbox";
+"tab.profile" = "Profile";
+
+/* Subscriptions list */
+"subs.title" = "My commutes";

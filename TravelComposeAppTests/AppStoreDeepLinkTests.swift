@@ -10,7 +10,12 @@ import Testing
 // most important re-engagement vectors. These tests pin the parser's
 // behavior so a future refactor can't quietly regress them.
 
-@Suite("AppStore deep-link parsing")
+// Serialized because every test attaches a NotificationCenter
+// observer for `.voygoOpenRoute`. Running them in parallel let a
+// posted notification from one test leak into another and randomly
+// fail `nonVoygoSchemeIgnored` (where ANY post is treated as a
+// false positive).
+@Suite("AppStore deep-link parsing", .serialized)
 @MainActor
 struct AppStoreDeepLinkTests {
 
