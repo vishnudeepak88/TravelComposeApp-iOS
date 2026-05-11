@@ -2,26 +2,21 @@ import SwiftUI
 
 // MARK: - Design System (legacy aliases over the V token set)
 //
-// Originally `VoygoTheme` was a parallel design system with its own color
-// values, dark-mode adaptive ramps, and component styling. The polished
-// prototype work introduced `VPalette` (in Polished.swift) with the V tokens
-// from the Voygo Polished design and the cleaner atom set (VPolishedCard,
-// VPolishedNavBar, VPrimaryButton, VAvatar, VBadge, etc.).
-//
-// Two systems running side-by-side meant two visual languages on the same
-// screen — the QA report flagged this as the single biggest "this feels
-// unfinished" tell. Rather than rewrite every existing call site to use
-// the new atoms, this file makes `VoygoTheme.*` source its values directly
-// from `VPalette`, and re-skins the legacy components (VoygoCard,
+// `VoygoTheme.*` is a back-compat shim that aliases the V token set in
+// `Polished.swift`. The polished prototype work introduced `VPalette`
+// with the V tokens from the Voygo Polished design and the cleaner
+// atom set (VPolishedCard, VPolishedNavBar, VPrimaryButton, VAvatar,
+// VBadge, etc.). This file re-skins the legacy components (VoygoCard,
 // PrimaryButton, VoygoNavBar, VoygoTextField, StatusBadge, AvatarView,
-// DayChip, SectionHeader) to match the polished look. Every screen using
-// the legacy tokens or atoms gets the unified palette automatically with
-// no per-screen edits.
+// DayChip, SectionHeader) to match so screens that mix old + new atoms
+// stay visually consistent.
 //
-// Trade-off: VoygoTheme used to support dark mode via `Color.adaptive`.
-// VPalette is light-mode-only (the prototype was light-only). Dark mode
-// is therefore disabled until the design intent is re-decided. The
-// `Color.adaptive` helper stays in the file in case it's needed later.
+// Dark mode: re-enabled. Every surface, text, border and tinted
+// container in VPalette is wired through `Color.adaptive(light:dark:)`
+// (defined in Polished.swift). Brand tokens (primary green, accent
+// purple, gold star) stay constant across modes; everything else
+// flips on `traits.userInterfaceStyle`. Apps that test dark/light
+// at preview time can use `.environment(\.colorScheme, .dark)`.
 
 struct VoygoTheme {
     // Brand
@@ -58,25 +53,9 @@ struct VoygoTheme {
     }
 }
 
-// Held for future dark-mode revival; nothing currently calls into it.
-private extension Color {
-    static func adaptive(light: UInt, dark: UInt) -> Color {
-        Color(UIColor { traits in
-            UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
-        })
-    }
-}
-
-private extension UIColor {
-    convenience init(hex: UInt) {
-        self.init(
-            red: CGFloat((hex >> 16) & 0xff) / 255,
-            green: CGFloat((hex >> 8) & 0xff) / 255,
-            blue: CGFloat(hex & 0xff) / 255,
-            alpha: 1
-        )
-    }
-}
+// Color.adaptive(light:dark:) + UIColor.fromHex now live in
+// Polished.swift alongside the VPalette tokens that use them — keeps
+// the dark-mode plumbing in a single file.
 
 // MARK: - Reusable Components — re-skinned to match VPolishedCard /
 // VPrimaryButton / VAvatar / VBadge so legacy screens look unified

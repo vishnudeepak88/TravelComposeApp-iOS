@@ -10,45 +10,66 @@ enum VPalette {
     // (`car-pool/project/tokens.jsx`). Replaces the previous trust-forward
     // teal direction with energetic green primary + forest ink. See
     // `docs/REDESIGN.md` for the full mapping rationale.
+    //
+    // Dark mode (re-enabled): every surface, text, border and tinted
+    // container has a hand-tuned dark variant via `Color.adaptive`.
+    // Brand tokens (primary green, accent purple, gold star) stay
+    // constant across modes — they're identity, not chrome — but
+    // their *containers* darken so the tints read as warm shadow
+    // rather than blown-out highlight on a dark surface.
     static let primary           = Color(hex: 0x00B14F)
     static let primaryDark       = Color(hex: 0x008F3F)
-    static let primaryContainer  = Color(hex: 0xE5F7ED)
+    static let primaryContainer  = Color.adaptive(light: 0xE5F7ED, dark: 0x113A26)
     static let onPrimary         = Color.white
     static let secondary         = Color(hex: 0x1F8A5C)
-    static let secondaryContainer = Color(hex: 0xDBF1E5)
+    static let secondaryContainer = Color.adaptive(light: 0xDBF1E5, dark: 0x14342A)
     static let accent            = Color(hex: 0x7B5CD6)
-    static let accentContainer   = Color(hex: 0xEFE9FA)
-    static let success           = Color(hex: 0x3A8F6F)
-    static let successContainer  = Color(hex: 0xE0F0E8)
-    static let warning           = Color(hex: 0xC77A3A)
-    static let warningContainer  = Color(hex: 0xFFF4D1)
-    static let danger            = Color(hex: 0xB84B4B)
-    static let dangerContainer   = Color(hex: 0xFBE3E0)
-    static let bg                = Color(hex: 0xF2F5F4)
-    static let surface           = Color.white
-    static let surfaceHigh       = Color(hex: 0xF7FAF8)
-    // Forest-tinted hairline; `T.divider` from the design at ~7% alpha
-    // over the `#0A2920` ink reads as a faint warm border — better
-    // than the cold gray we had before.
-    static let border            = Color(red: 10/255, green: 41/255, blue: 32/255, opacity: 0.07)
-    static let outline           = Color(hex: 0xAEBDB7)
-    static let text              = Color(hex: 0x0A2920)
-    static let textSec           = Color(hex: 0x37514A)
+    static let accentContainer   = Color.adaptive(light: 0xEFE9FA, dark: 0x2A1E4D)
+    // Status colours are a hair brighter in dark mode so they read
+    // against the deeper surface — straight #C77A3A on near-black is
+    // muddy.
+    static let success           = Color.adaptive(light: 0x3A8F6F, dark: 0x4FBA8E)
+    static let successContainer  = Color.adaptive(light: 0xE0F0E8, dark: 0x18352B)
+    static let warning           = Color.adaptive(light: 0xC77A3A, dark: 0xE89455)
+    static let warningContainer  = Color.adaptive(light: 0xFFF4D1, dark: 0x3D2F18)
+    static let danger            = Color.adaptive(light: 0xB84B4B, dark: 0xE66E6E)
+    static let dangerContainer   = Color.adaptive(light: 0xFBE3E0, dark: 0x3D1F1F)
+    // The big surface trio. Light keeps the forest-tinted off-white;
+    // dark uses a near-black with a green-grey tint so the brand
+    // identity carries through (a pure #000 background would feel
+    // like a generic dark theme, not Voygo).
+    static let bg                = Color.adaptive(light: 0xF2F5F4, dark: 0x0E1614)
+    static let surface           = Color.adaptive(light: 0xFFFFFF, dark: 0x1A2421)
+    static let surfaceHigh       = Color.adaptive(light: 0xF7FAF8, dark: 0x232E2A)
+    // Hairline border. Light: 7% of ink-green over surface. Dark:
+    // 12% white — slightly stronger to keep card edges legible on
+    // the deep background without looking harsh.
+    static let border            = Color.adaptiveRGBA(
+        light: (10/255, 41/255, 32/255, 0.07),
+        dark:  (255/255, 255/255, 255/255, 0.12)
+    )
+    static let outline           = Color.adaptive(light: 0xAEBDB7, dark: 0x4A5752)
+    // Text ramp — flips entirely. Dark mode pulls a near-white with
+    // a warm green tint (#E5EBE9) so the body reads coordinated with
+    // the green brand rather than ice-blue cold.
+    static let text              = Color.adaptive(light: 0x0A2920, dark: 0xE6ECE9)
+    static let textSec           = Color.adaptive(light: 0x37514A, dark: 0xA8BAB4)
     // Held at #5A6E74 instead of the design's lighter #7A8E88 — round-2
     // QA flagged the lighter value at ~3.6:1 contrast on the new
     // `#F2F5F4` bg, which fails WCAG 2.1 AA for body text. The redesign
-    // doc covers this trade-off explicitly.
-    static let textHint          = Color(hex: 0x5A6E74)
+    // doc covers this trade-off explicitly. Dark mode uses the lighter
+    // ramp position since contrast against the dark surface is fine.
+    static let textHint          = Color.adaptive(light: 0x5A6E74, dark: 0x8B9E98)
     static let starGold          = Color(hex: 0xFCD24A)
 
     // New accent tokens for service grids, promo banners, and "NEW" pills.
     static let accentCoral           = Color(hex: 0xFF6B6B)
-    static let accentCoralContainer  = Color(hex: 0xFFE5E5)
+    static let accentCoralContainer  = Color.adaptive(light: 0xFFE5E5, dark: 0x3D1F1F)
     static let accentAmber           = Color(hex: 0xFFB800)
-    static let accentAmberContainer  = Color(hex: 0xFFF4D1)
+    static let accentAmberContainer  = Color.adaptive(light: 0xFFF4D1, dark: 0x3D2F18)
     // Alias of `accent` — clearer at service-tile callsites.
     static let accentPurple          = Color(hex: 0x7B5CD6)
-    static let accentPurpleContainer = Color(hex: 0xEFE9FA)
+    static let accentPurpleContainer = Color.adaptive(light: 0xEFE9FA, dark: 0x2A1E4D)
 
     static var primaryGradient: LinearGradient {
         LinearGradient(
@@ -61,6 +82,8 @@ enum VPalette {
     static var creditGradient: LinearGradient {
         // Deep sage → vibrant primary so the Wallet hero reads as
         // "money, but on-brand" rather than a separate visual island.
+        // Same gradient in both modes — the wallet card stays a
+        // green island in either theme.
         LinearGradient(
             colors: [Color(hex: 0x0E5C3C), primary],
             startPoint: .topLeading,
@@ -77,6 +100,40 @@ extension Color {
             green: Double((hex >> 8) & 0xff) / 255,
             blue: Double(hex & 0xff) / 255,
             opacity: 1
+        )
+    }
+
+    /// Adaptive Color that switches by the system's userInterfaceStyle.
+    /// Both `light` and `dark` are hex literals (e.g. `0xF2F5F4`).
+    /// Implemented via UIColor so SwiftUI honours runtime trait
+    /// changes — including Settings → Dark Mode flips without an
+    /// app restart and per-window Environment overrides.
+    static func adaptive(light: UInt, dark: UInt) -> Color {
+        Color(UIColor { traits in
+            UIColor.fromHex(traits.userInterfaceStyle == .dark ? dark : light)
+        })
+    }
+
+    /// Same as `adaptive` but for RGBA tuples — used by border-style
+    /// tokens where the colour is expressed as alpha over ink.
+    static func adaptiveRGBA(
+        light: (CGFloat, CGFloat, CGFloat, CGFloat),
+        dark:  (CGFloat, CGFloat, CGFloat, CGFloat)
+    ) -> Color {
+        Color(UIColor { traits in
+            let t = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: t.0, green: t.1, blue: t.2, alpha: t.3)
+        })
+    }
+}
+
+private extension UIColor {
+    static func fromHex(_ hex: UInt) -> UIColor {
+        UIColor(
+            red:   CGFloat((hex >> 16) & 0xff) / 255,
+            green: CGFloat((hex >> 8)  & 0xff) / 255,
+            blue:  CGFloat(hex & 0xff) / 255,
+            alpha: 1
         )
     }
 }
