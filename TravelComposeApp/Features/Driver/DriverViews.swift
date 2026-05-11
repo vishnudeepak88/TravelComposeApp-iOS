@@ -683,8 +683,19 @@ struct CreateRouteView: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 16)
+                    .padding(.top, 16)
+                    // Bottom clearance for the floating tab bar — without
+                    // this the Save button + the last Drop-Points card sit
+                    // underneath the bar and look like the screen has run
+                    // out of scrollable content. `VTabBarLayout.clearance`
+                    // matches the bar height the rest of the app uses.
+                    .padding(.bottom, VTabBarLayout.clearance)
                 }
+                // Tap outside the keyboard to dismiss it AND let the user
+                // drag the scroll view down without first dismissing the
+                // keyboard manually. Critical on the Seats / Price fields
+                // which sit halfway down the form.
+                .scrollDismissesKeyboard(.interactively)
             }
         }
         .onAppear { vm.store = store }
