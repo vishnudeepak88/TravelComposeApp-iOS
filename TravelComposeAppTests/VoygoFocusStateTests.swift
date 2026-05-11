@@ -9,19 +9,19 @@ import Testing
 // SetFocusFilterIntent can pick them up and the rest of the app can
 // react via the `voygoFocusStateChanged` notification.
 //
-// These tests pin the persistence behaviour: write → read round-trip,
+// These tests pin the persistence behaviour: write -> read round-trip,
 // default values when unset, and notification fan-out on save.
 
-@Suite("VoygoFocusState")
+@Suite("VoygoFocusState", .serialized)
 struct VoygoFocusStateTests {
 
     private static let keyActive = "voygo.focus.active"
     private static let keyMute = "voygo.focus.mutePromotional"
     private static let keyBadge = "voygo.focus.hideInboxBadge"
 
-    /// Clean the three UserDefaults keys before each test so suites
-    /// don't bleed state between cases. Swift Testing runs tests in
-    /// parallel by default but each `@Test` gets its own instance.
+    /// Clean the three UserDefaults keys before each test so cases
+    /// don't bleed state into each other. The suite is serialized
+    /// because these tests share UserDefaults + NotificationCenter.
     private func resetDefaults() {
         let d = UserDefaults.standard
         d.removeObject(forKey: Self.keyActive)

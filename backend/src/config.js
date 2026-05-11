@@ -45,6 +45,17 @@ if (isHardened && rawAuthDevMode) {
 const billplzApiKey = process.env.BILLPLZ_API_KEY || "";
 const billplzCollectionId = process.env.BILLPLZ_COLLECTION_ID || "";
 const billplzXSignatureKey = process.env.BILLPLZ_X_SIGNATURE_KEY || "";
+const kycS3Bucket = process.env.KYC_S3_BUCKET || "";
+const kycS3AccessKeyId =
+  process.env.KYC_S3_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID || "";
+const kycS3SecretAccessKey =
+  process.env.KYC_S3_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY || "";
+const kycS3Region =
+  process.env.KYC_S3_REGION || process.env.AWS_REGION || "us-east-1";
+const kycS3Endpoint = process.env.KYC_S3_ENDPOINT || "";
+const kycS3ForcePathStyle =
+  String(process.env.KYC_S3_FORCE_PATH_STYLE || "").toLowerCase() === "true" ||
+  Boolean(kycS3Endpoint);
 
 // Billplz strictness applies only to true production. Staging boots
 // without keys and routes charges through mock-mode (with a loud
@@ -129,6 +140,18 @@ const config = {
     callbackUrl: process.env.BILLPLZ_CALLBACK_URL || "https://voygo-ios-api.onrender.com/payments/billplz/callback",
     redirectUrl: process.env.BILLPLZ_REDIRECT_URL || "voygo://payments/return",
     isMockMode: billplzIsMockMode
+  },
+
+  // Durable storage for KYC uploads. The upload route accepts S3-compatible
+  // providers (AWS S3, Cloudflare R2, MinIO) through these env vars and keeps
+  // local disk as a development-only fallback.
+  kycStorage: {
+    bucket: kycS3Bucket,
+    region: kycS3Region,
+    endpoint: kycS3Endpoint,
+    accessKeyId: kycS3AccessKeyId,
+    secretAccessKey: kycS3SecretAccessKey,
+    forcePathStyle: kycS3ForcePathStyle
   }
 };
 

@@ -52,6 +52,11 @@ const {
   rateLimitOtpByPhone,
   rateLimitWrite
 } = require("./middleware");
+const {
+  buildKycObjectKey,
+  kycObjectStorageConfigured,
+  uploadKycObject
+} = require("./objectStorage");
 
 const app = express();
 const logSuccessfulRequests =
@@ -1174,31 +1179,28 @@ app.get(
 // queue, APNs device registration for push, and a Stripe Connect
 // onboarding URL stub. Each is wired so the iOS side can call it
 // today; production-side configuration (S3 bucket, Twilio account,
-// APNs key, Stripe secret) is read from env vars and gracefully
-// no-ops when missing — the endpoints persist data in all paths.
+// APNs key, Stripe secret) is read from env vars. Production KYC fails
+// closed when durable object storage is missing; the other pilot endpoints
+// persist queue/audit rows even when external dispatch providers are absent.
 
 // --- KYC document upload ----------------------------------------------------
 //
 // Accepts a raw PUT/POST body of the image bytes (Content-Type from
-// the request); persists to disk under `KYC_STORAGE_DIR` in non-production
-// only; inserts a `kyc_uploads` row; returns `{ id, storageUri }`. The
-// iOS side then calls the existing `POST /users/me/kyc-documents` with
-// the storageUri. Production refuses uploads until a durable object-store
-// adapter is implemented.
+// the request); persists to S3-compatible object storage when configured,
+// otherwise to disk under `KYC_STORAGE_DIR` in non-production only; inserts
+// a `kyc_uploads` row; returns `{ id, storageUri }`. The iOS side then calls
+// the existing `POST /users/me/kyc-documents` with the storageUri.
 
-// KYC storage. Local-disk fallback (writing to `KYC_STORAGE_DIR`) is
-// fine for development but unsafe in production:
+// KYC storage. Local-disk fallback (writing to `KYC_STORAGE_DIR`) is fine
+// for development but unsafe in production:
 //   1. PII at rest is unencrypted.
 //   2. Render's local disk is ephemeral — restarts wipe uploads.
 //   3. There's no retention policy or access audit.
-// In production we therefore refuse to accept uploads until a real durable
-// backend is wired. `KYC_S3_BUCKET` is reserved for that future adapter;
-// setting it today must not accidentally route PII into ephemeral disk.
+// In production we therefore require the S3-compatible adapter configured
+// through KYC_S3_* / AWS_* env vars.
 const KYC_STORAGE_DIR =
   process.env.KYC_STORAGE_DIR ||
   path.join(__dirname, "..", "var", "kyc");
-
-const KYC_S3_BUCKET = process.env.KYC_S3_BUCKET || "";
 
 function ensureKycDirSync() {
   try { fs.mkdirSync(KYC_STORAGE_DIR, { recursive: true }); } catch (_e) {}
@@ -1211,24 +1213,13 @@ app.post(
   // the bytes directly. The iOS side sets Content-Type to image/jpeg.
   express.raw({ type: ["image/*", "application/octet-stream"], limit: "8mb" }),
   asyncHandler(async (req, res) => {
-    // Production storage gate — never silently write PII to a local disk
-    // that will evaporate on the next deploy. A KYC_S3_BUCKET env var alone
-    // is not storage; until the uploader exists, production must fail safe.
-    if (config.isProduction) {
-      console.error("[kyc] upload refused: durable KYC object storage is not implemented");
-      res.status(503).json({ detail: "kyc_storage_unavailable" });
-      return;
-    }
-    if (KYC_S3_BUCKET) {
-      console.warn("[kyc] KYC_S3_BUCKET is set but S3 upload is not implemented; using local disk outside production");
-    }
-    if (config.isStaging && !KYC_S3_BUCKET) {
-      console.warn("[kyc] STAGING: writing PII to local disk (KYC_S3_BUCKET unset)");
-    }
-
-    const kind = String(req.query.kind || req.body?.kind || "").trim();
+    const kind = String(req.query.kind || "").toUpperCase().trim();
     if (!kind) {
       res.status(400).json({ detail: "kind query param required" });
+      return;
+    }
+    if (!KYC_DOC_KINDS.has(kind)) {
+      res.status(400).json({ detail: "invalid document kind" });
       return;
     }
     const buffer = req.body;
@@ -1247,14 +1238,24 @@ app.post(
               : contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg"
               : "bin";
 
-    // Local-disk path is reachable only outside production (the gate above
-    // blocks it there). This is for dev/staging pilots only.
-    ensureKycDirSync();
-    const filename = `${id}.${ext}`;
-    const fullPath = path.join(KYC_STORAGE_DIR, filename);
-    fs.writeFileSync(fullPath, buffer);
-
-    const storageUri = `voygo://kyc/${id}.${ext}`;
+    let storageUri;
+    if (kycObjectStorageConfigured()) {
+      const key = buildKycObjectKey({ userId: req.user.id, id, ext });
+      storageUri = await uploadKycObject({ key, body: buffer, contentType });
+    } else {
+      if (config.isProduction) {
+        res.status(503).json({ detail: "kyc_storage_unavailable" });
+        return;
+      }
+      if (config.isStaging) {
+        console.warn("[kyc] STAGING: writing PII to local disk (KYC_S3_* env vars unset)");
+      }
+      ensureKycDirSync();
+      const filename = `${id}.${ext}`;
+      const fullPath = path.join(KYC_STORAGE_DIR, filename);
+      fs.writeFileSync(fullPath, buffer);
+      storageUri = `voygo://kyc/${id}.${ext}`;
+    }
     await pool.query(
       `INSERT INTO kyc_uploads (id, user_id, kind, content_type, byte_size, storage_uri)
        VALUES ($1, $2, $3, $4, $5, $6)`,

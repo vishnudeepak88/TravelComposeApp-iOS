@@ -189,12 +189,10 @@ struct RouteDetailsView: View {
                 } else if let route = vm.route {
                     ScrollView {
                         VStack(spacing: 16) {
-                            // Abstract route diagram hero — narrative
-                            // visual that anchors the screen before the
-                            // dense info card. The diagram is decorative;
-                            // the actual map picker lives elsewhere.
-                            VRouteDiagram(
-                                stops: routeStops(for: route),
+                            // Real Apple Maps preview with pickup/drop pins
+                            // and a MapKit driving route when available.
+                            VRouteMapPreview(
+                                route: route,
                                 height: 180,
                                 accent: VPalette.success
                             )
@@ -503,20 +501,6 @@ struct RouteDetailsView: View {
         }
     }
 
-    /// Turns the route's start/pickup/drop/end into the 4-anchor stop
-    /// sequence the diagram expects. We always show origin → first
-    /// pickup → first drop → dest so the curve has its full sweep.
-    private func routeStops(for route: RecurringRoute) -> [RouteStop] {
-        var stops: [RouteStop] = [.init(label: route.startLocation, kind: .origin)]
-        if let firstPickup = route.pickupPoints.first {
-            stops.append(.init(label: firstPickup.label, kind: .stop))
-        }
-        if let firstDrop = route.dropPoints.first {
-            stops.append(.init(label: firstDrop.label, kind: .stop))
-        }
-        stops.append(.init(label: route.endLocation, kind: .dest))
-        return stops
-    }
 }
 
 private struct URLBox: Identifiable {

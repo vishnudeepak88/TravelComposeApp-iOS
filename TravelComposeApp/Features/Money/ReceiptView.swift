@@ -78,20 +78,26 @@ struct ReceiptView: View {
 
             DashedLine()
 
-            // Receipt hero: abstract route diagram in light mode.
-            // The receipt row doesn't carry pickup/drop addresses
-            // (backend doesn't thread them yet), so the diagram shows
-            // generic stop kinds and the date/booking caption sits as
-            // a kicker beneath it via the existing receipt body.
-            VRouteDiagram(
-                stops: [
-                    .init(label: "Pickup",  kind: .origin),
-                    .init(label: "Dropoff", kind: .dest)
-                ],
-                height: 140,
-                accent: VPalette.success
-            )
-            .accessibilityLabel(Text("Trip route — \(mapLabel)"))
+            if let route = resolvedRoute {
+                VRouteMapPreview(
+                    route: route,
+                    height: 140,
+                    accent: VPalette.success
+                )
+                .accessibilityLabel(Text("Trip route — \(mapLabel)"))
+            } else {
+                // Some historical payment rows are not tied to a route.
+                // Keep a graceful fallback for those receipts only.
+                VRouteDiagram(
+                    stops: [
+                        .init(label: "Pickup",  kind: .origin),
+                        .init(label: "Dropoff", kind: .dest)
+                    ],
+                    height: 140,
+                    accent: VPalette.success
+                )
+                .accessibilityLabel(Text("Trip route unavailable — \(mapLabel)"))
+            }
 
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top, spacing: 12) {
