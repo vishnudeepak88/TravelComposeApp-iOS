@@ -91,9 +91,24 @@ function maskPhone(phone, { revealed = false } = {}) {
   return `+${cc} •• ••• •${lastTwo}`;
 }
 
+function looksLikeUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    .test(String(value || "").trim());
+}
+
+function publicDriverName(...candidates) {
+  for (const candidate of candidates) {
+    const name = String(candidate || "").trim().replace(/\s+/g, " ");
+    if (name && !looksLikeUuid(name)) {
+      return name.slice(0, 80);
+    }
+  }
+  return "Voygo Driver";
+}
+
 function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null,
-                    driverPlate = null, driverColor = null, driverCarModel = null,
-                    isFavorite = false, revealPhone = false) {
+                    driverDisplayName = null, driverPlate = null, driverColor = null,
+                    driverCarModel = null, isFavorite = false, revealPhone = false) {
   const pickupPoints = points.filter((p) => p.kind === "pickup").map(mapPoint);
   const dropPoints = points.filter((p) => p.kind === "drop").map(mapPoint);
   const reliability = mapReliability(reliabilityRow);
@@ -101,7 +116,7 @@ function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null,
   return {
     id: String(routeRow.id),
     driverId: routeRow.driver_id,
-    driverName: routeRow.driver_name || routeRow.driver_id,
+    driverName: publicDriverName(driverDisplayName, routeRow.driver_name),
     // E.164 phone from users table — populated at OTP signup. We
     // ONLY reveal the unmasked number when the caller is the route's
     // driver or holds an ACTIVE subscription (computed by
@@ -184,7 +199,7 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
     reliabilityRes.rows.map((row) => [row.driver_id, row])
   );
 
-  // Pull driver phones AND vehicle identity from the users table.
+  // Pull driver profile data from the users table.
   // Vehicle lives on the driver (not per-route) so a bad actor can't
   // list one plate at search time and arrive in a different car —
   // every route DTO reflects whatever's currently on the profile.
@@ -192,17 +207,19 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
   // same mismatch that 500'd /longhaul/trips. Cast id::text on both
   // sides so Postgres doesn't error out.
   const userRes = await pool.query(
-    `SELECT id::text AS id, phone, plate_number, car_color, car_model
+    `SELECT id::text AS id, display_name, phone, plate_number, car_color, car_model
        FROM users
       WHERE id::text = ANY($1::text[])`,
     [driverIds]
   );
+  const displayNameByDriver = new Map();
   const phoneByDriver = new Map();
   const plateByDriver = new Map();
   const colorByDriver = new Map();
   const carModelByDriver = new Map();
   for (const row of userRes.rows) {
     const key = String(row.id);
+    displayNameByDriver.set(key, row.display_name || null);
     phoneByDriver.set(key, row.phone || null);
     plateByDriver.set(key, row.plate_number || null);
     colorByDriver.set(key, row.car_color || null);
@@ -275,6 +292,7 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
     const points = pointsByRoute.get(String(route.id)) || [];
     const reliabilityRow = reliabilityByDriver.get(route.driver_id) || null;
     const driverPhone = phoneByDriver.get(driverKey) || null;
+    const driverDisplayName = displayNameByDriver.get(driverKey) || null;
     const driverPlate = plateByDriver.get(driverKey) || null;
     const driverColor = colorByDriver.get(driverKey) || null;
     const driverCarModel = carModelByDriver.get(driverKey) || null;
@@ -290,6 +308,7 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
       points,
       reliabilityRow,
       driverPhone,
+      driverDisplayName,
       driverPlate,
       driverColor,
       driverCarModel,
@@ -313,7 +332,7 @@ async function createRoute(pool, payload, options = {}) {
     options.rawActiveStatus != null
       ? Boolean(options.rawActiveStatus)
       : normalizeActiveStatus(payload.activeStatus || "ACTIVE");
-  const driverName = payload.driverName || payload.driverId;
+  const driverName = publicDriverName(payload.driverName);
 
   // Vehicle identity (plate, colour, model) is intentionally NOT written
   // here — it lives on the driver's user record. Any plateNumber /
@@ -999,6 +1018,7 @@ module.exports = {
   loadRouteContexts,
   markChatThreadRead,
   maskPhone,
+  publicDriverName,
   assertChatParticipant,
   normalizeDaysOfWeek,
   normalizeActiveStatus

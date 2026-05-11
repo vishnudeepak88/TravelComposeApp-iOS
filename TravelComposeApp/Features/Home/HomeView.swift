@@ -7,9 +7,9 @@ import SwiftUI
 // tab so the first thing the rider sees is a vibrant green gradient,
 // a tappable search card, and the "Heading your way" feed — not a list.
 //
-// Drilling into the search card pushes onto the same FindCommute flow
-// the Routes tab already owns. The service grid is a marketing surface
-// for now: Carpool routes the user to Find, the others surface a
+// Drilling into the search card switches to the same FindCommute flow
+// the Search tab already owns. The service grid is a marketing surface
+// for now: Carpool routes the user to Search, the others surface a
 // "Coming soon" sheet via the same `showComingSoonFor` pattern Wallet
 // uses, so the tile is honest about what's wired up vs. on the roadmap.
 
@@ -35,9 +35,9 @@ struct HomeTab: View {
             HomeView(
                 onSearchTapped:       {
                     Telemetry.track(TelemetryEvents.homeBookARideTapped)
-                    path.append(.findRides)
+                    switchToSearchTab()
                 },
-                onCarpoolTapped:      { path.append(.findRides) },
+                onCarpoolTapped:      { switchToSearchTab() },
                 onLongHaulTapped:     { path.append(.longHaulBrowse) },
                 onSoloTapped:         { path.append(.soloPick) },
                 onOpenRoute:          { id in path.append(.routeDetails(routeId: id)) },
@@ -72,6 +72,13 @@ struct HomeTab: View {
             .navigationBarHidden(true)
             .enableSwipeBack()
         }
+    }
+
+    private func switchToSearchTab() {
+        NotificationCenter.default.post(
+            name: .voygoOpenFindRoutes,
+            object: nil
+        )
     }
 }
 

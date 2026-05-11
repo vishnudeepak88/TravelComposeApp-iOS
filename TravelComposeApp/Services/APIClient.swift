@@ -1214,9 +1214,17 @@ struct RecurringRouteDTO: Decodable {
     var reliability: DriverReliability?
     var isFavorite: Bool?
 
+    private static func publicDriverName(_ rawValue: String?) -> String {
+        let trimmed = (rawValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, UUID(uuidString: trimmed) == nil else {
+            return "Driver"
+        }
+        return trimmed
+    }
+
     func toModel() -> RecurringRoute {
         RecurringRoute(
-            id: id, driverId: driverId, driverName: driverName ?? "Driver",
+            id: id, driverId: driverId, driverName: Self.publicDriverName(driverName),
             driverPhone: driverPhone,
             driverPhoneRevealed: driverPhoneRevealed ?? false,
             startLocation: startLocation, endLocation: endLocation,

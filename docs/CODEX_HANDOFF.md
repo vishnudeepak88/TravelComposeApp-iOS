@@ -1,10 +1,19 @@
 # Codex Handoff
 
-Date: 2026-05-11
-Current goal: Fix Apple R&D audit blockers for Voygo iOS + backend.
+Date: 2026-05-12
+Current goal: Fix pilot UI/navigation issues found during real-device/simulator testing.
 Branch: main
 
 ## Completed
+- Fixed backend route driver names so account UUIDs are never stored or returned as public `driverName` fallbacks. New fallback is `Voygo Driver`; route reads now prefer `users.display_name` over stale `recurring_routes.driver_name`.
+- Added iOS defensive decoding so existing production rows whose `driverName` is a UUID render as `Driver` instead of exposing the raw identifier.
+- Fixed `voygo://routes/:id` deep links by storing a pending route id in `MainTabView` and letting `CommuteTab` consume it after the Search tab exists.
+- Fixed Home `See all` / carpool search entry so it switches to the real Search tab instead of pushing the Search screen under Home.
+- Added backend regression tests for public driver-name sanitization.
+- Verified simulator flow after fix:
+  - `/tmp/voygo-ui-captures/sim-fixed-see-all-search-tab.png`
+  - `/tmp/voygo-ui-captures/sim-fixed-route-deeplink-details.png`
+- Built, installed, and launched the fixed app on `Vishnu’s iPhone` (`com.voygo.travelcomposeapp`) using `/tmp/voygo-phone-ui-build/Build/Products/Debug-iphoneos/TravelComposeApp.app`.
 - Replaced the abstract route visuals on route detail, receipt, and live trip surfaces with `VRouteMapPreview` using Apple Maps tiles.
 - Upgraded `VRouteMapPreview` to calculate MapKit driving legs between every pickup/drop point, draw each road segment, sum road distance + ETA, and show a badge like `23.4 km · 38 min`.
 - Added graceful MapKit fallback behavior: failed legs render as dashed direct estimates and the badge switches to `Partial` or `Direct` instead of pretending the route is fully road-resolved. Partial/direct fallback shows distance only; full Apple routing shows distance + ETA.
@@ -30,6 +39,7 @@ Branch: main
 - `docs/CODEX_HANDOFF.md`
 - `TravelComposeApp.xcodeproj/project.pbxproj`
 - `TravelComposeApp/Core/RouteDiagram.swift`
+- `TravelComposeApp/Features/Home/HomeView.swift`
 - `TravelComposeApp/Features/Commute/RouteDetailsView.swift`
 - `TravelComposeApp/Info.plist`
 - `TravelComposeApp/App/AppRoute.swift`
@@ -42,7 +52,9 @@ Branch: main
 - `TravelComposeApp/Services/Telemetry.swift`
 - `backend/src/auth.js`
 - `backend/src/server.js`
+- `backend/src/repository.js`
 - `backend/test/auth.test.js`
+- `backend/test/repository.test.js`
 
 ## Commands run
 - `git status --short --branch`
@@ -60,9 +72,18 @@ Branch: main
 - `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project TravelComposeApp.xcodeproj -scheme TravelComposeApp -destination 'platform=iOS,id=00008140-001805CE0E40801C' -configuration Debug -derivedDataPath /tmp/voygo-device-build build` (passes)
 - `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl device install app --device 00008140-001805CE0E40801C /tmp/voygo-device-build/Build/Products/Debug-iphoneos/TravelComposeApp.app` (passes)
 - `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl device process launch --device 00008140-001805CE0E40801C --terminate-existing --json-output /tmp/voygo-launch.json com.voygo.travelcomposeapp` (passes, latest PID 15925)
+- `node --check src/server.js && node --test` from `backend` (passes, 9 tests)
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project TravelComposeApp.xcodeproj -scheme TravelComposeApp -destination 'generic/platform=iOS Simulator' build` (passes)
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl install BF3760C6-2FCC-4FB9-93A2-5B0E7D685124 .../TravelComposeApp.app`
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl launch BF3760C6-2FCC-4FB9-93A2-5B0E7D685124 com.voygo.travelcomposeapp`
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl openurl BF3760C6-2FCC-4FB9-93A2-5B0E7D685124 'voygo://routes/rr-dev-1'`
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project TravelComposeApp.xcodeproj -scheme TravelComposeApp -destination 'id=00008140-001805CE0E40801C' -derivedDataPath /tmp/voygo-phone-ui-build build` (passes)
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl device install app --device A7CA22FB-811C-57E3-BAE3-8BC0DA897E44 /tmp/voygo-phone-ui-build/Build/Products/Debug-iphoneos/TravelComposeApp.app` (passes)
+- `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun devicectl device process launch --device A7CA22FB-811C-57E3-BAE3-8BC0DA897E44 com.voygo.travelcomposeapp` (passes)
 
 ## Current state
 - Remaining local untracked files before this work: `.playwright-mcp/`, `form-filled.png`, `TravelComposeApp/Features/System/NotificationsView 2.swift`.
+- Current fixed flow: Home `See all` selects Search tab, and `voygo://routes/rr-dev-1` opens Search tab route-detail stack. The simulator showed `Route not found` because that specific demo route is not present after the live refresh, but the navigation destination is now correct.
 - MapKit route preview is now local/client-calculated. Backend persistence for `distanceMeters`, `durationSeconds`, and route provider is still not implemented.
 - Find Routes now requires both From and To before searching. If a route has fewer than two real coordinates, the UI shows `Map unavailable` instead of KL.
 - Important remaining blockers:

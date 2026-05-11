@@ -52,6 +52,7 @@ struct RootView: View {
 struct MainTabView: View {
     @Environment(AppStore.self) private var store
     @State private var selectedTab: VoygoTab = .home
+    @State private var pendingRouteDeepLink: String?
 
     enum VoygoTab: Int, Hashable {
         case home = 0, search = 1, calendar = 2, inbox = 3, profile = 4
@@ -96,7 +97,7 @@ struct MainTabView: View {
             .accessibilityHint("Your next commute and quick actions")
 
             Tab("Search", systemImage: "magnifyingglass", value: VoygoTab.search) {
-                CommuteTab()
+                CommuteTab(pendingRouteDeepLink: $pendingRouteDeepLink)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Search tab")
@@ -155,7 +156,13 @@ struct MainTabView: View {
         .onReceive(NotificationCenter.default.publisher(for: InboxView.openFindRoutesNotification)) { _ in
             selectedTab = .search
         }
-        .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRoute)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .voygoOpenFindRoutes)) { _ in
+            selectedTab = .search
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRoute)) { note in
+            if let routeId = note.userInfo?["routeId"] as? String {
+                pendingRouteDeepLink = routeId
+            }
             selectedTab = .search
         }
         .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRide)) { _ in
@@ -202,6 +209,7 @@ private struct SyncStatusBanner: View {
 /// can disambiguate.
 extension Notification.Name {
     static let voygoTabReselected = Notification.Name("voygo.tabReselected")
+    static let voygoOpenFindRoutes = Notification.Name("voygo.openFindRoutes")
     /// Cross-tab deep-link to a specific chat thread. Posted with userInfo
     /// `["threadId": String, "title": String]`. MainTabView switches to the
     /// Inbox tab and InboxView appends the thread to its NavigationStack
@@ -236,6 +244,7 @@ struct VoygoTabBar: View {
 
 struct CommuteTab: View {
     @State private var path: [AppRoute] = []
+    @Binding private var pendingRouteDeepLink: String?
     /// Persistent filter state owned by the tab so SearchFilters can
     /// actually write back. Previously each presentation created throw-
     /// away `Binding(get: { … }, set: { _ in })` placeholders that
@@ -245,10 +254,14 @@ struct CommuteTab: View {
     @State private var filtersLatest: String = "09:00"
     @State private var filtersDays: DaysOfWeekFlags = .weekdays
 
+    init(pendingRouteDeepLink: Binding<String?> = .constant(nil)) {
+        self._pendingRouteDeepLink = pendingRouteDeepLink
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             FindCommuteRoutesView(
-                onOpenRoute:       { path.append(.routeDetails(routeId: $0)) },
+                onOpenRoute:       { navigateToRoute($0) },
                 onMySubscriptions: { path.append(.mySubscriptions) },
                 onCreateRoute:     { path.append(.createRoute) },
                 onDriverDashboard: { path.append(.driverDashboard) }
@@ -262,14 +275,33 @@ struct CommuteTab: View {
             )
             .navigationBarHidden(true)
             .enableSwipeBack()
+            .onAppear {
+                consumePendingRouteDeepLink()
+            }
+            .onChange(of: pendingRouteDeepLink) {
+                consumePendingRouteDeepLink()
+            }
             .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRoute)) { note in
                 guard let info = note.userInfo,
                       let routeId = info["routeId"] as? String else { return }
-                // Avoid stacking duplicates if the user re-taps the same link.
-                if path.last != .routeDetails(routeId: routeId) {
-                    path.append(.routeDetails(routeId: routeId))
-                }
+                navigateToRoute(routeId)
+                pendingRouteDeepLink = nil
             }
+        }
+    }
+
+    private func consumePendingRouteDeepLink() {
+        guard let routeId = pendingRouteDeepLink else { return }
+        navigateToRoute(routeId)
+        pendingRouteDeepLink = nil
+    }
+
+    private func navigateToRoute(_ routeId: String) {
+        guard !routeId.isEmpty else { return }
+        let destination = AppRoute.routeDetails(routeId: routeId)
+        // Avoid stacking duplicates if the user re-taps the same link.
+        if path.last != destination {
+            path.append(destination)
         }
     }
 }

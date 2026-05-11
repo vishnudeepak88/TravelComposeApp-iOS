@@ -31,6 +31,7 @@ const {
   loadRouteContexts,
   markChatThreadRead,
   maskPhone,
+  publicDriverName,
   normalizeActiveStatus,
   normalizeDaysOfWeek
 } = require("./repository");
@@ -1957,12 +1958,12 @@ app.post(
     // driverName is server-derived. The previous version honoured a
     // client field which let an attacker publish a route under any
     // string they wanted ("Officer Tan"). We pull display_name from
-    // the users table and fall back to the user id.
+    // the users table and fall back to a neutral public label.
     const userRow = (await pool.query(
       "SELECT display_name FROM users WHERE id = $1",
       [req.user.id]
     )).rows[0];
-    const driverName = (userRow?.display_name || "").trim() || req.user.id;
+    const driverName = publicDriverName(userRow?.display_name);
 
     // Cap free-text fields server-side. start/end_location feeds
     // ILIKE comparisons in fan-out (notifySeatOpenedListeners) — an
@@ -2927,14 +2928,13 @@ app.post(
   rateLimitWrite,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
-    // Look up the canonical display name from the users row. Falls
-    // back to the user id if the column happens to be empty so the
-    // route still has a stable handle.
+    // Look up the canonical display name from the users row. Fall back
+    // to a neutral public label, never the account UUID.
     const userRow = (await pool.query(
       "SELECT display_name FROM users WHERE id = $1",
       [req.user.id]
     )).rows[0];
-    const driverName = (userRow?.display_name || "").trim() || req.user.id;
+    const driverName = publicDriverName(userRow?.display_name);
     const routeId = await createRoute(
       pool,
       {
