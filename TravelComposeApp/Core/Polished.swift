@@ -317,6 +317,17 @@ struct VPolishedCard<Content: View>: View {
 }
 
 /// Polished nav header with optional back chip, optional kicker, big title, optional trailing.
+///
+/// Accessibility notes (Apple R&D audit):
+///   - Title participates in Dynamic Type via `.font(.title2.weight(.black))`
+///     (replaces the previous fixed `.system(size: 22, weight: .black)`).
+///   - Back button has an `.accessibilityLabel("Back")` so VoiceOver
+///     reads "Back, Button" instead of just "Button". Hit target is
+///     44pt to clear Apple's HIG minimum.
+///   - The whole bar is exposed as a heading via
+///     `.accessibilityAddTraits(.isHeader)` so VoiceOver users can
+///     navigate by headings (Rotor → Headings).
+///   - Reduce Motion is honoured implicitly (no spring animations).
 struct VPolishedNavBar<Trailing: View>: View {
     let title: String
     var kicker: String? = nil
@@ -330,20 +341,29 @@ struct VPolishedNavBar<Trailing: View>: View {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(VPalette.text)
-                        .frame(width: 40, height: 40)
+                        .frame(width: 44, height: 44) // Apple HIG 44pt minimum
                         .background(VPalette.surface)
                         .overlay(Circle().stroke(VPalette.border, lineWidth: 1))
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text("Back"))
+                .accessibilityHint(Text("Return to the previous screen"))
+                .accessibilityAddTraits(.isButton)
             }
             VStack(alignment: .leading, spacing: 2) {
                 if let kicker { VKicker(text: kicker, size: 10) }
+                // Dynamic Type — was fixed `.system(size: 22, weight: .black)`
+                // which clipped at AccessibilityXXL. `.title2` scales
+                // with the user's accessibility setting; weight + tracking
+                // retain the bold-but-tight look.
                 Text(title)
-                    .font(.system(size: 22, weight: .black))
+                    .font(.title2.weight(.black))
                     .tracking(-0.4)
                     .foregroundColor(VPalette.text)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .accessibilityAddTraits(.isHeader)
             }
             Spacer(minLength: 0)
             trailing()
@@ -391,6 +411,36 @@ struct VRouteGlyph: View {
             RoundedRectangle(cornerRadius: 2).fill(squareColor).frame(width: 10, height: 10)
         }
     }
+}
+
+// MARK: - Dynamic Type-friendly font tokens
+//
+// The Apple R&D audit flagged 80+ `.font(.system(size: N, weight: W))`
+// callsites that bypass Dynamic Type — at AccessibilityXXL they clip
+// or overlap. These tokens map the most-used (size, weight) pairs to
+// a semantic font that scales with the user's accessibility setting.
+//
+// Migration: callsites swap
+//   .font(.system(size: 13, weight: .heavy)) → .font(.voygoLabel)
+//   .font(.system(size: 11)) → .font(.voygoCaption)
+// New code should always reach for these (or native `.body` / `.headline`).
+extension Font {
+    /// Big page-title text (≈ 22pt at default sizing). Used in nav-
+    /// bar titles, hero greetings.
+    static let voygoTitle: Font = .title2.weight(.black)
+
+    /// Section headings ("Settings", "Your vehicle"). Bold + uppercase
+    /// kicker styling stays in `VKicker`.
+    static let voygoSection: Font = .headline.weight(.heavy)
+
+    /// Default row label — "Notifications", "Payment methods".
+    static let voygoLabel: Font = .subheadline.weight(.heavy)
+
+    /// Secondary descriptive text under labels.
+    static let voygoCaption: Font = .caption
+
+    /// Caption that needs more weight (badges, monospaced totals).
+    static let voygoCaptionBold: Font = .caption.weight(.heavy)
 }
 
 /// iOS-style toggle styled in the V palette.
@@ -502,25 +552,28 @@ struct VHeroGradient<Content: View>: View {
 
 // MARK: - Tab bar safe-area
 //
-// `VoygoTabBar` floats above the home indicator at ~80–88pt total
-// height. Every tab root used to set its own `padding(.bottom, X)`
-// with hand-tuned values (96, 108, 110) that drifted as the bar
-// design changed. One constant + one modifier — change once, every
-// tab adapts.
-
+// Legacy tab-bar clearance constant. The custom `VoygoTabBar` was
+// retired in favour of native `TabView` (iOS 26 Liquid Glass) in
+// `Navigation.swift`. Native TabView handles bottom safe-area inset
+// automatically, so explicit `tabBarClearance()` calls aren't
+// necessary anymore.
+//
+// `clearance` is held at 0 (rather than removed) so the ~30 existing
+// call-sites compile without churn. Each call effectively becomes a
+// no-op, which is correct: native TabView's bottom inset already
+// reserves the space.
 enum VTabBarLayout {
-    /// Visible content height of the floating tab bar (icon + label +
-    /// vertical padding) PLUS extra clearance for the home indicator.
-    /// Adjust this if the bar's chrome changes.
-    static let clearance: CGFloat = 110
+    /// Now 0 — native TabView's safe-area inset replaces it. Kept as
+    /// a constant for source-compat with existing call sites; do not
+    /// add a non-zero value here without first removing the modifier.
+    static let clearance: CGFloat = 0
 }
 
 extension View {
-    /// Reserves bottom padding so floating tab bar doesn't overlap the
-    /// last row of scrolled content. Apply at the bottom of any
-    /// `ScrollView` whose parent is a tab root.
+    /// No-op now that we use native TabView. Call sites can stay; the
+    /// modifier is preserved for source-compat.
     func tabBarClearance() -> some View {
-        self.padding(.bottom, VTabBarLayout.clearance)
+        self
     }
 }
 

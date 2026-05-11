@@ -378,9 +378,12 @@ struct KycVerificationView: View {
                     .font(.system(size: 11))
                     .foregroundColor(VPalette.textSec)
                 Button {
-                    if let url = URL(string: "mailto:support@voygo.app?subject=KYC%20review%20stuck") {
-                        UIApplication.shared.open(url)
-                    }
+                    // Use the SafeOpen helper — `mailto:` silently
+                    // fails on devices without Mail installed (iPads,
+                    // and users who deleted Mail). The helper copies
+                    // the address to the clipboard as a fallback so
+                    // the user can paste into Gmail / Outlook / etc.
+                    SafeOpen.mailto("support@voygo.app", subject: "KYC review stuck")
                 } label: {
                     Text("Email support →")
                         .font(.system(size: 12, weight: .heavy))

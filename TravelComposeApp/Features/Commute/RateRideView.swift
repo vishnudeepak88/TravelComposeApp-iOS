@@ -74,6 +74,10 @@ struct RateRideView: View {
 
     private var stars: some View {
         VStack(spacing: 10) {
+            // Whole row is exposed as a single accessibility element
+            // with `.adjustable` trait — VoiceOver users can swipe up/
+            // down to change the rating instead of having to tap five
+            // separate buttons. Standard pattern for star raters.
             HStack(spacing: 10) {
                 ForEach(1...5, id: \.self) { i in
                     Button { rating = i } label: {
@@ -88,9 +92,22 @@ struct RateRideView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityHidden(true) // grouped on the HStack below
                 }
             }
-            Text(verdict).font(.system(size: 13, weight: .heavy)).foregroundColor(VPalette.success)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text("Ride rating"))
+            .accessibilityValue(Text("\(rating) of 5 stars"))
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: rating = min(5, rating + 1)
+                case .decrement: rating = max(1, rating - 1)
+                @unknown default: break
+                }
+            }
+            Text(verdict)
+                .font(.subheadline.weight(.heavy))
+                .foregroundColor(VPalette.success)
         }
     }
 

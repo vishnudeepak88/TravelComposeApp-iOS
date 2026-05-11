@@ -14,6 +14,8 @@
 		0F1E2D3C4B5A69788796A5B4 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */; };
 		C1A2B3D4E5F607182939A4B5 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3D4E5F607182939A4B4 /* KeychainStore.swift */; };
 		D1A2B3D4E5F607182939A001 /* Polished.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A101 /* Polished.swift */; };
+		D1A2B3D4E5F607182939A201 /* SafeURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A202 /* SafeURL.swift */; };
+		D1A2B3D4E5F607182939A301 /* FocusFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A302 /* FocusFilter.swift */; };
 		D1A2B3D4E5F607182939A002 /* WalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A102 /* WalletView.swift */; };
 		D1A2B3D4E5F607182939A003 /* TripHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A103 /* TripHistoryView.swift */; };
 		D1A2B3D4E5F607182939A004 /* ReceiptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A104 /* ReceiptView.swift */; };
@@ -52,6 +54,7 @@
 		07D37C2480054FB6B660CB1A /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01382652F995463C8E4271A4 /* Navigation.swift */; };
 1A2B3C4D5E6F708190A0B0C1 /* TravelComposeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708190A0B0C0 /* TravelComposeApp.swift */; };
 		1A2B3C4D5E6F708190A0B0C3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F708190A0B0C2 /* Assets.xcassets */; };
+		B2C3D4E5F60718CCCC0001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718CCCC0000 /* PrivacyInfo.xcprivacy */; };
 		A1B2C3D4E5F60718BBBB0001 /* LongHaul.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718AAAA0001 /* LongHaul.swift */; };
 		A1B2C3D4E5F60718BBBB0002 /* LongHaulBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718AAAA0002 /* LongHaulBrowseView.swift */; };
 		A1B2C3D4E5F60718BBBB0003 /* LongHaulTripDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718AAAA0003 /* LongHaulTripDetailView.swift */; };
@@ -70,6 +73,8 @@
 		0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		C1A2B3D4E5F607182939A4B4 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		D1A2B3D4E5F607182939A101 /* Polished.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Polished.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939A202 /* SafeURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeURL.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939A302 /* FocusFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusFilter.swift; sourceTree = "<group>"; };
 		D1A2B3D4E5F607182939A102 /* WalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletView.swift; sourceTree = "<group>"; };
 		D1A2B3D4E5F607182939A103 /* TripHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripHistoryView.swift; sourceTree = "<group>"; };
 		D1A2B3D4E5F607182939A104 /* ReceiptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReceiptView.swift; sourceTree = "<group>"; };
@@ -109,6 +114,8 @@
 		01382652F995463C8E4271A4 /* Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation.swift; sourceTree = "<group>"; };
 1A2B3C4D5E6F708190A0B0C0 /* TravelComposeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TravelComposeApp.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708190A0B0C2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B2C3D4E5F60718CCCC0000 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B2C3D4E5F60718CCCC0010 /* TravelComposeApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TravelComposeApp.entitlements; sourceTree = "<group>"; };
 		1A2B3C4D5E6F708190A0B0C4 /* TravelComposeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TravelComposeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F60718AAAA0001 /* LongHaul.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongHaul.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718AAAA0002 /* LongHaulBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LongHaulBrowseView.swift; sourceTree = "<group>"; };
@@ -149,6 +156,8 @@
 				8A68D56A52AC40A486194C16 /* Features */,
 				F1A2B3D4E5F607182939A200 /* Localizable.strings */,
 				1A2B3C4D5E6F708190A0B0C2 /* Assets.xcassets */,
+				B2C3D4E5F60718CCCC0000 /* PrivacyInfo.xcprivacy */,
+				B2C3D4E5F60718CCCC0010 /* TravelComposeApp.entitlements */,
 			);
 			path = TravelComposeApp;
 			sourceTree = "<group>";
@@ -170,6 +179,8 @@
 				AC7DA9910E6D4CA595C6D018 /* AppStore.swift */,
 				17E574B7331F4475B16CC22C /* DesignSystem.swift */,
 				D1A2B3D4E5F607182939A101 /* Polished.swift */,
+				D1A2B3D4E5F607182939A202 /* SafeURL.swift */,
+				D1A2B3D4E5F607182939A302 /* FocusFilter.swift */,
 				E1A2B3D4E5F607182939A101 /* PlaceAutocompleteField.swift */,
 				E1A2B3D4E5F607182939A102 /* TimeUtils.swift */,
 				E1A2B3D4E5F607182939A10B /* Formatters.swift */,
@@ -391,6 +402,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A2B3C4D5E6F708190A0B0C3 /* Assets.xcassets in Resources */,
+				B2C3D4E5F60718CCCC0001 /* PrivacyInfo.xcprivacy in Resources */,
 				F1A2B3D4E5F607182939A008 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -410,6 +422,8 @@
 				0F1E2D3C4B5A69788796A5B4 /* LocationService.swift in Sources */,
 				C1A2B3D4E5F607182939A4B5 /* KeychainStore.swift in Sources */,
 				D1A2B3D4E5F607182939A001 /* Polished.swift in Sources */,
+				D1A2B3D4E5F607182939A201 /* SafeURL.swift in Sources */,
+				D1A2B3D4E5F607182939A301 /* FocusFilter.swift in Sources */,
 				D1A2B3D4E5F607182939A002 /* WalletView.swift in Sources */,
 				D1A2B3D4E5F607182939A003 /* TripHistoryView.swift in Sources */,
 				D1A2B3D4E5F607182939A004 /* ReceiptView.swift in Sources */,

@@ -1341,7 +1341,7 @@ struct LiveTripView: View {
     }
 
     private var shareURL: URL {
-        URL(string: "voygo://rides/\(tripId)") ?? URL(string: "https://voygo.app")!
+        URL(string: "voygo://rides/\(tripId)") ?? URL.staticURL("https://voygo.app")
     }
 
     private var sosMessageBody: String {

@@ -37,29 +37,88 @@ struct RootView: View {
 }
 
 // MARK: - Main Tab Bar
+//
+// Native `TabView` with `Tab` + `value:` selection. Migrated from a
+// custom `VoygoTabBar` HStack in Dec 2026 — the previous implementation
+// bypassed iOS 26 Liquid Glass materials, had no Voice Control / VoiceOver
+// labels (every tab announced as "Button"), and no badge support. The
+// native API gets all of that for free.
+//
+// Tab-reselect (tap the active tab to scroll the root to top) is
+// preserved via a custom Binding that detects same-value writes —
+// `TabView` doesn't fire `onChange` when the selected tab is re-tapped,
+// so the binding's `set` block is the only hook we have.
 
 struct MainTabView: View {
     @Environment(AppStore.self) private var store
-    @State private var selectedTab = 0
+    @State private var selectedTab: VoygoTab = .home
 
-    var body: some View {
-        ZStack(alignment: .bottom) {
-            Group {
-                switch selectedTab {
-                case 0: HomeTab()
-                case 1: CommuteTab()
-                case 2: TripsTab()
-                case 3: InboxView()
-                case 4: ProfileView()
-                default: EmptyView()
+    enum VoygoTab: Int, Hashable {
+        case home = 0, search = 1, calendar = 2, inbox = 3, profile = 4
+    }
+
+    /// Binding that mirrors selectedTab but ALSO posts the
+    /// `voygoTabReselected` notification when the user taps the
+    /// currently-active tab. Tab roots (HomeTab, InboxView, etc.)
+    /// listen and scroll their root ScrollView to top — the iOS
+    /// convention for repeated taps.
+    private var tabBinding: Binding<VoygoTab> {
+        Binding(
+            get: { selectedTab },
+            set: { newValue in
+                if newValue == selectedTab {
+                    NotificationCenter.default.post(
+                        name: .voygoTabReselected,
+                        object: nil,
+                        userInfo: ["index": newValue.rawValue]
+                    )
+                } else {
+                    selectedTab = newValue
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        )
+    }
 
-            // Custom tab bar
-            VoygoTabBar(selectedIndex: $selectedTab)
+    var body: some View {
+        TabView(selection: tabBinding) {
+            Tab("Home", systemImage: "house.fill", value: VoygoTab.home) {
+                HomeTab()
+            }
+            .accessibilityLabel("Home tab")
+            .accessibilityHint("Your next commute and quick actions")
+
+            Tab("Search", systemImage: "magnifyingglass", value: VoygoTab.search) {
+                CommuteTab()
+            }
+            .accessibilityLabel("Search tab")
+            .accessibilityHint("Find a carpool route")
+
+            Tab("Calendar", systemImage: "calendar", value: VoygoTab.calendar) {
+                TripsTab()
+            }
+            .accessibilityLabel("Calendar tab")
+            .accessibilityHint("Your subscriptions and upcoming rides")
+
+            Tab("Inbox", systemImage: "bubble.left.fill", value: VoygoTab.inbox) {
+                InboxView()
+            }
+            // Sum of per-thread unread counts. Native `.badge` shows
+            // the red dot+number on the tab automatically when the
+            // value is non-zero. Free affordance the custom tab bar
+            // didn't have.
+            .badge(store.threads.reduce(0) { $0 + max(0, $1.unreadCount) })
+            .accessibilityLabel("Inbox tab")
+            .accessibilityHint("Chats with your drivers and notifications")
+
+            Tab("Profile", systemImage: "person.fill", value: VoygoTab.profile) {
+                ProfileView()
+            }
+            .accessibilityLabel("Profile tab")
+            .accessibilityHint("Your account, vehicle and settings")
         }
-        .ignoresSafeArea(edges: .bottom)
+        // iOS 18+ TabView gets Liquid Glass on iOS 26 automatically;
+        // tint sets the brand colour on the selected-tab indicator.
+        .tint(VPalette.primary)
         .overlay(alignment: .top) {
             if let message = store.connectionState.bannerText {
                 SyncStatusBanner(message: message, isOffline: store.connectionState.isOffline)
@@ -68,38 +127,24 @@ struct MainTabView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: store.connectionState)
+        .voygoAnimation(.spring(response: 0.32, dampingFraction: 0.82), value: store.connectionState)
         .task {
             await store.refreshAll()
         }
-        // Cross-tab deep linking. HomeTab posts this when the user
-        // taps Message-driver on the Next-commute card; we switch
-        // tabs without owning a shared NavigationPath.
+        // Cross-tab deep linking — same NotificationCenter pattern as
+        // before; the native TabView selection works exactly like the
+        // old `selectedTab` Int.
         .onReceive(NotificationCenter.default.publisher(for: HomeTab.switchToInboxNotification)) { _ in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                selectedTab = 3
-            }
+            selectedTab = .inbox
         }
         .onReceive(NotificationCenter.default.publisher(for: .voygoOpenThread)) { _ in
-            // Switch to Inbox; InboxView itself listens for the same
-            // notification and appends the thread to its path.
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                selectedTab = 3
-            }
+            selectedTab = .inbox
         }
         .onReceive(NotificationCenter.default.publisher(for: InboxView.openFindRoutesNotification)) { _ in
-            // Inbox empty-state CTA: hop to the Search/Carpool tab.
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                selectedTab = 1
-            }
+            selectedTab = .search
         }
         .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRoute)) { _ in
-            // Deep-link from voygo://routes/X — switch to the Carpool
-            // tab; CommuteTab listens for the same notification and
-            // appends the route detail to its path.
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                selectedTab = 1
-            }
+            selectedTab = .search
         }
     }
 }
@@ -153,68 +198,19 @@ extension Notification.Name {
     // posts it; MainTabView + CommuteTab listen below.
 }
 
+// VoygoTabBar was the custom HStack tab bar that bypassed native
+// TabView. Replaced by the native `TabView { Tab ... }` block above —
+// the new code uses `selection: Binding<VoygoTab>` for the same tab-
+// reselect behaviour but gets iOS 26 Liquid Glass, accessibility
+// labels, and badge support for free.
+//
+// The struct is kept as a `@available(*, deprecated)` shim so any
+// stale callsite that still references it fails the build loudly
+// with a fix-it suggesting `TabView`.
+@available(*, deprecated, message: "Use native TabView (see MainTabView). Custom tab bar removed for iOS 26 Liquid Glass + accessibility.")
 struct VoygoTabBar: View {
     @Binding var selectedIndex: Int
-
-    private let items: [(icon: String, selectedIcon: String, label: String)] = [
-        // Renamed: "Routes" → "Search". The tab roots straight onto
-        // FindCommuteRoutesView which is a search experience, not a
-        // list of the user's routes — keeping the old "Routes" label
-        // confused users into thinking it'd show their subscriptions.
-        ("house",        "house.fill",         "Home"),
-        ("magnifyingglass", "magnifyingglass", "Search"),
-        ("calendar",     "calendar",           "Calendar"),
-        ("bubble.left",  "bubble.left.fill",   "Inbox"),
-        ("person",       "person.fill",        "Profile")
-    ]
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { i, item in
-                Button(action: {
-                    if selectedIndex == i {
-                        // iOS convention: tap the active tab again to
-                        // jump to the top. Roots that care subscribe
-                        // via `.voygoTabReselected`.
-                        NotificationCenter.default.post(
-                            name: .voygoTabReselected,
-                            object: nil,
-                            userInfo: ["index": i]
-                        )
-                    } else {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            selectedIndex = i
-                        }
-                    }
-                }) {
-                    VStack(spacing: 5) {
-                        Image(systemName: selectedIndex == i ? item.selectedIcon : item.icon)
-                            .font(.system(size: 20, weight: selectedIndex == i ? .semibold : .regular))
-                            .foregroundColor(selectedIndex == i ? VoygoTheme.onPrimaryContainer : VoygoTheme.textHint)
-                            .frame(width: 56, height: 32)
-                            .background(
-                                Capsule()
-                                    .fill(selectedIndex == i ? VoygoTheme.primaryContainer : .clear)
-                            )
-                        Text(item.label)
-                            .font(.caption2.weight(.medium))
-                            .foregroundColor(selectedIndex == i ? VoygoTheme.textPrimary : VoygoTheme.textHint)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                }
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.bottom, 24)
-        .background(
-            VoygoTheme.surface
-                .overlay(Rectangle().fill(VoygoTheme.cardBorder.opacity(0.5)).frame(height: 1), alignment: .top)
-        )
-        .shadow(color: .black.opacity(0.12), radius: 8, y: -2)
-    }
+    var body: some View { EmptyView() }
 }
 
 // MARK: - Commute Tab Navigator

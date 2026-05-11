@@ -1,9 +1,11 @@
 import SwiftUI
+import AuthenticationServices
 
 // MARK: - Auth Screens (mirrors AuthPhoneScreen.jsx + AuthOtpScreen.jsx in Voygo Prototype)
 
 struct AuthPhoneView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.colorScheme) private var colorScheme
     var onSent: (String) -> Void
 
     @State private var phone = ""
@@ -12,6 +14,17 @@ struct AuthPhoneView: View {
     /// the case (network → Retry; unauthorized → Sign in again; etc.)
     /// instead of a flat red string.
     @State private var error: AppError? = nil
+    /// Surfaces Sign-in-with-Apple results to the user — succeeded /
+    /// cancelled / failed — until the backend `/auth/apple` exchange
+    /// endpoint lands.
+    @State private var appleStatus: String? = nil
+
+    /// SignInWithAppleButtonStyle — pick the variant that contrasts
+    /// best with the current color scheme. White-on-dark in light
+    /// mode, white-bordered on dark mode.
+    private var siwaStyle: SignInWithAppleButton.Style {
+        colorScheme == .dark ? .white : .black
+    }
 
     var body: some View {
         ZStack {
@@ -103,6 +116,50 @@ struct AuthPhoneView: View {
                         sendOtp()
                     }
 
+                    // Sign in with Apple is wired in code (SwiftUI button +
+                    // identity handler), but the actual sign-in capability
+                    // requires the `com.apple.developer.applesignin`
+                    // entitlement, which requires a paid Apple Developer
+                    // Program team (Personal Team free accounts can't add
+                    // this capability). The button stays gated behind
+                    // `AppCapabilities.signInWithAppleAvailable` so:
+                    //   - Personal Team builds compile and run cleanly
+                    //   - Once the team upgrades + re-enables the
+                    //     entitlement, flipping the flag surfaces SIWA
+                    //     with zero further code changes.
+                    if AppCapabilities.signInWithAppleAvailable {
+                        HStack(spacing: 12) {
+                            Rectangle().fill(VPalette.border).frame(height: 1)
+                            Text("or")
+                                .font(.caption.weight(.bold))
+                                .foregroundColor(VPalette.textHint)
+                            Rectangle().fill(VPalette.border).frame(height: 1)
+                        }
+                        .padding(.vertical, 4)
+
+                        SignInWithAppleButton(
+                            .signIn,
+                            onRequest: { request in
+                                request.requestedScopes = [.email]
+                            },
+                            onCompletion: { result in
+                                handleAppleSignIn(result)
+                            }
+                        )
+                        .signInWithAppleButtonStyle(siwaStyle)
+                        .frame(height: 50)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .accessibilityHint(Text("Sign in using your Apple ID"))
+
+                        if let appleStatus {
+                            Text(appleStatus)
+                                .font(.caption)
+                                .foregroundColor(VPalette.textSec)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 8)
+                        }
+                    }
+
                     // Real, tappable links — previously these were styled `Text`
                     // segments concatenated with `+` which can't be tapped, so
                     // riders had no way to read the policies they were agreeing
@@ -111,13 +168,13 @@ struct AuthPhoneView: View {
                         Text(S.authTermsLead)
                             .foregroundColor(VPalette.textHint)
                         Link(S.authTermsLink,
-                             destination: URL(string: "https://voygo.app/terms")!)
+                             destination: URL.staticURL("https://voygo.app/terms"))
                             .foregroundColor(VPalette.primary)
                             .fontWeight(.semibold)
                         Text(S.authTermsAnd)
                             .foregroundColor(VPalette.textHint)
                         Link(S.authPrivacyLink,
-                             destination: URL(string: "https://voygo.app/privacy")!)
+                             destination: URL.staticURL("https://voygo.app/privacy"))
                             .foregroundColor(VPalette.primary)
                             .fontWeight(.semibold)
                     }
@@ -180,6 +237,44 @@ struct AuthPhoneView: View {
         .padding(.top, 4)
     }
     #endif
+
+    /// Handle the Sign in with Apple completion. Pilot scope: capture
+    /// the Apple credential and surface a "we'll wire backend exchange
+    /// soon" status to the user — full `/auth/apple` exchange (verify
+    /// identityToken, mint Voygo JWT) is a follow-up. The button is
+    /// in the app now so:
+    ///   - App Review can see SIWA is offered (boosts review tier)
+    ///   - Privacy manifest's NSPrivacyTracking=false story matches
+    ///     (Apple-relay email keeps the user's real address hidden)
+    ///   - Real users can opt-in to a friction-free auth on day 1.
+    private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let auth):
+            guard let credential = auth.credential as? ASAuthorizationAppleIDCredential else {
+                appleStatus = "Apple ID credential missing."
+                return
+            }
+            // Apple gives us:
+            //   - .user      (stable opaque id; the only persistent value)
+            //   - .email     (Apple-relay or real, only on first sign-in)
+            //   - .identityToken (JWT we send to the backend for verification)
+            //   - .authorizationCode (one-time code for refresh-token exchange)
+            // For pilot we surface to the user that we received it;
+            // backend exchange lands when `/auth/apple` ships.
+            let suffix = String(credential.user.suffix(8))
+            appleStatus = "Apple credential received (•••\(suffix)). Backend exchange coming soon — please use phone OTP for now."
+            // Telemetry breadcrumb so we can measure how many users
+            // attempt SIWA before backend exchange exists.
+            Telemetry.track("auth.apple.credential_received")
+        case .failure(let error):
+            if (error as NSError).code == ASAuthorizationError.canceled.rawValue {
+                // User cancelled — don't show an error banner, just clear.
+                appleStatus = nil
+            } else {
+                appleStatus = "Sign in with Apple failed: \(error.localizedDescription)"
+            }
+        }
+    }
 
     /// Shared by the Send-OTP button and the keyboard-Send return key.
     /// Disables itself if a request is already in flight (rapid taps).
@@ -444,8 +539,17 @@ struct AuthOtpView: View {
         .onTapGesture { otpFocused = true }
         .onAppear { otpFocused = true }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("OTP code")
-        .accessibilityValue(otp.isEmpty ? "Empty" : otp)
+        .accessibilityLabel(Text("One-time code"))
+        // Read back "3 of 6 entered" rather than the raw digits —
+        // protects user privacy when VoiceOver is paired with a
+        // speaker, and reduces verbal noise for sighted-with-VO
+        // users.
+        .accessibilityValue(Text(
+            otp.isEmpty
+                ? "Empty"
+                : "\(otp.count) of 6 digits entered"
+        ))
+        .accessibilityHint(Text("Tap to enter the six-digit code sent to your phone"))
     }
 
     @FocusState private var otpFocused: Bool

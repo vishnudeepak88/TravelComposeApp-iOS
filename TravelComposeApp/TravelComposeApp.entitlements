@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+        Sign in with Apple capability. Required for the
+        SignInWithAppleButton to actually complete an authorization
+        rather than failing with ASAuthorizationError.unknown.
+        Automatic-signing builds re-issue the provisioning profile
+        with this capability on next archive/build.
+    -->
+    <key>com.apple.developer.applesignin</key>
+    <array>
+        <string>Default</string>
+    </array>
+
+    <!--
+        APS environment for the push-notification registration that
+        already lives in `PushRegistration.swift`. `development` is
+        the right default for TestFlight + Debug; App Store builds
+        flip this to `production` via the release entitlements
+        layer (build settings already handle this).
+    -->
+    <key>aps-environment</key>
+    <string>development</string>
+</dict>
+</plist>
