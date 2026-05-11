@@ -58,6 +58,11 @@ enum CommuteSortOption: String, CaseIterable, Identifiable {
     var selectedOfficeLat: Double? = nil
     var selectedOfficeLng: Double? = nil
 
+    var hasCompleteSearchCriteria: Bool {
+        !homeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        && !officeQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// True when both home coords are known — drives whether the walk
     /// distance pill on each result card is shown (the backend's
     /// fallback constant when no coord is provided isn't worth
@@ -171,8 +176,16 @@ enum CommuteSortOption: String, CaseIterable, Identifiable {
         }
     }
 
-    func searchRoutes() {
+    func searchRoutes(showValidation: Bool = true) {
         guard let store else { return }
+        guard hasCompleteSearchCriteria else {
+            results = []
+            isSearching = false
+            if showValidation {
+                errorMessage = "Enter both From and To before searching routes."
+            }
+            return
+        }
         isSearching = true
         errorMessage = nil
         clearDropdowns()
@@ -482,7 +495,9 @@ struct FindCommuteRoutesView: View {
             // returning rider sees their corridor in the input fields
             // and gets their personalised results, not the demo defaults.
             await vm.restoreSavedSearch()
-            vm.searchRoutes()
+            if vm.hasCompleteSearchCriteria {
+                vm.searchRoutes(showValidation: false)
+            }
         }
         .sheet(isPresented: $showRequestSheet) {
             RequestRouteSheet(

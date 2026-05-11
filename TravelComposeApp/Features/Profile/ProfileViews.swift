@@ -768,6 +768,14 @@ struct LiveTripView: View {
         return stops
     }
 
+    private var liveMapCoordinate: CLLocationCoordinate2D? {
+        guard let live = store.liveLocation(for: tripId),
+              Date().timeIntervalSince(live.recordedAt) < 60 else {
+            return nil
+        }
+        return CLLocationCoordinate2D(latitude: live.lat, longitude: live.lng)
+    }
+
     /// Vehicle line under the driver row. Uses `carType.label` until
     /// the model carries a plate or vehicle nickname.
     private var driverCarLabel: String {
@@ -792,16 +800,22 @@ struct LiveTripView: View {
 
             VStack(spacing: 0) {
                 ZStack(alignment: .top) {
-                    // Stylised abstract route diagram instead of the
-                    // legacy faux-map. The tracking screen wants the
-                    // narrative version (curving polyline + city blocks)
-                    // — the actual GPS dot is overlaid below.
-                    VRouteDiagram(
-                        stops: liveTripStops,
-                        height: 360,
-                        accent: VPalette.primary,
-                        dark: true
-                    )
+                    if let route {
+                        VRouteMapPreview(
+                            route: route,
+                            height: 360,
+                            accent: VPalette.primary,
+                            liveCoordinate: liveMapCoordinate,
+                            cornerRadius: 0
+                        )
+                    } else {
+                        VRouteDiagram(
+                            stops: liveTripStops,
+                            height: 360,
+                            accent: VPalette.primary,
+                            dark: true
+                        )
+                    }
 
                     HStack {
                         Button(action: onBack) {
@@ -842,45 +856,20 @@ struct LiveTripView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 54)
 
-                    // GPS dot — animates along the abstract diagram
-                    // based on real driver progress when an SSE
-                    // sample is in. We compute progress as a 0…1
-                    // value from the driver's lat/lng vs. the
-                    // route's pickup/drop bounds; idle position is
-                    // the previous "47% × 55%" demo midpoint.
-                    GeometryReader { geo in
-                        let progress = liveProgressFraction()
-                        ZStack {
-                            Circle().fill(VPalette.primary).frame(width: 30, height: 30)
-                                .overlay(Circle().stroke(.white, lineWidth: 3))
-                                .shadow(color: VPalette.primary.opacity(0.5), radius: 12, y: 4)
-                            Image(systemName: "car.fill")
-                                .font(.footnote.weight(.bold))
-                                .foregroundColor(.white)
+                    if liveMapCoordinate != nil {
+                        HStack(spacing: 5) {
+                            Circle().fill(VPalette.success).frame(width: 6, height: 6)
+                            Text("Live driver location")
+                                .font(.caption2.weight(.black))
+                                .tracking(0.4)
                         }
-                        .position(
-                            x: geo.size.width  * (0.10 + 0.80 * progress),
-                            y: geo.size.height * (0.85 - 0.70 * progress)
-                        )
-                        .animation(.easeOut(duration: 0.6), value: progress)
-                        // "Live" pill when we have a fresh SSE sample.
-                        if let live = store.liveLocation(for: tripId),
-                           Date().timeIntervalSince(live.recordedAt) < 60 {
-                            HStack(spacing: 4) {
-                                Circle().fill(VPalette.success).frame(width: 6, height: 6)
-                                Text("Live")
-                                    .font(.caption2.weight(.black))
-                                    .tracking(0.6)
-                                    .foregroundColor(.white)
-                            }
-                            .padding(.horizontal, 8).padding(.vertical, 3)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Capsule())
-                            .position(
-                                x: geo.size.width  * (0.10 + 0.80 * progress),
-                                y: geo.size.height * (0.85 - 0.70 * progress) - 26
-                            )
-                        }
+                        .foregroundColor(VPalette.text)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Capsule())
+                        .shadow(color: .black.opacity(0.12), radius: 8, y: 4)
+                        .padding(.top, 106)
                     }
                 }
                 .frame(height: 360)

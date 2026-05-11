@@ -240,7 +240,7 @@ struct CommuteTab: View {
     /// actually write back. Previously each presentation created throw-
     /// away `Binding(get: { … }, set: { _ in })` placeholders that
     /// silently discarded edits.
-    @State private var filtersQuery: String = "Subang Jaya → KLCC"
+    @State private var filtersQuery: String = ""
     @State private var filtersEarliest: String = "06:30"
     @State private var filtersLatest: String = "09:00"
     @State private var filtersDays: DaysOfWeekFlags = .weekdays
