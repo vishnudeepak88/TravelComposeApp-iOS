@@ -747,6 +747,25 @@ async function appendChatMessage(pool, threadId, text, sender = "ME") {
     [threadId, String(sender)]
   );
 
+  // Look up the thread's route + the OTHER participants so the
+  // server can push a CHAT_MESSAGE notification per recipient.
+  // Returning these alongside the DTO keeps the notification policy
+  // in server.js (where createNotification + APNs hookup live)
+  // without leaking the notifications table into the data layer.
+  const recipientRes = await pool.query(
+    `SELECT user_id
+       FROM chat_participants
+      WHERE thread_id = $1 AND user_id <> $2`,
+    [threadId, String(sender)]
+  );
+  const threadRes = await pool.query(
+    `SELECT route_id, title FROM chat_threads WHERE id = $1`,
+    [threadId]
+  );
+  const recipients = recipientRes.rows.map((row) => String(row.user_id));
+  const routeId = threadRes.rows[0]?.route_id ? String(threadRes.rows[0].route_id) : null;
+  const threadTitle = threadRes.rows[0]?.title || null;
+
   // Return the DTO shape the iOS client expects so callers can
   // reconcile their optimistic local row with the server-assigned id.
   return {
@@ -754,7 +773,8 @@ async function appendChatMessage(pool, threadId, text, sender = "ME") {
     threadId: String(threadId),
     sender: "ME",
     text: trimmedText,
-    timestamp: Number(timestampMs)
+    timestamp: Number(timestampMs),
+    _notify: { recipients, routeId, threadTitle }
   };
 }
 

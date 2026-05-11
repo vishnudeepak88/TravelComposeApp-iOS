@@ -435,8 +435,38 @@ final class AppStore {
         guard useOnline, isAuthenticated else { return }
         do {
             let rows = try await VoygoAPIClient.listNotifications(limit: 50)
+            // If a fresh batch of notifications includes a CHAT_MESSAGE
+            // newer than what we'd already seen, also refresh the threads
+            // list. Without this the Inbox kicker + per-row unread
+            // badges stay stale until the user pulls to refresh.
+            let previousLatestChatAt = notifications
+                .filter { $0.type == "CHAT_MESSAGE" }
+                .map(\.createdAt)
+                .max() ?? .distantPast
             notifications = rows
             notificationsTick &+= 1
+            let newestChatAt = rows
+                .filter { $0.type == "CHAT_MESSAGE" }
+                .map(\.createdAt)
+                .max() ?? .distantPast
+            if newestChatAt > previousLatestChatAt {
+                await refreshThreads()
+            }
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal — leave existing list in place.
+        }
+    }
+
+    /// Pulls just the chat-threads list (without the heavier refreshAll).
+    /// Used when a CHAT_MESSAGE notification arrives — the messages list
+    /// inside ChatThreadView already polls itself; this hook keeps the
+    /// Inbox tab's thread rows + unread badges fresh.
+    func refreshThreads() async {
+        guard useOnline, isAuthenticated else { return }
+        do {
+            threads = try await VoygoAPIClient.getThreads()
         } catch APIError.unauthorized {
             clearSession()
         } catch {

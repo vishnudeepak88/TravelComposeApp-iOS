@@ -4,6 +4,11 @@ import SwiftUI
 
 struct InboxView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
+    /// Drives the empty-state CTA. Posted via NotificationCenter rather
+    /// than passed down because Inbox is a tab root and doesn't own a
+    /// shared NavigationPath with the other tabs.
+    static let openFindRoutesNotification = Notification.Name("voygo.inbox.findRoutes")
     /// Path-based stack so the chat thread can use the same custom
     /// VPolishedNavBar pattern as the rest of the app, instead of the
     /// system blue back arrow that came with the legacy NavigationLink.
@@ -21,8 +26,22 @@ struct InboxView: View {
                     VPolishedNavBar(title: "Inbox", kicker: inboxKicker)
 
                     if store.threads.isEmpty {
-                        EmptyStateView(icon: "bubble.left.and.bubble.right",
-                                       title: "No messages", subtitle: "Your commute chats will appear here").frame(maxHeight: .infinity)
+                        EmptyStateView(
+                            icon: "bubble.left.and.bubble.right",
+                            title: "No messages",
+                            subtitle: "Subscribe to a route or post a long-haul trip — chats appear here once you're matched with a driver or rider.",
+                            ctaLabel: "Find a route",
+                            ctaAction: {
+                                // Pull-through to Carpool tab via the existing
+                                // tab-reselect notification pattern. MainTabView
+                                // listens and switches selectedTab to 1 (Search).
+                                NotificationCenter.default.post(
+                                    name: InboxView.openFindRoutesNotification,
+                                    object: nil
+                                )
+                            }
+                        )
+                        .frame(maxHeight: .infinity)
                     } else {
                         ScrollViewReader { proxy in
                             ScrollView {
@@ -71,7 +90,26 @@ struct InboxView: View {
             .enableSwipeBack()
         }
         .task {
+            // Initial fetch + periodic poll while the Inbox tab is on
+            // screen. Without this loop, threads + unread counts only
+            // update on pull-to-refresh / app open — a reply from the
+            // driver wouldn't surface until the user happened to swipe
+            // down. 8s is slow enough to be polite on battery and
+            // fast enough that "where's my reply?" doesn't happen.
             await store.refreshAll()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                if Task.isCancelled { break }
+                await store.refreshThreads()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Foreground refresh — closing/reopening the app, or
+            // returning from a push-notification tap, should not
+            // require pulling to refresh to see new threads.
+            if phase == .active {
+                Task { await store.refreshThreads() }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .voygoOpenThread)) { note in
             guard let info = note.userInfo,

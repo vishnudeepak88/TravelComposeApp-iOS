@@ -87,6 +87,12 @@ struct MainTabView: View {
                 selectedTab = 3
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: InboxView.openFindRoutesNotification)) { _ in
+            // Inbox empty-state CTA: hop to the Search/Carpool tab.
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                selectedTab = 1
+            }
+        }
     }
 }
 

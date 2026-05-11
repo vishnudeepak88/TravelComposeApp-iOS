@@ -2011,6 +2011,28 @@ app.post(
       return;
     }
     const message = await appendChatMessage(pool, req.params.threadId, text, req.user.id);
+
+    // Push a CHAT_MESSAGE notification to every OTHER participant in
+    // the thread. Without this, replies are invisible until the
+    // recipient happens to open the Inbox tab — fine for testing,
+    // a complaint for real users. The notification carries the
+    // route_id so iOS's existing voygoOpenThread deep-link lookup
+    // works (Home tap → thread).
+    const notify = message._notify || { recipients: [], routeId: null, threadTitle: null };
+    const preview = text.length > 80 ? text.slice(0, 80) + "…" : text;
+    for (const recipientId of notify.recipients) {
+      await createNotification({
+        userId: recipientId,
+        type: "CHAT_MESSAGE",
+        title: notify.threadTitle || "New message",
+        body: preview,
+        routeId: notify.routeId
+      });
+    }
+
+    // Strip the internal `_notify` field from the wire response so the
+    // shape stays exactly what the iOS ChatMessage decoder expects.
+    delete message._notify;
     // Returning the persisted DTO (id + timestamp) lets the iOS
     // client reconcile its optimistic local row with the
     // server-assigned id, instead of clobbering the optimistic
