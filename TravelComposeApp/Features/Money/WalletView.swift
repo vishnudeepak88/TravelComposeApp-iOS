@@ -90,7 +90,7 @@ struct WalletView: View {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
                 VPolishedNavBar(title: "Wallet", kicker: "Payments & credits", onBack: onBack) {
-                    Button {} label: {
+                    Button { showComingSoonFor = "Wallet export" } label: {
                         Image(systemName: "arrow.up.right")
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(VPalette.text)

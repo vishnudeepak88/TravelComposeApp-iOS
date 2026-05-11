@@ -379,7 +379,9 @@ app.post(
     const userRes = await pool.query(
       `INSERT INTO users (id, phone)
        VALUES ($1, $2)
-       ON CONFLICT (phone) DO UPDATE SET updated_at = NOW()
+       ON CONFLICT (phone) DO UPDATE
+          SET updated_at = NOW(),
+              deleted_at = NULL
        RETURNING id, phone, display_name, kyc_status`,
       [crypto.randomUUID(), phone]
     );
@@ -590,7 +592,8 @@ app.get(
       pushEnabled: prefs.pushEnabled !== false,             // default ON
       phoneVisibleToSubscribers: prefs.phoneVisibleToSubscribers !== false, // default ON
       biometricLock: prefs.biometricLock === true,          // default OFF
-      marketingEmails: prefs.marketingEmails === true       // default OFF (PDPA: opt-in)
+      marketingEmails: prefs.marketingEmails === true,      // default OFF (PDPA: opt-in)
+      analyticsEnabled: prefs.analyticsEnabled !== false    // default ON, user can opt out
     });
   })
 );
@@ -604,7 +607,13 @@ app.put(
     // Whitelist the keys we accept. A future toggle gets added to
     // this list explicitly — prevents a malicious client from
     // injecting arbitrary preference keys.
-    const allowed = ["pushEnabled", "phoneVisibleToSubscribers", "biometricLock", "marketingEmails"];
+    const allowed = [
+      "pushEnabled",
+      "phoneVisibleToSubscribers",
+      "biometricLock",
+      "marketingEmails",
+      "analyticsEnabled"
+    ];
     const patch = {};
     for (const key of allowed) {
       if (typeof body[key] === "boolean") patch[key] = body[key];
@@ -741,7 +750,7 @@ app.post(
     }
     res.json({
       scheduledFor: new Date(Date.now() + 30 * 86_400_000).toISOString(),
-      message: "Account deletion scheduled. Sign in again within 30 days to cancel."
+      message: "Account deletion scheduled. Sign in again within 30 days to cancel deletion. Paused subscriptions and routes stay paused until you resume them."
     });
   })
 );
@@ -780,10 +789,7 @@ app.post(
 // scoped to one transition only: the user attests they have uploaded
 // their documents and is requesting review (status moves to PENDING).
 //
-// APPROVED / REJECTED are reachable only via an admin/provider path
-// — TODO: ship that admin endpoint behind requireAdmin once the
-// trust & safety review tool exists. Until then, status flips to
-// APPROVED happen via direct DB update by ops.
+// APPROVED / REJECTED are reachable only through the admin endpoints below.
 app.post(
   "/users/me/kyc/submit",
   requireAuth,
@@ -810,6 +816,99 @@ app.post(
       [req.user.id]
     );
     res.json({ kycStatus: after.rows[0]?.kyc_status || "PENDING" });
+  })
+);
+
+app.get(
+  "/admin/kyc/pending",
+  requireAdmin,
+  asyncHandler(async (_req, res) => {
+    const result = await pool.query(
+      `SELECT u.id, u.phone, u.display_name, u.kyc_status,
+              json_agg(
+                json_build_object(
+                  'id', d.id,
+                  'kind', d.kind,
+                  'storageUrl', d.storage_url,
+                  'uploadedAt', d.uploaded_at,
+                  'verifiedAt', d.verified_at,
+                  'rejectionReason', d.rejection_reason
+                )
+                ORDER BY d.uploaded_at DESC
+              ) FILTER (WHERE d.id IS NOT NULL) AS documents
+         FROM users u
+         LEFT JOIN kyc_documents d ON d.user_id = u.id::text
+        WHERE u.kyc_status = 'PENDING'
+        GROUP BY u.id, u.phone, u.display_name, u.kyc_status
+        ORDER BY MIN(d.uploaded_at) ASC NULLS LAST, u.updated_at ASC
+        LIMIT 100`
+    );
+    res.json(result.rows.map((row) => ({
+      userId: String(row.id),
+      phone: maskPhoneForLog(row.phone),
+      displayName: row.display_name || "",
+      kycStatus: row.kyc_status || "PENDING",
+      documents: row.documents || []
+    })));
+  })
+);
+
+app.post(
+  "/admin/kyc/:userId/decision",
+  requireAdmin,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const userId = String(req.params.userId || "").trim();
+    const decision = String(req.body?.decision || "").trim().toUpperCase();
+    const reason = String(req.body?.reason || "").trim().slice(0, 500);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId)) {
+      res.status(400).json({ detail: "invalid_user_id" });
+      return;
+    }
+    if (!["APPROVED", "REJECTED"].includes(decision)) {
+      res.status(400).json({ detail: "decision must be APPROVED or REJECTED" });
+      return;
+    }
+    if (decision === "REJECTED" && !reason) {
+      res.status(400).json({ detail: "rejection reason required" });
+      return;
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const userRes = await client.query(
+        "UPDATE users SET kyc_status = $2, updated_at = NOW() WHERE id = $1 RETURNING id, kyc_status",
+        [userId, decision]
+      );
+      if (userRes.rowCount === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ detail: "user_not_found" });
+        return;
+      }
+      if (decision === "APPROVED") {
+        await client.query(
+          `UPDATE kyc_documents
+              SET verified_at = NOW(), rejection_reason = NULL
+            WHERE user_id = $1`,
+          [userId]
+        );
+      } else {
+        await client.query(
+          `UPDATE kyc_documents
+              SET verified_at = NULL, rejection_reason = $2
+            WHERE user_id = $1`,
+          [userId, reason]
+        );
+      }
+      await client.query("COMMIT");
+      res.json({ userId, kycStatus: decision });
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
   })
 );
 
@@ -1081,23 +1180,20 @@ app.get(
 // --- KYC document upload ----------------------------------------------------
 //
 // Accepts a raw PUT/POST body of the image bytes (Content-Type from
-// the request); persists to disk under `KYC_STORAGE_DIR` (default
-// `<repo>/var/kyc`); inserts a `kyc_uploads` row; returns
-// `{ id, storageUri }`. The iOS side then calls the existing
-// `POST /users/me/kyc-documents` with the storageUri. Real S3 lands
-// here when `KYC_S3_BUCKET` is set; same response shape so iOS
-// doesn't need to know which backend.
+// the request); persists to disk under `KYC_STORAGE_DIR` in non-production
+// only; inserts a `kyc_uploads` row; returns `{ id, storageUri }`. The
+// iOS side then calls the existing `POST /users/me/kyc-documents` with
+// the storageUri. Production refuses uploads until a durable object-store
+// adapter is implemented.
 
 // KYC storage. Local-disk fallback (writing to `KYC_STORAGE_DIR`) is
 // fine for development but unsafe in production:
 //   1. PII at rest is unencrypted.
 //   2. Render's local disk is ephemeral — restarts wipe uploads.
 //   3. There's no retention policy or access audit.
-// In production we therefore require either a real durable backend
-// (S3 today; same env contract as the document signer ops will swap
-// in) or the endpoint refuses to accept uploads with 503. Any future
-// S3 path lands behind `KYC_S3_BUCKET`; until that's wired we fail
-// loud rather than pretend.
+// In production we therefore refuse to accept uploads until a real durable
+// backend is wired. `KYC_S3_BUCKET` is reserved for that future adapter;
+// setting it today must not accidentally route PII into ephemeral disk.
 const KYC_STORAGE_DIR =
   process.env.KYC_STORAGE_DIR ||
   path.join(__dirname, "..", "var", "kyc");
@@ -1115,14 +1211,16 @@ app.post(
   // the bytes directly. The iOS side sets Content-Type to image/jpeg.
   express.raw({ type: ["image/*", "application/octet-stream"], limit: "8mb" }),
   asyncHandler(async (req, res) => {
-    // Production storage gate — never silently write PII to a local
-    // disk that will evaporate on the next deploy. Staging is allowed
-    // to use local disk for pre-launch testing, but we log every
-    // upload so the team can audit what landed where.
-    if (config.isProduction && !KYC_S3_BUCKET) {
-      console.error("[kyc] upload refused: KYC_S3_BUCKET unset in production");
-      res.status(503).json({ detail: "kyc_storage_unconfigured" });
+    // Production storage gate — never silently write PII to a local disk
+    // that will evaporate on the next deploy. A KYC_S3_BUCKET env var alone
+    // is not storage; until the uploader exists, production must fail safe.
+    if (config.isProduction) {
+      console.error("[kyc] upload refused: durable KYC object storage is not implemented");
+      res.status(503).json({ detail: "kyc_storage_unavailable" });
       return;
+    }
+    if (KYC_S3_BUCKET) {
+      console.warn("[kyc] KYC_S3_BUCKET is set but S3 upload is not implemented; using local disk outside production");
     }
     if (config.isStaging && !KYC_S3_BUCKET) {
       console.warn("[kyc] STAGING: writing PII to local disk (KYC_S3_BUCKET unset)");
@@ -1149,10 +1247,8 @@ app.post(
               : contentType.includes("jpeg") || contentType.includes("jpg") ? "jpg"
               : "bin";
 
-    // Local-disk path is reachable only outside production (the gate
-    // above blocks it there). When the S3 bucket is wired this branch
-    // gets replaced with a real upload — the response shape is
-    // unchanged so iOS doesn't need to know which backend served it.
+    // Local-disk path is reachable only outside production (the gate above
+    // blocks it there). This is for dev/staging pilots only.
     ensureKycDirSync();
     const filename = `${id}.${ext}`;
     const fullPath = path.join(KYC_STORAGE_DIR, filename);
@@ -1175,10 +1271,12 @@ app.post(
   "/safety/sos",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const rideId = req.body?.rideId ? String(req.body.rideId) : null;
-    const routeId = req.body?.routeId ? String(req.body.routeId) : null;
-    const lat = req.body?.lat != null ? Number(req.body.lat) : null;
-    const lng = req.body?.lng != null ? Number(req.body.lng) : null;
+    const rideId = req.body?.rideId ? String(req.body.rideId).slice(0, 80) : null;
+    const routeId = req.body?.routeId ? String(req.body.routeId).slice(0, 80) : null;
+    const parsedLat = req.body?.lat != null ? Number(req.body.lat) : null;
+    const parsedLng = req.body?.lng != null ? Number(req.body.lng) : null;
+    const lat = Number.isFinite(parsedLat) ? parsedLat : null;
+    const lng = Number.isFinite(parsedLng) ? parsedLng : null;
     const message = String(req.body?.message || "").slice(0, 4000);
 
     const id = crypto.randomUUID();
@@ -1188,15 +1286,61 @@ app.post(
       [id, req.user.id, rideId, routeId, lat, lng, message]
     );
 
-    // Real dispatch (Twilio SMS to ops on-call, PagerDuty page) is
-    // env-gated. Without `SAFETY_PAGERDUTY_KEY` / `SAFETY_TWILIO_*`
-    // we still persist the alert so support sees it in the queue.
-    // TODO: wire dispatchers when the env vars land.
     const dispatchedTo = [];
-    if (process.env.SAFETY_PAGERDUTY_KEY) dispatchedTo.push("pagerduty");
-    if (process.env.SAFETY_TWILIO_NUMBER) dispatchedTo.push("twilio");
+    const dispatchFailures = [];
+    const summary = [
+      `Voygo SOS ${id}`,
+      `user=${req.user.id}`,
+      rideId ? `ride=${rideId}` : null,
+      routeId ? `route=${routeId}` : null,
+      Number.isFinite(lat) && Number.isFinite(lng) ? `loc=${lat},${lng}` : null
+    ].filter(Boolean).join(" · ");
 
-    res.status(201).json({ alertId: id, status: "OPEN", dispatchedTo });
+    if (process.env.SAFETY_TWILIO_NUMBER) {
+      if (!smsConfigured()) {
+        dispatchFailures.push("twilio_unconfigured");
+      } else {
+        const sms = await sendSms({
+          to: process.env.SAFETY_TWILIO_NUMBER,
+          body: `${summary}\n\n${message.slice(0, 900)}`
+        });
+        if (sms.ok) dispatchedTo.push("twilio");
+        else dispatchFailures.push(`twilio_${sms.reason || "failed"}`);
+      }
+    }
+
+    if (process.env.SAFETY_PAGERDUTY_KEY) {
+      try {
+        const pd = await fetch("https://events.pagerduty.com/v2/enqueue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            routing_key: process.env.SAFETY_PAGERDUTY_KEY,
+            event_action: "trigger",
+            dedup_key: `voygo-sos-${id}`,
+            payload: {
+              summary,
+              severity: "critical",
+              source: "voygo-api",
+              custom_details: { alertId: id, userId: req.user.id, rideId, routeId, lat, lng, message }
+            }
+          })
+        });
+        if (pd.ok) dispatchedTo.push("pagerduty");
+        else dispatchFailures.push(`pagerduty_${pd.status}`);
+      } catch (_err) {
+        dispatchFailures.push("pagerduty_network");
+      }
+    }
+
+    const opsNotified = dispatchedTo.length > 0;
+    res.status(201).json({
+      alertId: id,
+      status: opsNotified ? "DISPATCHED" : "OPEN",
+      dispatchedTo,
+      dispatchFailures,
+      opsNotified
+    });
   })
 );
 
@@ -1553,6 +1697,17 @@ app.post(
     if (events.length === 0 || events.length > 50) {
       res.status(204).end();
       return;
+    }
+    if (userId) {
+      const prefRes = await pool.query(
+        "SELECT preferences FROM users WHERE id = $1 LIMIT 1",
+        [userId]
+      );
+      const prefs = prefRes.rows[0]?.preferences || {};
+      if (prefs.analyticsEnabled === false) {
+        res.status(204).end();
+        return;
+      }
     }
     const sessionId = typeof body.session_id === "string" ? body.session_id.slice(0, 64) : null;
     const appVersion = typeof body.app_version === "string" ? body.app_version.slice(0, 32) : null;

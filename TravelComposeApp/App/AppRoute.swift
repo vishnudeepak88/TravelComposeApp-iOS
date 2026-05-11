@@ -94,12 +94,11 @@ struct AppRouteDestinations: ViewModifier {
                     onBack: { if !path.isEmpty { path.removeLast() } },
                     onSubscribed: { bookingId in
                         // Land on the celebratory confirmation screen.
-                        let routeName = "USJ 9 LRT"
-                        let driverName = "your driver"
+                        let context = bookingConfirmationContext(routeId: id, subscriptionId: bookingId)
                         path.append(.bookingConfirmed(
                             bookingId: bookingId,
-                            pickup: routeName,
-                            driverName: driverName
+                            pickup: context.pickup,
+                            driverName: context.driverName
                         ))
                     },
                     onBookSolo: { _ in
@@ -166,7 +165,7 @@ struct AppRouteDestinations: ViewModifier {
                     tripId: id,
                     isDriver: isDriver,
                     onBack: { if !path.isEmpty { path.removeLast() } },
-                    onMessageDriver: nil,
+                    onMessageDriver: { openTripThread(for: id) },
                     onEndTrip: { rideId, routeId, driverId, initial, name, summary in
                         // Real driver/route values from LiveTrip's
                         // store lookup — were previously hardcoded
@@ -364,6 +363,47 @@ struct AppRouteDestinations: ViewModifier {
                 )
                 .navigationBarHidden(true)
             }
+        }
+    }
+
+    private func bookingConfirmationContext(routeId: String, subscriptionId: String) -> (pickup: String, driverName: String) {
+        if let subscription = store.subscriptions.first(where: { $0.id == subscriptionId }) {
+            let route = store.routes.first { $0.id == subscription.routeId }
+            return (
+                pickup: subscription.selectedPickupPoint.label,
+                driverName: route?.driverName ?? "your driver"
+            )
+        }
+
+        if let route = store.routes.first(where: { $0.id == routeId }) {
+            return (
+                pickup: route.pickupPoints.first?.label ?? route.startLocation,
+                driverName: route.driverName
+            )
+        }
+
+        return (pickup: "your pickup", driverName: "your driver")
+    }
+
+    private func openTripThread(for tripId: String) {
+        let routeId = store.rideInstances.first(where: { $0.id == tripId })?.routeId
+        let thread = store.threads.first { thread in
+            if thread.tripId == tripId { return true }
+            if let routeId { return thread.tripId == routeId }
+            return false
+        }
+
+        if let thread {
+            NotificationCenter.default.post(
+                name: .voygoOpenThread,
+                object: nil,
+                userInfo: ["threadId": thread.id, "title": thread.title]
+            )
+        } else {
+            NotificationCenter.default.post(
+                name: HomeTab.switchToInboxNotification,
+                object: nil
+            )
         }
     }
 }

@@ -898,6 +898,24 @@ struct UserPreferencesDTO: Decodable {
     var phoneVisibleToSubscribers: Bool
     var biometricLock: Bool
     var marketingEmails: Bool
+    var analyticsEnabled: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case pushEnabled
+        case phoneVisibleToSubscribers
+        case biometricLock
+        case marketingEmails
+        case analyticsEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        pushEnabled = try container.decodeIfPresent(Bool.self, forKey: .pushEnabled) ?? true
+        phoneVisibleToSubscribers = try container.decodeIfPresent(Bool.self, forKey: .phoneVisibleToSubscribers) ?? true
+        biometricLock = try container.decodeIfPresent(Bool.self, forKey: .biometricLock) ?? false
+        marketingEmails = try container.decodeIfPresent(Bool.self, forKey: .marketingEmails) ?? false
+        analyticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .analyticsEnabled) ?? true
+    }
 }
 
 struct UpdatePreferencesRequest: Encodable {
@@ -905,6 +923,7 @@ struct UpdatePreferencesRequest: Encodable {
     var phoneVisibleToSubscribers: Bool?
     var biometricLock: Bool?
     var marketingEmails: Bool?
+    var analyticsEnabled: Bool?
 }
 
 struct BlockedUserDTO: Decodable, Identifiable, Equatable {
@@ -1320,6 +1339,8 @@ struct SafetyAlertResponse: Decodable, Equatable {
     var alertId: String
     var status: String
     var dispatchedTo: [String]
+    var dispatchFailures: [String]?
+    var opsNotified: Bool?
 }
 
 struct RegisterDeviceRequest: Encodable {

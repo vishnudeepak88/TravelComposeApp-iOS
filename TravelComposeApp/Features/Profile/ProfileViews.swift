@@ -735,6 +735,16 @@ struct PrivacySecurityView: View {
                         set: { update(.marketingEmails, $0) }
                     )
                 )
+                divider()
+                preferenceToggle(
+                    icon: "chart.bar.doc.horizontal.fill", color: VPalette.accentPurple,
+                    title: "Product analytics",
+                    subtitle: "Share usage events that help improve reliability and route matching",
+                    isOn: Binding(
+                        get: { prefs?.analyticsEnabled ?? TelemetryConsent.isEnabled },
+                        set: { update(.analyticsEnabled, $0) }
+                    )
+                )
             }
             .background(VPalette.surface)
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
@@ -896,7 +906,7 @@ struct PrivacySecurityView: View {
     // MARK: - Network
 
     private enum PrefField {
-        case pushEnabled, phoneVisibleToSubscribers, biometricLock, marketingEmails
+        case pushEnabled, phoneVisibleToSubscribers, biometricLock, marketingEmails, analyticsEnabled
     }
 
     private func load() async {
@@ -905,6 +915,9 @@ struct PrivacySecurityView: View {
         async let blocksResult = (try? await VoygoAPIClient.listBlocks()) ?? []
         prefs = await prefsResult
         blocks = await blocksResult
+        if let prefs {
+            TelemetryConsent.isEnabled = prefs.analyticsEnabled
+        }
         isLoading = false
         if prefs == nil { errorMessage = "Couldn't load preferences." }
     }
@@ -918,14 +931,19 @@ struct PrivacySecurityView: View {
         case .phoneVisibleToSubscribers:  current.phoneVisibleToSubscribers = newValue
         case .biometricLock:              current.biometricLock = newValue
         case .marketingEmails:            current.marketingEmails = newValue
+        case .analyticsEnabled:           current.analyticsEnabled = newValue
         }
         prefs = current
+        if field == .analyticsEnabled {
+            TelemetryConsent.isEnabled = newValue
+        }
         var patch = UpdatePreferencesRequest.empty
         switch field {
         case .pushEnabled:                patch.pushEnabled = newValue
         case .phoneVisibleToSubscribers:  patch.phoneVisibleToSubscribers = newValue
         case .biometricLock:              patch.biometricLock = newValue
         case .marketingEmails:            patch.marketingEmails = newValue
+        case .analyticsEnabled:           patch.analyticsEnabled = newValue
         }
         Task {
             do {
@@ -933,6 +951,9 @@ struct PrivacySecurityView: View {
             } catch {
                 await MainActor.run {
                     prefs = previous
+                    if field == .analyticsEnabled {
+                        TelemetryConsent.isEnabled = previous.analyticsEnabled
+                    }
                     errorMessage = "Couldn't save preference. Try again."
                 }
             }
@@ -985,7 +1006,13 @@ struct PrivacySecurityView: View {
 // at every call site is noisy.
 private extension UpdatePreferencesRequest {
     static var empty: UpdatePreferencesRequest {
-        UpdatePreferencesRequest(pushEnabled: nil, phoneVisibleToSubscribers: nil, biometricLock: nil, marketingEmails: nil)
+        UpdatePreferencesRequest(
+            pushEnabled: nil,
+            phoneVisibleToSubscribers: nil,
+            biometricLock: nil,
+            marketingEmails: nil,
+            analyticsEnabled: nil
+        )
     }
 }
 
@@ -1076,6 +1103,8 @@ struct LiveTripView: View {
     @State private var dropoffConfirmed = false
     @State private var sosPressed = false
     @State private var showSOSAlert = false
+    @State private var sosNotice: String? = nil
+    @State private var sosNoticeIsError = false
     @State private var showShareSheet = false
     @State private var showSOSMessageComposer = false
     /// Live ETA in minutes. Computed from the live driver location +
@@ -1202,7 +1231,7 @@ struct LiveTripView: View {
 
                         Spacer()
 
-                        Button {} label: {
+                        Button { showShareSheet = true } label: {
                             Image(systemName: "square.and.arrow.up")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundColor(VPalette.text)
@@ -1286,18 +1315,16 @@ struct LiveTripView: View {
             Button("Compose SMS", role: .destructive) {
                 sosPressed = true
                 // Two channels in parallel:
-                //   1. System SMS composer pre-filled — instant for
-                //      the rider's own contacts.
-                //   2. POST /safety/sos — server records the alert
-                //      and (when env-configured) pages on-call ops.
-                // Either path delivering value is enough; we don't
-                // gate the composer on the network call.
+                //   1. System SMS composer pre-filled for the rider's own
+                //      trusted contact.
+                //   2. POST /safety/sos — server records the alert and
+                //      reports whether ops dispatch is configured.
                 showSOSMessageComposer = true
                 Task { await postSafetyAlert() }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Opens Messages with your live trip details so you can send to your emergency contacts. Voygo Safety is also notified.")
+            Text("Opens Messages with your trip details and asks Voygo to record an SOS alert. If ops dispatch is configured, the server will notify the safety team too.")
         }
         .sheet(isPresented: $showShareSheet) {
             // Share-my-ride: ActivityViewController with a deep link.
@@ -1456,10 +1483,26 @@ struct LiveTripView: View {
             .background(VPalette.surfaceHigh)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 
+            if let sosNotice {
+                HStack(spacing: 8) {
+                    Image(systemName: sosNoticeIsError ? "exclamationmark.triangle.fill" : "checkmark.shield.fill")
+                        .foregroundColor(sosNoticeIsError ? VPalette.danger : VPalette.success)
+                    Text(sosNotice)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(VPalette.textSec)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(12)
+                .background((sosNoticeIsError ? VPalette.dangerContainer : VPalette.successContainer).opacity(0.7))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.top, 12)
+            }
+
             Button { showSOSAlert = true } label: {
                 HStack(spacing: 8) {
-                    Text("🆘").font(.system(size: 18))
-                    Text("Hold for SOS")
+                    Text("SOS").font(.system(size: 18, weight: .black))
+                    Text("Send SOS")
                         .font(.system(size: 14, weight: .black))
                         .tracking(0.3)
                 }
@@ -1612,9 +1655,10 @@ struct LiveTripView: View {
 
     // MARK: - Safety alert post
 
-    /// Best-effort POST to /safety/sos. Failure isn't surfaced to the
-    /// user — the SMS composer is the rider's primary lifeline; the
-    /// backend persistence is the ops-side double-check.
+    /// POSTs to /safety/sos and surfaces whether server-side ops dispatch
+    /// actually happened. The SMS composer remains the rider's direct
+    /// channel, but we no longer pretend the backend notified ops when it
+    /// only queued the row.
     private func postSafetyAlert() async {
         let live = store.liveLocation(for: tripId)
         Telemetry.track(TelemetryEvents.liveTripSosTapped, [
@@ -1622,15 +1666,23 @@ struct LiveTripView: View {
             "has_live_location": .bool(live != nil)
         ])
         do {
-            _ = try await VoygoAPIClient.reportSafetyAlert(
+            let response = try await VoygoAPIClient.reportSafetyAlert(
                 rideId: tripId,
                 routeId: route?.id,
                 lat: live?.lat,
                 lng: live?.lng,
                 message: sosMessageBody
             )
+            if response.opsNotified == true || !response.dispatchedTo.isEmpty {
+                sosNotice = "Voygo Safety notified via \(response.dispatchedTo.joined(separator: ", "))."
+                sosNoticeIsError = false
+            } else {
+                sosNotice = "SOS saved for support review. Send the SMS too, because live ops dispatch is not configured."
+                sosNoticeIsError = true
+            }
         } catch {
-            // non-fatal
+            sosNotice = "Couldn't reach Voygo Safety. Send the SMS now and contact support when safe."
+            sosNoticeIsError = true
         }
     }
 
