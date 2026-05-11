@@ -309,6 +309,70 @@ async function initSchema(pool) {
     )
   `);
 
+  // Route requests — riders flag interest in a corridor that nobody
+  // is currently serving. Drivers see "12 people want Air Itam →
+  // Bayan Lepas" as a strong signal to spin up that route. Closes
+  // the cold-start liquidity gap: search returns 0, rider posts an
+  // interest, the system tracks demand.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS route_requests (
+      id              UUID PRIMARY KEY,
+      rider_id        TEXT NOT NULL,
+      origin          TEXT NOT NULL,
+      destination     TEXT NOT NULL,
+      origin_lat      DOUBLE PRECISION NULL,
+      origin_lng      DOUBLE PRECISION NULL,
+      dest_lat        DOUBLE PRECISION NULL,
+      dest_lng        DOUBLE PRECISION NULL,
+      preferred_time  TEXT NULL,
+      days_of_week    JSONB NOT NULL DEFAULT '{}'::jsonb,
+      notes           TEXT NOT NULL DEFAULT '',
+      status          TEXT NOT NULL DEFAULT 'OPEN',
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query("CREATE INDEX IF NOT EXISTS ix_route_requests_rider ON route_requests(rider_id, created_at DESC)");
+  await pool.query("CREATE INDEX IF NOT EXISTS ix_route_requests_status ON route_requests(status, created_at DESC)");
+
+  // Route favorites — saved-for-later list. Lets riders compare a few
+  // routes before subscribing or come back to one they liked.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS route_favorites (
+      route_id    UUID NOT NULL REFERENCES recurring_routes(id) ON DELETE CASCADE,
+      rider_id    TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (route_id, rider_id)
+    )
+  `);
+  await pool.query("CREATE INDEX IF NOT EXISTS ix_route_favorites_rider ON route_favorites(rider_id, created_at DESC)");
+
+  // Plate + car color on recurring_routes — surfaced on the rider
+  // search card so a rider waiting at the pickup point can identify
+  // the right vehicle. Idempotent ALTERs so the migration is safe
+  // on existing deploys.
+  await pool.query("ALTER TABLE recurring_routes ADD COLUMN IF NOT EXISTS plate_number TEXT NULL");
+  await pool.query("ALTER TABLE recurring_routes ADD COLUMN IF NOT EXISTS car_color TEXT NULL");
+
+  // Saved searches — rider's daily commute query. Persist on the
+  // server so it's available across devices (the iOS side mirrors
+  // to UserDefaults for fast first-paint).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS commute_saved_searches (
+      rider_id           TEXT PRIMARY KEY,
+      origin_label       TEXT NOT NULL,
+      destination_label  TEXT NOT NULL,
+      origin_lat         DOUBLE PRECISION NULL,
+      origin_lng         DOUBLE PRECISION NULL,
+      dest_lat           DOUBLE PRECISION NULL,
+      dest_lng           DOUBLE PRECISION NULL,
+      earliest_time      TEXT NOT NULL DEFAULT '06:30',
+      latest_time        TEXT NOT NULL DEFAULT '09:00',
+      days_of_week       JSONB NOT NULL DEFAULT '{}'::jsonb,
+      max_price_myr      INTEGER NULL,
+      updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
   // Long-haul: one-off inter-city trips. Orthogonal to recurring_routes
   // — riders book a single seat for a specific datetime rather than
   // subscribing to a weekday cadence. Drivers post these as

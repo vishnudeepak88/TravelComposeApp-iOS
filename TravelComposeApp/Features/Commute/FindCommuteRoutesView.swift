@@ -3,6 +3,17 @@ import CoreLocation
 
 // MARK: - Find Commute Routes (mirrors FindCommuteRoutesScreen.kt)
 
+/// How the search results list is ordered. Stored alongside the
+/// filter state in the VM so toggling between modes doesn't trigger
+/// a server round-trip.
+enum CommuteSortOption: String, CaseIterable, Identifiable {
+    case bestMatch  = "Best match"
+    case cheapest   = "Cheapest"
+    case closest    = "Closest pickup"
+    case reliable   = "Most reliable"
+    var id: String { rawValue }
+}
+
 @MainActor
 @Observable final class FindCommuteRoutesViewModel {
     var homeQuery = ""
@@ -13,15 +24,26 @@ import CoreLocation
     var officeLoading = false
     var earliestTime = "07:00"
     var latestTime   = "09:30"
+    /// Day-of-week filter, default Mon–Fri. Routes that don't run on
+    /// any of the rider's chosen days are dropped server-side.
+    var daysOfWeek: DaysOfWeekFlags = .weekdays
+    /// Budget cap (RM/seat). `nil` means no cap.
+    var maxPriceMyr: Int? = nil
+    /// Sort order — applied client-side over the server's match result.
+    var sortBy: CommuteSortOption = .bestMatch
     var results: [CommuteRouteMatchResult] = []
     var isSearching = false
     var isLocatingHome = false
     var errorMessage: String? = nil
 
-    private var selectedHomeLat: Double? = nil
-    private var selectedHomeLng: Double? = nil
-    private var selectedOfficeLat: Double? = nil
-    private var selectedOfficeLng: Double? = nil
+    /// True when the VM hydrated its query state from a saved search.
+    /// View uses this to short-circuit the "first paint empty" look.
+    var hasRestoredSavedSearch = false
+
+    var selectedHomeLat: Double? = nil
+    var selectedHomeLng: Double? = nil
+    var selectedOfficeLat: Double? = nil
+    var selectedOfficeLng: Double? = nil
     private var suppressNextHomeChange = false
     private var suppressNextOfficeChange = false
 
@@ -144,13 +166,130 @@ import CoreLocation
                 homeLat: selectedHomeLat,
                 homeLng: selectedHomeLng,
                 officeLat: selectedOfficeLat,
-                officeLng: selectedOfficeLng
+                officeLng: selectedOfficeLng,
+                daysOfWeek: daysOfWeek,
+                maxPriceMyr: maxPriceMyr
             )
-            self.results = results
+            self.results = applySort(to: results)
             self.isSearching = false
+            // Persist the successful search so the next launch can
+            // hydrate the form without the rider re-typing.
+            await persistSavedSearch()
         }
     }
 
+    /// Client-side sort applied over server-returned matches.
+    func applySort(to source: [CommuteRouteMatchResult]) -> [CommuteRouteMatchResult] {
+        switch sortBy {
+        case .bestMatch:
+            return source.sorted { $0.rankingScore > $1.rankingScore }
+        case .cheapest:
+            return source.sorted { $0.route.pricePerSeat < $1.route.pricePerSeat }
+        case .closest:
+            return source.sorted { $0.pickupDistanceMeters < $1.pickupDistanceMeters }
+        case .reliable:
+            return source.sorted { $0.route.reliability.onTimeRate > $1.route.reliability.onTimeRate }
+        }
+    }
+
+    /// Re-applies the current sort to the existing result list without
+    /// re-fetching. Used when the rider taps a different sort chip.
+    func restortResults() {
+        results = applySort(to: results)
+    }
+
+    /// Persistence — saved-search round-trip + UserDefaults mirror.
+    func persistSavedSearch() async {
+        guard let store else { return }
+        let payload = SavedSearchPayload(
+            originLabel: homeQuery,
+            destinationLabel: officeQuery,
+            originLat: selectedHomeLat,
+            originLng: selectedHomeLng,
+            destLat: selectedOfficeLat,
+            destLng: selectedOfficeLng,
+            earliestTime: earliestTime,
+            latestTime: latestTime,
+            daysOfWeek: daysOfWeek.asDictionary,
+            maxPriceMyr: maxPriceMyr
+        )
+        await store.saveSearch(payload)
+        if let data = try? JSONEncoder().encode(payload) {
+            UserDefaults.standard.set(data, forKey: "voygo.commute.savedSearch")
+        }
+    }
+
+    /// Loads the rider's saved search — UserDefaults first for instant
+    /// first-paint, server-confirm in the background to pick up
+    /// cross-device updates.
+    func restoreSavedSearch() async {
+        if hasRestoredSavedSearch { return }
+        hasRestoredSavedSearch = true
+        if let data = UserDefaults.standard.data(forKey: "voygo.commute.savedSearch"),
+           let payload = try? JSONDecoder().decode(SavedSearchPayload.self, from: data) {
+            apply(savedSearch: payload)
+        }
+        if let store, let remote = await store.loadSavedSearch() {
+            apply(savedSearch: remote)
+        }
+    }
+
+    private func apply(savedSearch payload: SavedSearchPayload) {
+        homeQuery = payload.originLabel
+        officeQuery = payload.destinationLabel
+        selectedHomeLat = payload.originLat
+        selectedHomeLng = payload.originLng
+        selectedOfficeLat = payload.destLat
+        selectedOfficeLng = payload.destLng
+        earliestTime = payload.earliestTime
+        latestTime = payload.latestTime
+        if let dict = payload.daysOfWeek {
+            daysOfWeek = DaysOfWeekFlags.fromDictionary(dict)
+        }
+        maxPriceMyr = payload.maxPriceMyr
+    }
+
+    func applyPopularCorridor(_ corridor: PopularCorridor) {
+        suppressNextHomeChange = true
+        suppressNextOfficeChange = true
+        homeQuery = corridor.origin
+        officeQuery = corridor.destination
+        selectedHomeLat = corridor.originLat
+        selectedHomeLng = corridor.originLng
+        selectedOfficeLat = corridor.destLat
+        selectedOfficeLng = corridor.destLng
+        homeSuggestions = []
+        officeSuggestions = []
+        searchRoutes()
+    }
+}
+
+/// Pre-canned Penang commute corridors — surfaced as one-tap chips
+/// above the search panel so a fresh rider gets to results in two
+/// taps instead of typing.
+struct PopularCorridor: Identifiable, Equatable {
+    let id = UUID()
+    let origin: String
+    let destination: String
+    let originLat: Double
+    let originLng: Double
+    let destLat: Double
+    let destLng: Double
+
+    static let penangPicks: [PopularCorridor] = [
+        PopularCorridor(origin: "Air Itam",       destination: "Bayan Lepas FIZ",
+                        originLat: 5.4036, originLng: 100.2730, destLat: 5.3267, destLng: 100.2787),
+        PopularCorridor(origin: "Butterworth",    destination: "Komtar",
+                        originLat: 5.4014, originLng: 100.3623, destLat: 5.4148, destLng: 100.3299),
+        PopularCorridor(origin: "USM",            destination: "Bayan Lepas FIZ",
+                        originLat: 5.3556, originLng: 100.3015, destLat: 5.3267, destLng: 100.2787),
+        PopularCorridor(origin: "Tanjung Tokong", destination: "Bayan Lepas FIZ",
+                        originLat: 5.4564, originLng: 100.3052, destLat: 5.3267, destLng: 100.2787),
+        PopularCorridor(origin: "Penang Sentral", destination: "Komtar",
+                        originLat: 5.4014, originLng: 100.3623, destLat: 5.4148, destLng: 100.3299),
+        PopularCorridor(origin: "Gelugor",        destination: "Penang Airport",
+                        originLat: 5.3556, originLng: 100.3015, destLat: 5.2974, destLng: 100.2734)
+    ]
 }
 
 struct FindCommuteRoutesView: View {
@@ -165,6 +304,8 @@ struct FindCommuteRoutesView: View {
     /// where the tab bar is the way out. Drives whether the hero shows
     /// a back chevron.
     var onBack: (() -> Void)? = nil
+
+    @State private var showRequestSheet = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -181,6 +322,15 @@ struct FindCommuteRoutesView: View {
 
                         modeRail
                             .padding(.horizontal, 16)
+
+                        // Popular Penang corridors — one-tap pre-canned
+                        // searches so a fresh rider can hit results in 2
+                        // taps instead of typing two locations.
+                        PopularCorridorsRow(corridors: PopularCorridor.penangPicks) { corridor in
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                            vm.applyPopularCorridor(corridor)
+                        }
+                        .padding(.horizontal, 16)
 
                         MapsStyleCommuteSearchPanel(
                             homeQuery: $vm.homeQuery,
@@ -208,6 +358,23 @@ struct FindCommuteRoutesView: View {
                         )
                         .padding(.horizontal, 16)
 
+                        // Day-of-week + price + sort filters. Wired so
+                        // any change re-runs the server search (debounced
+                        // implicitly via the search button + onChange).
+                        CommuteFiltersBar(
+                            days: $vm.daysOfWeek,
+                            maxPriceMyr: $vm.maxPriceMyr,
+                            sortBy: $vm.sortBy,
+                            onChange: { changedSort in
+                                if changedSort {
+                                    vm.restortResults()
+                                } else {
+                                    vm.searchRoutes()
+                                }
+                            }
+                        )
+                        .padding(.horizontal, 16)
+
                         if !vm.results.isEmpty || vm.isSearching {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
@@ -228,12 +395,39 @@ struct FindCommuteRoutesView: View {
                         if vm.isSearching {
                             LoadingView().frame(height: 200)
                         } else if vm.results.isEmpty && (!vm.homeQuery.isEmpty || !vm.officeQuery.isEmpty) {
-                            EmptyStateView(icon: "map.fill", title: "No routes found",
-                                           subtitle: "Try adjusting your locations or departure window")
-                                .frame(height: 220)
+                            // Productive empty state — three concrete next
+                            // steps instead of a dead-end "No routes found"
+                            // message. Auto-expand widens the time window;
+                            // Request route flags interest; Reset clears.
+                            CommuteEmptyState(
+                                onWiden: {
+                                    vm.earliestTime = "06:00"
+                                    vm.latestTime   = "10:00"
+                                    vm.searchRoutes()
+                                },
+                                onRequest: {
+                                    showRequestSheet = true
+                                },
+                                onReset: {
+                                    vm.daysOfWeek = .weekdays
+                                    vm.maxPriceMyr = nil
+                                    vm.searchRoutes()
+                                }
+                            )
+                            .padding(.horizontal, 16)
                         } else {
                             ForEach(Array(vm.results.enumerated()), id: \.element.id) { index, match in
-                                PolishedRouteCard(match: match, accentSeed: index, onTap: { onOpenRoute(match.route.id) })
+                                PolishedRouteCard(
+                                    match: match,
+                                    accentSeed: index,
+                                    onTap: { onOpenRoute(match.route.id) },
+                                    onToggleFavorite: {
+                                        Task { await store.toggleFavorite(routeId: match.route.id) }
+                                    },
+                                    onShare: {
+                                        shareRoute(match.route)
+                                    }
+                                )
                                     .padding(.horizontal, 16)
                             }
                         }
@@ -254,7 +448,45 @@ struct FindCommuteRoutesView: View {
                 }
             }
         }
-        .onAppear { vm.store = store; vm.searchRoutes() }
+        .onAppear { vm.store = store }
+        .task {
+            // Hydrate saved search before the initial search runs so a
+            // returning rider sees their corridor in the input fields
+            // and gets their personalised results, not the demo defaults.
+            await vm.restoreSavedSearch()
+            vm.searchRoutes()
+        }
+        .sheet(isPresented: $showRequestSheet) {
+            RequestRouteSheet(
+                initialOrigin: vm.homeQuery,
+                initialDestination: vm.officeQuery,
+                initialDays: vm.daysOfWeek,
+                onSubmit: { payload in
+                    let result = await store.postRouteRequest(payload)
+                    if case .success = result { showRequestSheet = false }
+                    return result
+                }
+            )
+            .presentationDetents([.fraction(0.55), .large])
+        }
+    }
+
+    /// Share-route handler — presents the system share sheet with a
+    /// human-readable summary + a deep link the recipient can tap to
+    /// open the same route in Voygo. Deep link uses the existing
+    /// `voygo://` URL scheme (already registered for Billplz returns).
+    private func shareRoute(_ route: RecurringRoute) {
+        let deepLink = "voygo://routes/\(route.id)"
+        let text = """
+        \(route.startLocation) → \(route.endLocation) on Voygo
+        \(route.departureTime) · RM \(route.pricePerSeat)/seat · driver \(route.driverName)
+        \(deepLink)
+        """
+        let activity = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.windows.first?.rootViewController?
+            .present(activity, animated: true)
     }
 
     private var homeHero: some View {
@@ -391,6 +623,13 @@ struct PolishedRouteCard: View {
     let match: CommuteRouteMatchResult
     let accentSeed: Int
     let onTap: () -> Void
+    /// Optional favorite-toggle handler. When provided, a star button
+    /// appears in the corner; tapping it fires this without
+    /// propagating to the card's main tap.
+    var onToggleFavorite: (() -> Void)? = nil
+    /// Optional share-this-route handler. Renders a small share icon
+    /// next to the star.
+    var onShare: (() -> Void)? = nil
 
     private var accent: Color {
         switch accentSeed % 3 {
@@ -400,9 +639,65 @@ struct PolishedRouteCard: View {
         }
     }
 
+    /// Walk-distance band — colour-coded badge above the corridor.
+    /// Green ≤500m, amber ≤1.5km, red beyond. Humans think in
+    /// metres, not km, so we render as "350m" not "0.35 km".
+    private var walkBand: (label: String, color: Color, accessibility: String) {
+        let m = Int(match.pickupDistanceMeters)
+        let label: String = m < 1000 ? "\(m)m walk" : String(format: "%.1fkm walk", Double(m)/1000.0)
+        let color: Color = m <= 500 ? VPalette.success : (m <= 1500 ? VPalette.warning : VPalette.danger)
+        return (label, color, "Pickup is \(m) metres from your home location")
+    }
+
+    /// "Why this route" one-liner — surfaces the strongest reason this
+    /// card outranked the others. Replaces three small metric chips
+    /// with one human sentence.
+    private var whyThisRoute: String {
+        let m = Int(match.pickupDistanceMeters)
+        let onTime = Int(match.reliabilityScore * 100)
+        let walk = m < 1000 ? "\(m)m walk" : String(format: "%.1fkm walk", Double(m)/1000.0)
+        return "\(walk) · \(onTime)% on-time · departs \(match.route.departureTime)"
+    }
+
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 12) {
+                // Walk-distance + favourite/share top strip. Walk-distance
+                // is the headline metric the rider actually decides on.
+                HStack {
+                    HStack(spacing: 4) {
+                        Image(systemName: "figure.walk")
+                            .font(.caption.weight(.bold))
+                        Text(walkBand.label)
+                            .font(.caption.weight(.heavy))
+                    }
+                    .foregroundColor(walkBand.color)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(walkBand.color.opacity(0.14))
+                    .clipShape(Capsule())
+                    .accessibilityLabel(walkBand.accessibility)
+                    Spacer()
+                    if let onShare {
+                        Button(action: onShare) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 13, weight: .heavy))
+                                .foregroundColor(VPalette.textSec)
+                                .frame(width: 32, height: 32)
+                                .contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                    }
+                    if let onToggleFavorite {
+                        Button(action: onToggleFavorite) {
+                            Image(systemName: match.route.isFavorite ? "star.fill" : "star")
+                                .font(.system(size: 14, weight: .heavy))
+                                .foregroundColor(match.route.isFavorite ? VPalette.starGold : VPalette.textHint)
+                                .frame(width: 32, height: 32)
+                                .contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                        .accessibilityLabel(match.route.isFavorite ? "Remove from favourites" : "Save to favourites")
+                    }
+                }
+
                 HStack(spacing: 12) {
                     VAvatar(initial: String(match.route.driverName.prefix(1)), size: 42, accent: accent)
                     VStack(alignment: .leading, spacing: 1) {
@@ -416,8 +711,19 @@ struct PolishedRouteCard: View {
                                     .font(.system(size: 11, weight: .bold)).foregroundColor(VPalette.text)
                             }
                         }
-                        Text("\(match.route.carType.label) · \(Int(match.reliabilityScore * 100))% on-time")
+                        // Plate + colour when known so the rider can
+                        // identify the vehicle at the pickup.
+                        let plate = match.route.plateNumber
+                        let colour = match.route.carColor
+                        let carLine: String = {
+                            var parts: [String] = [match.route.carType.label]
+                            if let c = colour, !c.isEmpty { parts.append(c) }
+                            if let p = plate,  !p.isEmpty { parts.append(p.uppercased()) }
+                            return parts.joined(separator: " · ")
+                        }()
+                        Text(carLine)
                             .font(.system(size: 11)).foregroundColor(VPalette.textHint)
+                            .lineLimit(1)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 1) {
@@ -462,6 +768,15 @@ struct PolishedRouteCard: View {
                         Image(systemName: "arrow.right").font(.system(size: 11, weight: .heavy)).foregroundColor(VPalette.primary)
                     }
                 }
+
+                // "Why this route" rationale — one sentence summarising
+                // the strongest signals the matcher picked up. Easier
+                // to read than the three small metric chips this
+                // replaced.
+                Text(whyThisRoute)
+                    .font(.system(size: 11))
+                    .foregroundColor(VPalette.textHint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(14)
             .background(VPalette.surface)
@@ -809,5 +1124,308 @@ private struct MetricChip: View {
             Text(value).font(.caption.bold()).foregroundColor(VoygoTheme.textPrimary)
             Text(label).font(.caption2).foregroundColor(VoygoTheme.textHint)
         }
+    }
+}
+
+// MARK: - Popular corridors row
+
+struct PopularCorridorsRow: View {
+    let corridors: [PopularCorridor]
+    let onTap: (PopularCorridor) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(VPalette.primary)
+                Text("Popular Penang corridors")
+                    .font(.caption.weight(.heavy))
+                    .foregroundColor(VPalette.textSec)
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(corridors) { corridor in
+                        Button { onTap(corridor) } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "location.north.fill")
+                                    .font(.caption2.weight(.heavy))
+                                Text("\(corridor.origin) → \(corridor.destination)")
+                                    .font(.caption.weight(.semibold))
+                                    .lineLimit(1)
+                            }
+                            .foregroundColor(VPalette.primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(VPalette.primaryContainer)
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Filters bar (day-of-week + price cap + sort)
+
+struct CommuteFiltersBar: View {
+    @Binding var days: DaysOfWeekFlags
+    @Binding var maxPriceMyr: Int?
+    @Binding var sortBy: CommuteSortOption
+    /// `changedSort = true` means the rider tapped a sort chip and we
+    /// can re-sort locally; otherwise we need a fresh server search.
+    let onChange: (_ changedSort: Bool) -> Void
+
+    @State private var priceCapEnabled: Bool = false
+    @State private var priceCap: Double = 15
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionLabel("RUN ON")
+            HStack(spacing: 6) {
+                dayChip("M", binding: $days.monday)
+                dayChip("T", binding: $days.tuesday)
+                dayChip("W", binding: $days.wednesday)
+                dayChip("T", binding: $days.thursday)
+                dayChip("F", binding: $days.friday)
+                dayChip("S", binding: $days.saturday)
+                dayChip("S", binding: $days.sunday)
+            }
+
+            sectionLabel("BUDGET")
+            HStack(spacing: 8) {
+                Toggle(isOn: $priceCapEnabled) { Text("Cap").font(.caption.weight(.semibold)) }
+                    .toggleStyle(.switch).tint(VPalette.primary)
+                    .fixedSize()
+                if priceCapEnabled {
+                    Slider(value: $priceCap, in: 5...50, step: 1)
+                        .tint(VPalette.primary)
+                    Text("RM \(Int(priceCap))")
+                        .font(.caption.weight(.heavy)).foregroundColor(VPalette.primary)
+                        .frame(width: 50, alignment: .trailing)
+                } else {
+                    Text("Any price")
+                        .font(.caption).foregroundColor(VPalette.textHint)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .onChange(of: priceCapEnabled) { _, on in
+                maxPriceMyr = on ? Int(priceCap) : nil
+                onChange(false)
+            }
+            .onChange(of: priceCap) { _, value in
+                if priceCapEnabled {
+                    maxPriceMyr = Int(value)
+                    onChange(false)
+                }
+            }
+
+            sectionLabel("SORT BY")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(CommuteSortOption.allCases) { option in
+                        Button { sortBy = option; onChange(true) } label: {
+                            Text(option.rawValue)
+                                .font(.caption.weight(.heavy))
+                                .foregroundColor(sortBy == option ? .white : VPalette.text)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(sortBy == option ? VPalette.primary : VPalette.surfaceHigh)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(VPalette.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(VPalette.border))
+    }
+
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .heavy))
+            .tracking(1.2)
+            .foregroundColor(VPalette.textHint)
+    }
+
+    private func dayChip(_ label: String, binding: Binding<Bool>) -> some View {
+        Button {
+            binding.wrappedValue.toggle()
+            onChange(false)
+        } label: {
+            Text(label)
+                .font(.caption.weight(.heavy))
+                .foregroundColor(binding.wrappedValue ? .white : VPalette.text)
+                .frame(width: 32, height: 32)
+                .background(binding.wrappedValue ? VPalette.primary : VPalette.surfaceHigh)
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Empty state with three productive next steps
+
+struct CommuteEmptyState: View {
+    let onWiden: () -> Void
+    let onRequest: () -> Void
+    let onReset: () -> Void
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "map")
+                .font(.system(size: 40, weight: .semibold))
+                .foregroundColor(VPalette.textHint)
+            Text("No routes for that exact corridor — yet")
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundColor(VPalette.text)
+                .multilineTextAlignment(.center)
+            Text("Penang's pilot still has gaps. Try one of these:")
+                .font(.caption)
+                .foregroundColor(VPalette.textSec)
+                .multilineTextAlignment(.center)
+            VStack(spacing: 8) {
+                VPrimaryButton("Tell drivers I want this corridor",
+                               icon: "hand.raised.fill",
+                               action: onRequest)
+                Button(action: onWiden) {
+                    Text("Try a wider time window (06:00–10:00)")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundColor(VPalette.primary)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity)
+                        .background(VPalette.primaryContainer)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }.buttonStyle(.plain)
+                Button(action: onReset) {
+                    Text("Reset filters")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(VPalette.textSec)
+                }.buttonStyle(.plain)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(VPalette.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay(RoundedRectangle(cornerRadius: 20).stroke(VPalette.border))
+    }
+}
+
+// MARK: - Request a route sheet
+
+struct RequestRouteSheet: View {
+    let initialOrigin: String
+    let initialDestination: String
+    let initialDays: DaysOfWeekFlags
+    let onSubmit: (RouteRequestPayload) async -> Result<String, AppError>
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var origin: String = ""
+    @State private var destination: String = ""
+    @State private var preferredTime: String = "07:30"
+    @State private var days: DaysOfWeekFlags = .weekdays
+    @State private var notes: String = ""
+    @State private var isSubmitting = false
+    @State private var error: String? = nil
+
+    private var canSubmit: Bool {
+        !origin.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !destination.trimmingCharacters(in: .whitespaces).isEmpty &&
+        !isSubmitting
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Request a route")
+                    .font(.system(size: 20, weight: .black))
+                    .tracking(-0.4)
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundColor(VPalette.textSec)
+                        .frame(width: 32, height: 32)
+                        .background(VPalette.surfaceHigh)
+                        .clipShape(Circle())
+                }.buttonStyle(.plain)
+            }
+            Text("Tell drivers about this corridor. We'll notify you the moment one of them adds a matching route.")
+                .font(.caption).foregroundColor(VPalette.textSec)
+
+            field(label: "FROM", text: $origin)
+            field(label: "TO",   text: $destination)
+
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("PREFERRED TIME").font(.system(size: 10, weight: .heavy))
+                        .tracking(1.2).foregroundColor(VPalette.textHint)
+                    TextField("07:30", text: $preferredTime)
+                        .padding(10).background(VPalette.surfaceHigh)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("DAYS").font(.system(size: 10, weight: .heavy))
+                        .tracking(1.2).foregroundColor(VPalette.textHint)
+                    Text(days.shortLabel).font(.caption.weight(.semibold))
+                        .padding(10).background(VPalette.surfaceHigh)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+
+            TextField("Notes (optional)", text: $notes, axis: .vertical)
+                .lineLimit(1...3)
+                .padding(10).background(VPalette.surfaceHigh)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            if let error {
+                Text(error).font(.caption.weight(.semibold)).foregroundColor(VPalette.danger)
+            }
+
+            VPrimaryButton("Send request",
+                           icon: "paperplane.fill",
+                           isLoading: isSubmitting,
+                           isEnabled: canSubmit) {
+                Task { await submit() }
+            }
+        }
+        .padding(20)
+        .onAppear {
+            origin = initialOrigin
+            destination = initialDestination
+            days = initialDays
+        }
+    }
+
+    private func field(label: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 10, weight: .heavy))
+                .tracking(1.2).foregroundColor(VPalette.textHint)
+            TextField("", text: text)
+                .padding(10).background(VPalette.surfaceHigh)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .textInputAutocapitalization(.words)
+        }
+    }
+
+    private func submit() async {
+        isSubmitting = true
+        error = nil
+        let payload = RouteRequestPayload(
+            origin: origin.trimmingCharacters(in: .whitespaces),
+            destination: destination.trimmingCharacters(in: .whitespaces),
+            preferredTime: preferredTime,
+            daysOfWeek: days.asDictionary,
+            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        let result = await onSubmit(payload)
+        isSubmitting = false
+        if case .failure(let err) = result { error = err.localizedDescription }
     }
 }

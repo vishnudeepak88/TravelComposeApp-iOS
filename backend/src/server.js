@@ -156,7 +156,12 @@ function normalizeCommuteSearchBody(body) {
     homeLat: bodyValue(body, "homeLat", "home_lat"),
     homeLng: bodyValue(body, "homeLng", "home_lng"),
     officeLat: bodyValue(body, "officeLat", "office_lat"),
-    officeLng: bodyValue(body, "officeLng", "office_lng")
+    officeLng: bodyValue(body, "officeLng", "office_lng"),
+    // New filters: rider's needed days (object form) + budget cap.
+    // Both optional — when omitted, repository.findCommuteMatches
+    // skips the filter and returns everything in the time window.
+    daysOfWeek: bodyValue(body, "daysOfWeek", "days_of_week"),
+    maxPriceMyr: bodyValue(body, "maxPriceMyr", "max_price_myr")
   };
 }
 
@@ -1282,10 +1287,255 @@ app.post(
       seatCount: bodyValue(body, "seatCount", "seat_count"),
       pricePerSeat: bodyValue(body, "pricePerSeat", "price_per_seat"),
       carType: bodyValue(body, "carType", "car_type"),
+      plateNumber: bodyValue(body, "plateNumber", "plate_number"),
+      carColor: bodyValue(body, "carColor", "car_color"),
       activeStatus: "ACTIVE"
     });
     await generateRideInstances(pool, todayIso(), 30);
+
+    // Cross-pollinate with route_requests: when a new route lands,
+    // notify riders who flagged interest in this corridor so they
+    // see the supply immediately. Simple substring match — good
+    // enough for the pilot's small request volume.
+    try {
+      const startLow = String(bodyValue(body, "startLocation", "start_location") || "").toLowerCase();
+      const endLow   = String(bodyValue(body, "endLocation",   "end_location")   || "").toLowerCase();
+      if (startLow && endLow) {
+        const matched = await pool.query(
+          `SELECT id, rider_id
+             FROM route_requests
+            WHERE status = 'OPEN'
+              AND LOWER(origin) LIKE '%' || $1 || '%'
+              AND LOWER(destination) LIKE '%' || $2 || '%'`,
+          [startLow, endLow]
+        );
+        for (const row of matched.rows) {
+          await createNotification({
+            userId: row.rider_id,
+            type: "ROUTE_REQUEST_MATCHED",
+            title: "A driver added your corridor!",
+            body: `${bodyValue(body, "startLocation", "start_location")} → ${bodyValue(body, "endLocation", "end_location")} is now available. Tap to subscribe.`,
+            routeId
+          });
+        }
+        // Auto-close the matched requests so the rider's "waiting"
+        // list stops growing stale.
+        if (matched.rowCount > 0) {
+          await pool.query(
+            `UPDATE route_requests SET status = 'FULFILLED' WHERE id = ANY($1::uuid[])`,
+            [matched.rows.map((r) => r.id)]
+          );
+        }
+      }
+    } catch (e) {
+      console.warn(`[routes] cross-pollinate failed: ${e.message}`);
+    }
+
     res.json({ id: routeId });
+  })
+);
+
+// ─── Route requests (cold-start liquidity) ────────────────────────────
+//
+// When search returns 0 results, the rider can post a request. Drivers
+// see aggregated demand on /commute/route-requests/driver/me so they
+// can decide whether to add a route. New routes auto-notify the
+// matching requesters and flip their status to FULFILLED.
+
+app.post(
+  "/commute/route-requests",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const origin = String(bodyValue(body, "origin") || "").trim();
+    const destination = String(bodyValue(body, "destination") || "").trim();
+    if (!origin || !destination) {
+      res.status(400).json({ detail: "origin and destination required" });
+      return;
+    }
+    const id = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO route_requests
+         (id, rider_id, origin, destination, origin_lat, origin_lng,
+          dest_lat, dest_lng, preferred_time, days_of_week, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)`,
+      [
+        id,
+        req.user.id,
+        origin,
+        destination,
+        bodyValue(body, "originLat", "origin_lat"),
+        bodyValue(body, "originLng", "origin_lng"),
+        bodyValue(body, "destLat",   "dest_lat"),
+        bodyValue(body, "destLng",   "dest_lng"),
+        bodyValue(body, "preferredTime", "preferred_time"),
+        JSON.stringify(bodyValue(body, "daysOfWeek", "days_of_week") || {}),
+        String(bodyValue(body, "notes") || "").slice(0, 500)
+      ]
+    );
+    res.status(201).json({ id });
+  })
+);
+
+app.get(
+  "/commute/route-requests/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `SELECT id, origin, destination, preferred_time, days_of_week,
+              notes, status, created_at
+         FROM route_requests
+        WHERE rider_id = $1
+        ORDER BY created_at DESC
+        LIMIT 50`,
+      [req.user.id]
+    );
+    res.json(result.rows.map((r) => ({
+      id: String(r.id),
+      origin: r.origin,
+      destination: r.destination,
+      preferredTime: r.preferred_time,
+      daysOfWeek: r.days_of_week,
+      notes: r.notes,
+      status: r.status,
+      createdAt: r.created_at
+    })));
+  })
+);
+
+// Aggregated demand for the driver dashboard — counts of how many
+// riders want each corridor.
+app.get(
+  "/commute/route-requests/demand",
+  requireAuth,
+  asyncHandler(async (_req, res) => {
+    const result = await pool.query(
+      `SELECT origin, destination, COUNT(*)::int AS riders
+         FROM route_requests
+        WHERE status = 'OPEN'
+        GROUP BY origin, destination
+        ORDER BY riders DESC
+        LIMIT 25`
+    );
+    res.json(result.rows.map((r) => ({
+      origin: r.origin,
+      destination: r.destination,
+      riders: Number(r.riders)
+    })));
+  })
+);
+
+// ─── Route favorites ──────────────────────────────────────────────────
+app.post(
+  "/commute/routes/:routeId/favorite",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await pool.query(
+      `INSERT INTO route_favorites (route_id, rider_id)
+       VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [req.params.routeId, req.user.id]
+    );
+    res.status(204).send();
+  })
+);
+
+app.delete(
+  "/commute/routes/:routeId/favorite",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await pool.query(
+      `DELETE FROM route_favorites WHERE route_id = $1 AND rider_id = $2`,
+      [req.params.routeId, req.user.id]
+    );
+    res.status(204).send();
+  })
+);
+
+app.get(
+  "/commute/routes/favorites/me",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const contexts = await loadRouteContexts(
+      pool,
+      `id IN (SELECT route_id FROM route_favorites WHERE rider_id = $1)`,
+      [req.user.id],
+      { favoriteForRiderId: req.user.id }
+    );
+    res.json(contexts.map((c) => c.dto));
+  })
+);
+
+// ─── Saved commute search ─────────────────────────────────────────────
+app.put(
+  "/commute/saved-search",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    await pool.query(
+      `INSERT INTO commute_saved_searches
+         (rider_id, origin_label, destination_label, origin_lat, origin_lng,
+          dest_lat, dest_lng, earliest_time, latest_time, days_of_week, max_price_myr, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, NOW())
+       ON CONFLICT (rider_id) DO UPDATE SET
+         origin_label       = EXCLUDED.origin_label,
+         destination_label  = EXCLUDED.destination_label,
+         origin_lat         = EXCLUDED.origin_lat,
+         origin_lng         = EXCLUDED.origin_lng,
+         dest_lat           = EXCLUDED.dest_lat,
+         dest_lng           = EXCLUDED.dest_lng,
+         earliest_time      = EXCLUDED.earliest_time,
+         latest_time        = EXCLUDED.latest_time,
+         days_of_week       = EXCLUDED.days_of_week,
+         max_price_myr      = EXCLUDED.max_price_myr,
+         updated_at         = NOW()`,
+      [
+        req.user.id,
+        String(bodyValue(body, "originLabel", "origin_label") || ""),
+        String(bodyValue(body, "destinationLabel", "destination_label") || ""),
+        bodyValue(body, "originLat", "origin_lat"),
+        bodyValue(body, "originLng", "origin_lng"),
+        bodyValue(body, "destLat",   "dest_lat"),
+        bodyValue(body, "destLng",   "dest_lng"),
+        String(bodyValue(body, "earliestTime", "earliest_time") || "06:30"),
+        String(bodyValue(body, "latestTime",   "latest_time")   || "09:00"),
+        JSON.stringify(bodyValue(body, "daysOfWeek", "days_of_week") || {}),
+        bodyValue(body, "maxPriceMyr", "max_price_myr")
+      ]
+    );
+    res.status(204).send();
+  })
+);
+
+app.get(
+  "/commute/saved-search",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `SELECT origin_label, destination_label, origin_lat, origin_lng,
+              dest_lat, dest_lng, earliest_time, latest_time,
+              days_of_week, max_price_myr, updated_at
+         FROM commute_saved_searches WHERE rider_id = $1`,
+      [req.user.id]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ detail: "no_saved_search" });
+      return;
+    }
+    const r = result.rows[0];
+    res.json({
+      originLabel: r.origin_label,
+      destinationLabel: r.destination_label,
+      originLat: r.origin_lat,
+      originLng: r.origin_lng,
+      destLat: r.dest_lat,
+      destLng: r.dest_lng,
+      earliestTime: r.earliest_time,
+      latestTime: r.latest_time,
+      daysOfWeek: r.days_of_week,
+      maxPriceMyr: r.max_price_myr,
+      updatedAt: r.updated_at
+    });
   })
 );
 
@@ -1316,6 +1566,45 @@ async function canAccessRouteRideData(routeId, userId) {
     [routeId, userId]
   );
   return result.rowCount > 0;
+}
+
+/// Pushes a SEAT_OPENED notification to riders who have either
+/// favourited this route or have a saved-search whose corridor
+/// (origin/destination labels) substring-matches this route. Used
+/// when a sub turns ACTIVE → CANCELLED / PAUSED, freeing a seat.
+async function notifySeatOpenedListeners(routeId, startLocation, endLocation) {
+  try {
+    const favRes = await pool.query(
+      `SELECT rider_id FROM route_favorites WHERE route_id = $1`,
+      [routeId]
+    );
+    const startLow = String(startLocation || "").toLowerCase();
+    const endLow   = String(endLocation   || "").toLowerCase();
+    const corridorRes = startLow && endLow
+      ? await pool.query(
+          `SELECT rider_id
+             FROM commute_saved_searches
+            WHERE LOWER(origin_label) LIKE '%' || $1 || '%'
+              AND LOWER(destination_label) LIKE '%' || $2 || '%'`,
+          [startLow, endLow]
+        )
+      : { rows: [] };
+    const recipients = new Set([
+      ...favRes.rows.map((r) => String(r.rider_id)),
+      ...corridorRes.rows.map((r) => String(r.rider_id))
+    ]);
+    for (const riderId of recipients) {
+      await createNotification({
+        userId: riderId,
+        type: "SEAT_OPENED",
+        title: "A seat just opened up",
+        body: `${startLocation} → ${endLocation} has space. Tap to book.`,
+        routeId
+      });
+    }
+  } catch (err) {
+    console.warn(`[notify] seat-opened fanout failed: ${err.message}`);
+  }
 }
 
 async function notifyRouteSubscribers(routeId, type, title, body) {
@@ -1558,6 +1847,12 @@ app.put(
       res.status(400).json({ detail: "invalid subscription status" });
       return;
     }
+    // Capture previous status before the update so the seat-open
+    // notification below knows whether a seat actually opened.
+    const previousStatus = (await pool.query(
+      "SELECT status FROM route_subscriptions WHERE id = $1",
+      [subscriptionId]
+    )).rows[0]?.status;
     await pool.query(
       `UPDATE route_subscriptions
        SET status = $2
@@ -1565,6 +1860,19 @@ app.put(
       [subscriptionId, status]
     );
     await generateRideInstances(pool, todayIso(), 30);
+    // Seat-open notification: when an ACTIVE sub becomes CANCELLED
+    // or PAUSED, a seat just freed up. Notify riders who favourited
+    // this route OR have a recent saved search whose corridor
+    // matches the route, so they can grab the open seat.
+    if (previousStatus === "ACTIVE" && (status === "CANCELLED" || status === "PAUSED")) {
+      const routeRow = (await pool.query(
+        "SELECT route_id, start_location, end_location FROM recurring_routes r JOIN route_subscriptions s ON s.route_id = r.id WHERE s.id = $1",
+        [subscriptionId]
+      )).rows[0];
+      if (routeRow) {
+        await notifySeatOpenedListeners(routeRow.route_id, routeRow.start_location, routeRow.end_location);
+      }
+    }
     const sub = (await pool.query(
       "SELECT route_id FROM route_subscriptions WHERE id = $1",
       [subscriptionId]

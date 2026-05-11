@@ -126,6 +126,21 @@ struct DaysOfWeekFlags: Codable, Equatable {
         ["monday": monday, "tuesday": tuesday, "wednesday": wednesday,
          "thursday": thursday, "friday": friday, "saturday": saturday, "sunday": sunday]
     }
+
+    /// Inverse of `asDictionary` — used by saved-search hydration to
+    /// rebuild the struct from server JSON without redundant
+    /// boilerplate at the call site.
+    static func fromDictionary(_ dict: [String: Bool]) -> DaysOfWeekFlags {
+        DaysOfWeekFlags(
+            monday:    dict["monday"]    ?? false,
+            tuesday:   dict["tuesday"]   ?? false,
+            wednesday: dict["wednesday"] ?? false,
+            thursday:  dict["thursday"]  ?? false,
+            friday:    dict["friday"]    ?? false,
+            saturday:  dict["saturday"]  ?? false,
+            sunday:    dict["sunday"]    ?? false
+        )
+    }
 }
 
 struct RecurringRoute: Codable, Equatable, Identifiable {
@@ -146,8 +161,17 @@ struct RecurringRoute: Codable, Equatable, Identifiable {
     var seatCount: Int
     var pricePerSeat: Int
     var carType: CarType
+    /// Plate + color let the rider identify the vehicle at the pickup
+    /// point. Both optional until the driver fills them on Create
+    /// Route. Surfaced on the search-result card.
+    var plateNumber: String? = nil
+    var carColor: String? = nil
     var activeStatus: RouteActiveStatus
     var reliability: DriverReliability
+    /// Server-decorated for the requesting rider — true when the
+    /// route is in `route_favorites`. iOS uses this to render the
+    /// filled-star state without a second round-trip.
+    var isFavorite: Bool = false
 }
 
 struct RouteSubscription: Codable, Equatable, Identifiable {

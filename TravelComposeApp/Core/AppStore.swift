@@ -881,6 +881,104 @@ final class AppStore {
         }
     }
 
+    // MARK: - Favorites + Route requests + Saved search
+
+    var favoriteRouteIds: Set<String> = []
+
+    /// Toggles the favorite flag for a route. Optimistically updates
+    /// the local `routes` array so the star fills instantly; rolls
+    /// back on server error. Idempotent on the server.
+    func toggleFavorite(routeId: String) async {
+        guard isAuthenticated else { return }
+        let wasFavorite = favoriteRouteIds.contains(routeId)
+        if wasFavorite {
+            favoriteRouteIds.remove(routeId)
+        } else {
+            favoriteRouteIds.insert(routeId)
+        }
+        if let i = routes.firstIndex(where: { $0.id == routeId }) {
+            routes[i].isFavorite.toggle()
+        }
+        do {
+            if wasFavorite {
+                try await VoygoAPIClient.unfavoriteRoute(routeId)
+            } else {
+                try await VoygoAPIClient.favoriteRoute(routeId)
+            }
+        } catch {
+            // Roll back local state on any error.
+            if wasFavorite {
+                favoriteRouteIds.insert(routeId)
+            } else {
+                favoriteRouteIds.remove(routeId)
+            }
+            if let i = routes.firstIndex(where: { $0.id == routeId }) {
+                routes[i].isFavorite = wasFavorite
+            }
+        }
+    }
+
+    func refreshFavorites() async {
+        guard useOnline, isAuthenticated else { return }
+        do {
+            let dtos = try await VoygoAPIClient.myFavorites()
+            favoriteRouteIds = Set(dtos.map(\.id))
+            for dto in dtos { replaceRoute(dto.toModel()) }
+        } catch APIError.unauthorized {
+            clearSession()
+        } catch {
+            // Non-fatal — leave local state intact.
+        }
+    }
+
+    var routeRequests: [RouteRequest] = []
+    var routeRequestDemand: [RouteRequestDemand] = []
+
+    /// Posts a "I want this corridor" request. The server notifies
+    /// the rider when a matching route is created.
+    func postRouteRequest(_ payload: RouteRequestPayload) async -> Result<String, AppError> {
+        guard isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            let response = try await VoygoAPIClient.postRouteRequest(payload)
+            await refreshRouteRequests()
+            return .success(response.id ?? "")
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            return .failure(.from(error))
+        }
+    }
+
+    func refreshRouteRequests() async {
+        guard useOnline, isAuthenticated else { return }
+        do {
+            routeRequests = try await VoygoAPIClient.myRouteRequests()
+        } catch { /* non-fatal */ }
+    }
+
+    func refreshRouteRequestDemand() async {
+        guard useOnline, isAuthenticated else { return }
+        do {
+            routeRequestDemand = try await VoygoAPIClient.routeRequestDemand()
+        } catch { /* non-fatal */ }
+    }
+
+    /// Saved-search persistence. The view layer mirrors to UserDefaults
+    /// for instant first-paint; the backend round-trip is best-effort
+    /// so a network hiccup doesn't block the rider from searching.
+    func saveSearch(_ payload: SavedSearchPayload) async {
+        guard isAuthenticated else { return }
+        do {
+            try await VoygoAPIClient.putSavedSearch(payload)
+        } catch { /* non-fatal */ }
+    }
+
+    func loadSavedSearch() async -> SavedSearchPayload? {
+        guard useOnline, isAuthenticated else { return nil }
+        return try? await VoygoAPIClient.getSavedSearch()
+    }
+
     // MARK: - Long-haul
 
     /// Browses open long-haul trips. Pure-online — there's no offline
@@ -1010,10 +1108,13 @@ final class AppStore {
     // MARK: - Mutations
 
     func findCommuteRoutes(homeLocation: String, officeLocation: String, earliestDeparture: String, latestDeparture: String,
-                           homeLat: Double?, homeLng: Double?, officeLat: Double?, officeLng: Double?) async -> [CommuteRouteMatchResult] {
+                           homeLat: Double?, homeLng: Double?, officeLat: Double?, officeLng: Double?,
+                           daysOfWeek: DaysOfWeekFlags? = nil, maxPriceMyr: Int? = nil) async -> [CommuteRouteMatchResult] {
         Telemetry.track(TelemetryEvents.routeSearched, [
             "has_home_coords": .bool(homeLat != nil && homeLng != nil),
-            "has_office_coords": .bool(officeLat != nil && officeLng != nil)
+            "has_office_coords": .bool(officeLat != nil && officeLng != nil),
+            "has_day_filter": .bool(daysOfWeek?.asDictionary.values.contains(true) == true),
+            "has_price_cap": .bool(maxPriceMyr != nil)
         ])
         if useOnline && isAuthenticated {
             do {
@@ -1026,7 +1127,9 @@ final class AppStore {
                     homeLat: homeLat,
                     homeLng: homeLng,
                     officeLat: officeLat,
-                    officeLng: officeLng
+                    officeLng: officeLng,
+                    daysOfWeek: daysOfWeek?.asDictionary,
+                    maxPriceMyr: maxPriceMyr
                 )
                 let response = try await VoygoAPIClient.findCommuteRoutes(request: request)
                 let matches = response.candidates.map { $0.toModel() }
@@ -1195,7 +1298,8 @@ final class AppStore {
 
     func createRoute(startLocation: String, endLocation: String, departureTime: String,
                      seatCount: Int, pricePerSeat: Int, carType: CarType, daysOfWeek: DaysOfWeekFlags,
-                     pickupNames: [String], dropNames: [String]) async -> Result<String, AppError> {
+                     pickupNames: [String], dropNames: [String],
+                     plateNumber: String? = nil, carColor: String? = nil) async -> Result<String, AppError> {
         guard isAuthenticated else { return .failure(.message("Sign in first")) }
         guard !startLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !endLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1218,7 +1322,9 @@ final class AppStore {
             daysOfWeek: daysOfWeek.asDictionary,
             seatCount: seatCount,
             pricePerSeat: pricePerSeat,
-            carType: carType.rawValue
+            carType: carType.rawValue,
+            plateNumber: plateNumber,
+            carColor: carColor
         )
         do {
             let response = try await VoygoAPIClient.createRoute(request: request)
@@ -1228,7 +1334,9 @@ final class AppStore {
                                         startLocation: startLocation, endLocation: endLocation,
                                         pickupPoints: pickups, dropPoints: drops, departureTime: departureTime,
                                         daysOfWeek: daysOfWeek, seatCount: seatCount, pricePerSeat: pricePerSeat,
-                                        carType: carType, activeStatus: .active,
+                                        carType: carType,
+                                        plateNumber: plateNumber, carColor: carColor,
+                                        activeStatus: .active,
                                         reliability: DriverReliability(onTimeRate: 0.9, cancellationRate: 0.05, repeatRiders: 0, averageRating: 5.0)))
             regenerateRides()
             return .success(id)

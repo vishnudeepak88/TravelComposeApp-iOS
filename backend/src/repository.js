@@ -69,7 +69,7 @@ function normalizeActiveStatus(status) {
     .trim() === "ACTIVE";
 }
 
-function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null) {
+function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null, isFavorite = false) {
   const pickupPoints = points.filter((p) => p.kind === "pickup").map(mapPoint);
   const dropPoints = points.filter((p) => p.kind === "drop").map(mapPoint);
   const reliability = mapReliability(reliabilityRow);
@@ -91,12 +91,20 @@ function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null) {
     seatCount: Number(routeRow.seat_count),
     pricePerSeat: Number(routeRow.price_per_seat),
     carType: routeRow.car_type || "SEDAN",
+    plateNumber: routeRow.plate_number || null,
+    carColor: routeRow.car_color || null,
     activeStatus: routeRow.active_status ? "ACTIVE" : "PAUSED",
-    reliability
+    reliability,
+    isFavorite
   };
 }
 
-async function loadRouteContexts(pool, whereClause = "TRUE", params = []) {
+async function loadRouteContexts(pool, whereClause = "TRUE", params = [], options = {}) {
+  // `favoriteForRiderId` decorates each DTO's `isFavorite` flag for
+  // the given rider, so search results can surface a filled star
+  // without a second round-trip. Optional — when omitted, all DTOs
+  // come back with `isFavorite: false`.
+  const favoriteForRiderId = options.favoriteForRiderId || null;
   const routeRes = await pool.query(
     `SELECT *
      FROM recurring_routes
@@ -159,11 +167,26 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = []) {
     activeCountRes.rows.map((row) => [String(row.route_id), Number(row.active_count)])
   );
 
+  // Favorites lookup — single roundtrip keyed by route_id for the
+  // requesting rider. Default: nothing favourited.
+  let favoriteRouteIds = new Set();
+  if (favoriteForRiderId) {
+    const favRes = await pool.query(
+      `SELECT route_id::text AS route_id
+         FROM route_favorites
+        WHERE rider_id = $1
+          AND route_id = ANY($2::uuid[])`,
+      [favoriteForRiderId, routeIds]
+    );
+    favoriteRouteIds = new Set(favRes.rows.map((r) => r.route_id));
+  }
+
   return routeRes.rows.map((route) => {
     const points = pointsByRoute.get(String(route.id)) || [];
     const reliabilityRow = reliabilityByDriver.get(route.driver_id) || null;
     const driverPhone = phoneByDriver.get(String(route.driver_id)) || null;
-    const dto = mapRouteDto(route, points, reliabilityRow, driverPhone);
+    const isFavorite = favoriteRouteIds.has(String(route.id));
+    const dto = mapRouteDto(route, points, reliabilityRow, driverPhone, isFavorite);
     const activeCount = activeCountByRoute.get(String(route.id)) || 0;
     return {
       route,
@@ -186,9 +209,10 @@ async function createRoute(pool, payload, options = {}) {
   await pool.query(
     `INSERT INTO recurring_routes (
       id, driver_id, driver_name, start_location, end_location, departure_time,
-      days_of_week, seat_count, price_per_seat, car_type, active_status
+      days_of_week, seat_count, price_per_seat, car_type,
+      plate_number, car_color, active_status
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)`,
+    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13)`,
     [
       routeId,
       payload.driverId,
@@ -200,6 +224,8 @@ async function createRoute(pool, payload, options = {}) {
       Number(payload.seatCount),
       Number(payload.pricePerSeat),
       payload.carType || "SEDAN",
+      payload.plateNumber || null,
+      payload.carColor || null,
       activeStatus
     ]
   );
@@ -483,7 +509,12 @@ async function listRiderCalendar(pool, riderId, fromDate, days) {
 }
 
 async function findCommuteMatches(pool, payload) {
-  const contexts = await loadRouteContexts(pool, "active_status = TRUE");
+  const contexts = await loadRouteContexts(
+    pool,
+    "active_status = TRUE",
+    [],
+    { favoriteForRiderId: payload.riderId }
+  );
   if (contexts.length === 0) {
     return [];
   }
@@ -508,10 +539,33 @@ async function findCommuteMatches(pool, payload) {
   const hasHomeCoords = Number.isFinite(homeLat) && Number.isFinite(homeLng);
   const hasOfficeCoords = Number.isFinite(officeLat) && Number.isFinite(officeLng);
 
+  // Optional rider-supplied filters. Days of week is an object like
+  // { monday: true, ... }; max price is a small integer ringgit cap.
+  const requestedDays = payload.daysOfWeek
+    ? normalizeDaysOfWeek(payload.daysOfWeek)
+    : null;
+  const hasDayFilter = requestedDays && Object.values(requestedDays).some((v) => v);
+  const maxPriceMyr = Number.isFinite(Number(payload.maxPriceMyr))
+    ? Number(payload.maxPriceMyr)
+    : null;
+
   const matches = [];
   for (const ctx of contexts) {
     const routeMinutes = parseMinutes(ctx.route.departure_time);
     if (routeMinutes == null || routeMinutes < earliestMinutes || routeMinutes > latestMinutes) {
+      continue;
+    }
+
+    // Day-of-week filter: route's enabled days must overlap with the
+    // rider's requested days. Skipped when the rider didn't supply any.
+    if (hasDayFilter) {
+      const routeDays = normalizeDaysOfWeek(ctx.route.days_of_week);
+      const overlap = Object.entries(requestedDays).some(([k, v]) => v && routeDays[k]);
+      if (!overlap) continue;
+    }
+
+    // Price cap — exclude routes pricier than the rider's budget.
+    if (maxPriceMyr != null && Number(ctx.route.price_per_seat) > maxPriceMyr) {
       continue;
     }
 

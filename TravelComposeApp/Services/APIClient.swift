@@ -277,6 +277,59 @@ struct VoygoAPIClient {
         try validate(response, data: data, url: url)
     }
 
+    // MARK: - Favorites + Route requests + Saved search
+
+    static func favoriteRoute(_ routeId: String) async throws {
+        _ = try await postVoid(EmptyRequest(),
+            to: baseURL.appendingPathComponent("commute/routes/\(routeId)/favorite"))
+    }
+
+    static func unfavoriteRoute(_ routeId: String) async throws {
+        let url = baseURL.appendingPathComponent("commute/routes/\(routeId)/favorite")
+        var req = authedRequest(url, method: "DELETE")
+        req.httpBody = nil
+        let (data, response) = try await session.data(for: req)
+        try validate(response, data: data, url: url)
+    }
+
+    static func myFavorites() async throws -> [RecurringRouteDTO] {
+        try await get(baseURL.appendingPathComponent("commute/routes/favorites/me"),
+                      as: [RecurringRouteDTO].self)
+    }
+
+    static func postRouteRequest(_ request: RouteRequestPayload) async throws -> IdResponse {
+        try await post(request,
+                       to: baseURL.appendingPathComponent("commute/route-requests"),
+                       as: IdResponse.self)
+    }
+
+    static func myRouteRequests() async throws -> [RouteRequest] {
+        try await get(baseURL.appendingPathComponent("commute/route-requests/me"),
+                      as: [RouteRequest].self)
+    }
+
+    static func routeRequestDemand() async throws -> [RouteRequestDemand] {
+        try await get(baseURL.appendingPathComponent("commute/route-requests/demand"),
+                      as: [RouteRequestDemand].self)
+    }
+
+    static func putSavedSearch(_ payload: SavedSearchPayload) async throws {
+        var req = authedRequest(baseURL.appendingPathComponent("commute/saved-search"), method: "PUT")
+        req.httpBody = try encoder.encode(payload)
+        let (data, response) = try await session.data(for: req)
+        try validate(response, data: data, url: req.url ?? baseURL)
+    }
+
+    static func getSavedSearch() async throws -> SavedSearchPayload? {
+        let url = baseURL.appendingPathComponent("commute/saved-search")
+        let req = authedRequest(url, method: "GET")
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        if http.statusCode == 404 { return nil }
+        try validate(response, data: data, url: url)
+        return try decode(SavedSearchPayload.self, from: data, url: url)
+    }
+
     // MARK: - Long-haul
 
     static func listLongHaulTrips(origin: String? = nil,
@@ -703,6 +756,55 @@ struct CommuteRouteSearchRequest: Encodable {
     var homeLng: Double?
     var officeLat: Double?
     var officeLng: Double?
+    /// Optional rider-supplied filters. When omitted the backend
+    /// returns everything in the time window — matches today's
+    /// behaviour. When set, restricts to overlapping days + capped
+    /// price.
+    var daysOfWeek: [String: Bool]? = nil
+    var maxPriceMyr: Int? = nil
+}
+
+struct RouteRequestPayload: Encodable {
+    var origin: String
+    var destination: String
+    var originLat: Double? = nil
+    var originLng: Double? = nil
+    var destLat: Double? = nil
+    var destLng: Double? = nil
+    var preferredTime: String? = nil
+    var daysOfWeek: [String: Bool]? = nil
+    var notes: String = ""
+}
+
+struct RouteRequest: Decodable, Identifiable {
+    var id: String
+    var origin: String
+    var destination: String
+    var preferredTime: String?
+    var daysOfWeek: [String: Bool]?
+    var notes: String
+    var status: String
+    var createdAt: Date
+}
+
+struct RouteRequestDemand: Decodable, Identifiable {
+    var origin: String
+    var destination: String
+    var riders: Int
+    var id: String { "\(origin)::\(destination)" }
+}
+
+struct SavedSearchPayload: Codable {
+    var originLabel: String
+    var destinationLabel: String
+    var originLat: Double? = nil
+    var originLng: Double? = nil
+    var destLat: Double? = nil
+    var destLng: Double? = nil
+    var earliestTime: String
+    var latestTime: String
+    var daysOfWeek: [String: Bool]? = nil
+    var maxPriceMyr: Int? = nil
 }
 
 struct CommuteRouteMatchResponse: Decodable {
@@ -759,8 +861,11 @@ struct RecurringRouteDTO: Decodable {
     var seatCount: Int
     var pricePerSeat: Int
     var carType: CarType?
+    var plateNumber: String?
+    var carColor: String?
     var activeStatus: RouteActiveStatus?
     var reliability: DriverReliability?
+    var isFavorite: Bool?
 
     func toModel() -> RecurringRoute {
         RecurringRoute(
@@ -770,8 +875,11 @@ struct RecurringRouteDTO: Decodable {
             pickupPoints: pickupPoints, dropPoints: dropPoints,
             departureTime: departureTime, daysOfWeek: daysOfWeek,
             seatCount: seatCount, pricePerSeat: pricePerSeat,
-            carType: carType ?? .sedan, activeStatus: activeStatus ?? .active,
-            reliability: reliability ?? DriverReliability(onTimeRate: 0.9, cancellationRate: 0.05, repeatRiders: 0, averageRating: 4.5)
+            carType: carType ?? .sedan,
+            plateNumber: plateNumber, carColor: carColor,
+            activeStatus: activeStatus ?? .active,
+            reliability: reliability ?? DriverReliability(onTimeRate: 0.9, cancellationRate: 0.05, repeatRiders: 0, averageRating: 4.5),
+            isFavorite: isFavorite ?? false
         )
     }
 }
@@ -950,6 +1058,8 @@ struct CreateRecurringRouteRequest: Encodable {
     var seatCount: Int
     var pricePerSeat: Int
     var carType: String
+    var plateNumber: String? = nil
+    var carColor: String? = nil
     var activeStatus: Bool = true
 
     struct RoutePointIn: Encodable {
