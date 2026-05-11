@@ -766,8 +766,14 @@ struct LiveTripView: View {
     }
 
     private var canCallDriver: Bool {
-        if let p = route?.driverPhone { return !p.isEmpty }
-        return false
+        // The phone is only dialable when the backend revealed the
+        // unmasked E.164 — masked stubs like "+60 •• ••• ••23" would
+        // sanitize down to "+60••••23" and either fail to open the
+        // dialer or dial garbage. Match the server's reveal rule:
+        // ACTIVE subscriber or route driver.
+        guard let r = route else { return false }
+        guard let phone = r.driverPhone, !phone.isEmpty else { return false }
+        return r.driverPhoneRevealed
     }
 
     var body: some View {
@@ -1033,10 +1039,13 @@ struct LiveTripView: View {
                 }
                 Spacer()
                 Button {
-                    // Open `tel://` when the route has a driver phone
-                    // on file. Stays disabled (with a real a11y label)
-                    // when the backend hasn't threaded the phone in.
-                    if let phone = route?.driverPhone, !phone.isEmpty,
+                    // Open `tel://` only when the server revealed the
+                    // unmasked phone (caller is the route driver or
+                    // an ACTIVE subscriber). A masked stub would have
+                    // canCallDriver=false anyway, but check again here
+                    // as defense-in-depth before we sanitize + dial.
+                    if canCallDriver,
+                       let phone = route?.driverPhone,
                        let url = URL(string: "tel://\(phone.filter { $0.isNumber || $0 == "+" })") {
                         UIApplication.shared.open(url)
                     }

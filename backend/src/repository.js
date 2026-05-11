@@ -69,9 +69,31 @@ function normalizeActiveStatus(status) {
     .trim() === "ACTIVE";
 }
 
+/// Masks an E.164 phone number for public display. We keep the country
+/// prefix and the last two digits so the rider can sanity-check a
+/// callback, but everything in between is hidden. A leaked DB row +
+/// any route lookup used to be enough to scrape every driver's number
+/// — now non-privileged callers see "+60 1• ••• ••23".
+///
+/// `revealed` short-circuits and returns the full number — used when
+/// the caller is the route's driver, or is a confirmed ACTIVE
+/// subscriber and therefore needs the real number to call the driver.
+function maskPhone(phone, { revealed = false } = {}) {
+  if (!phone) return null;
+  if (revealed) return phone;
+  const digits = String(phone).replace(/\D+/g, "");
+  if (digits.length < 4) return "•••";
+  // Show country prefix (1-3 digits before the operator code) + last 2
+  const lastTwo = digits.slice(-2);
+  // Heuristic: drop the leading "+", keep first 2 chars (country code
+  // for MY/SG/PH/etc), middle is fully masked.
+  const cc = String(phone).startsWith("+") ? String(phone).slice(1, 3) : digits.slice(0, 2);
+  return `+${cc} •• ••• •${lastTwo}`;
+}
+
 function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null,
                     driverPlate = null, driverColor = null, driverCarModel = null,
-                    isFavorite = false) {
+                    isFavorite = false, revealPhone = false) {
   const pickupPoints = points.filter((p) => p.kind === "pickup").map(mapPoint);
   const dropPoints = points.filter((p) => p.kind === "drop").map(mapPoint);
   const reliability = mapReliability(reliabilityRow);
@@ -80,10 +102,14 @@ function mapRouteDto(routeRow, points, reliabilityRow, driverPhone = null,
     id: String(routeRow.id),
     driverId: routeRow.driver_id,
     driverName: routeRow.driver_name || routeRow.driver_id,
-    // E.164 phone from users table — populated at OTP signup. Powers
-    // the LiveTrip "Call driver" affordance; the iOS Models keep it
-    // optional so a missing phone keeps the button disabled.
-    driverPhone: driverPhone || null,
+    // E.164 phone from users table — populated at OTP signup. We
+    // ONLY reveal the unmasked number when the caller is the route's
+    // driver or holds an ACTIVE subscription (computed by
+    // loadRouteContexts). All other authenticated viewers get a
+    // masked stub like "+60 •• ••• ••23" — enough to recognise the
+    // number on a callback, not enough to scrape contact lists.
+    driverPhone: maskPhone(driverPhone, { revealed: revealPhone }),
+    driverPhoneRevealed: revealPhone,
     startLocation: routeRow.start_location,
     endLocation: routeRow.end_location,
     pickupPoints,
@@ -112,6 +138,15 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
   // without a second round-trip. Optional — when omitted, all DTOs
   // come back with `isFavorite: false`.
   const favoriteForRiderId = options.favoriteForRiderId || null;
+  // `requesterId` controls phone-reveal policy. When the caller is the
+  // route's driver OR holds an ACTIVE subscription on that route, we
+  // hand back the real E.164 number so the LiveTrip "Call driver"
+  // button works. Otherwise the rider sees a masked stub. Anonymous
+  // (no requesterId) gets masked phones across the board — that's the
+  // search-results path. Passing `revealAllPhones: true` is a server
+  // internal override (e.g. driver dashboards) and bypasses the check.
+  const requesterId = options.requesterId ? String(options.requesterId) : null;
+  const revealAllPhones = Boolean(options.revealAllPhones);
   const routeRes = await pool.query(
     `SELECT *
      FROM recurring_routes
@@ -200,6 +235,23 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
     favoriteRouteIds = new Set(favRes.rows.map((r) => r.route_id));
   }
 
+  // Routes where the caller is an ACTIVE subscriber. Combined with
+  // "caller is the driver" below, this controls which route DTOs get
+  // the unmasked driver phone. Skipped when we have no requester (auth
+  // hasn't run / internal call) — those callers get masked phones.
+  let subscribedRouteIds = new Set();
+  if (requesterId && !revealAllPhones) {
+    const subRes = await pool.query(
+      `SELECT route_id::text AS route_id
+         FROM route_subscriptions
+        WHERE rider_id = $1
+          AND status = 'ACTIVE'
+          AND route_id = ANY($2::uuid[])`,
+      [requesterId, routeIds]
+    );
+    subscribedRouteIds = new Set(subRes.rows.map((r) => r.route_id));
+  }
+
   return routeRes.rows.map((route) => {
     const driverKey = String(route.driver_id);
     const points = pointsByRoute.get(String(route.id)) || [];
@@ -209,6 +261,12 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
     const driverColor = colorByDriver.get(driverKey) || null;
     const driverCarModel = carModelByDriver.get(driverKey) || null;
     const isFavorite = favoriteRouteIds.has(String(route.id));
+    // Reveal the full phone only if the caller is the route driver
+    // OR holds an ACTIVE subscription on it OR caller flagged
+    // revealAllPhones (internal use). Everything else gets the mask.
+    const isDriver = requesterId != null && driverKey === requesterId;
+    const isSubscriber = subscribedRouteIds.has(String(route.id));
+    const revealPhone = revealAllPhones || isDriver || isSubscriber;
     const dto = mapRouteDto(
       route,
       points,
@@ -217,7 +275,8 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
       driverPlate,
       driverColor,
       driverCarModel,
-      isFavorite
+      isFavorite,
+      revealPhone
     );
     const activeCount = activeCountByRoute.get(String(route.id)) || 0;
     return {
@@ -547,7 +606,7 @@ async function findCommuteMatches(pool, payload) {
     pool,
     "active_status = TRUE",
     [],
-    { favoriteForRiderId: payload.riderId }
+    { favoriteForRiderId: payload.riderId, requesterId: payload.riderId }
   );
   if (contexts.length === 0) {
     return [];
@@ -897,6 +956,7 @@ module.exports = {
   listSubscriptions,
   loadRouteContexts,
   markChatThreadRead,
+  maskPhone,
   assertChatParticipant,
   normalizeDaysOfWeek,
   normalizeActiveStatus

@@ -1369,6 +1369,9 @@ final class AppStore {
             // route page.
             replaceRoute(RecurringRoute(id: id, driverId: driverId, driverName: currentUser.name,
                                         driverPhone: phoneNumber.isEmpty ? nil : phoneNumber,
+                                        // Self-created route: the driver looking at their own
+                                        // dashboard always has phone-revealed = true.
+                                        driverPhoneRevealed: true,
                                         startLocation: startLocation, endLocation: endLocation,
                                         pickupPoints: pickups, dropPoints: drops, departureTime: departureTime,
                                         daysOfWeek: daysOfWeek, seatCount: seatCount, pricePerSeat: pricePerSeat,

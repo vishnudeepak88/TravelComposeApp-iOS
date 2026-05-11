@@ -151,7 +151,14 @@ struct RecurringRoute: Codable, Equatable, Identifiable {
     /// until the backend exposes it on the route DTO; when nil, the
     /// LiveTrip phone affordance stays disabled (with a real
     /// accessibility label) instead of opening a bad `tel:` URL.
+    ///
+    /// PRIVACY: the server returns this either fully revealed (caller
+    /// is the driver or holds an ACTIVE subscription) or as a masked
+    /// stub like "+60 •• ••• ••23" for everyone else. UI must check
+    /// `driverPhoneRevealed` before passing to `tel://` — a masked
+    /// string would otherwise dial garbage.
     var driverPhone: String? = nil
+    var driverPhoneRevealed: Bool = false
     var startLocation: String
     var endLocation: String
     var pickupPoints: [RoutePoint]

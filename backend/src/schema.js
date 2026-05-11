@@ -21,6 +21,36 @@ async function initSchema(pool) {
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS car_color   TEXT NULL");
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS car_model   TEXT NULL");
 
+  // Plate uniqueness. Case-insensitive partial index so two drivers
+  // can't both claim "PEN 1234". Partial-WHERE excludes NULLs so users
+  // who haven't set a plate yet don't collide on the empty-key.
+  // Whitespace differences (`"PEN 1234"` vs `"PEN1234"`) are
+  // normalised by squashing spaces in the index expression.
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_users_plate_number
+      ON users (LOWER(REGEXP_REPLACE(plate_number, '\\s+', '', 'g')))
+      WHERE plate_number IS NOT NULL AND plate_number <> ''
+  `);
+
+  // Audit log for vehicle-identity changes. Every write goes through
+  // PUT /users/me/vehicle and lands a row here so a driver who swaps
+  // plates between rides leaves a trail. Ops can query historical
+  // values when investigating a rider report.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_vehicle_history (
+      id            UUID PRIMARY KEY,
+      user_id       TEXT NOT NULL,
+      plate_number  TEXT NULL,
+      car_color     TEXT NULL,
+      car_model     TEXT NULL,
+      changed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      source_ip     TEXT NULL
+    )
+  `);
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_user_vehicle_history_user ON user_vehicle_history(user_id, changed_at DESC)"
+  );
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS otp_codes (
       id UUID PRIMARY KEY,
@@ -265,9 +295,13 @@ async function initSchema(pool) {
     "CREATE INDEX IF NOT EXISTS ix_safety_alerts_open ON safety_alerts(status, created_at DESC)"
   );
 
-  // APNs device registrations. One row per (user, token) pair so a
-  // user can have multiple devices. Removed lazily when a delivery
-  // attempt comes back as `BadDeviceToken`.
+  // APNs device registrations. One row per token (the natural unique
+  // key) — a device only ever maps to ONE user at a time. If the user
+  // logs out and someone else logs in, we reassign user_id on the
+  // existing row rather than creating a duplicate. Previously the PK
+  // was (user_id, apns_token) which let an attacker who learned a
+  // victim's APNs token register it under their own account and
+  // receive the victim's push notifications.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS push_devices (
       user_id     TEXT NOT NULL,
@@ -280,6 +314,37 @@ async function initSchema(pool) {
       PRIMARY KEY (user_id, apns_token)
     )
   `);
+  // Migration: tighten the PK to `apns_token` alone. Idempotent —
+  // a CHECK on pg_indexes lets us skip the rewrite on subsequent boots.
+  // Step 1: collapse duplicates (same apns_token under multiple users)
+  //         to a single row keyed by most-recent last_seen_at.
+  // Step 2: swap the PK.
+  const hasOldPk = await pool.query(`
+    SELECT 1 FROM pg_indexes
+     WHERE schemaname = 'public'
+       AND tablename = 'push_devices'
+       AND indexname = 'push_devices_pkey'
+       AND indexdef LIKE '%(user_id, apns_token)%'
+     LIMIT 1
+  `);
+  if (hasOldPk.rowCount > 0) {
+    await pool.query(`
+      DELETE FROM push_devices a
+       USING push_devices b
+       WHERE a.apns_token = b.apns_token
+         AND a.last_seen_at < b.last_seen_at
+    `);
+    // For any remaining ties (rare) keep an arbitrary row.
+    await pool.query(`
+      DELETE FROM push_devices a
+       USING push_devices b
+       WHERE a.apns_token = b.apns_token
+         AND a.last_seen_at = b.last_seen_at
+         AND a.ctid < b.ctid
+    `);
+    await pool.query("ALTER TABLE push_devices DROP CONSTRAINT push_devices_pkey");
+    await pool.query("ALTER TABLE push_devices ADD PRIMARY KEY (apns_token)");
+  }
 
   // KYC document storage. Until the env-configured S3 bucket is set
   // up, we accept multipart uploads and persist the bytes locally
@@ -355,12 +420,15 @@ async function initSchema(pool) {
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS ix_route_favorites_rider ON route_favorites(rider_id, created_at DESC)");
 
-  // Plate + car color on recurring_routes — surfaced on the rider
-  // search card so a rider waiting at the pickup point can identify
-  // the right vehicle. Idempotent ALTERs so the migration is safe
-  // on existing deploys.
-  await pool.query("ALTER TABLE recurring_routes ADD COLUMN IF NOT EXISTS plate_number TEXT NULL");
-  await pool.query("ALTER TABLE recurring_routes ADD COLUMN IF NOT EXISTS car_color TEXT NULL");
+  // Legacy plate/colour columns on `recurring_routes`. Replaced by
+  // `users.plate_number` / `users.car_color` / `users.car_model` so
+  // vehicle identity is driver-owned and not per-route (see
+  // loadRouteContexts JOIN). Dropping the columns here is the
+  // defense-in-depth half of the fix: even if a future code path
+  // tried to write to them, there's nothing to write to.
+  // IF EXISTS makes the drop idempotent.
+  await pool.query("ALTER TABLE recurring_routes DROP COLUMN IF EXISTS plate_number");
+  await pool.query("ALTER TABLE recurring_routes DROP COLUMN IF EXISTS car_color");
 
   // Saved searches — rider's daily commute query. Persist on the
   // server so it's available across devices (the iOS side mirrors

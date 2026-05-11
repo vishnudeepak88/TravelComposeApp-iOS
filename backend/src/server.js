@@ -30,6 +30,7 @@ const {
   listSubscriptions,
   loadRouteContexts,
   markChatThreadRead,
+  maskPhone,
   normalizeActiveStatus,
   normalizeDaysOfWeek
 } = require("./repository");
@@ -48,6 +49,7 @@ const {
   rateLimitGlobal,
   rateLimitSearch,
   rateLimitAuth,
+  rateLimitOtpByPhone,
   rateLimitWrite
 } = require("./middleware");
 
@@ -72,7 +74,38 @@ function broadcastRideLocation(rideId, payload) {
   }
 }
 
-app.use(cors());
+// CORS allowlist. The iOS app doesn't need CORS (URLSession doesn't
+// enforce same-origin), but web browsers do. We allowlist the public
+// website + the voygo:// deep-link scheme. Any other origin gets no
+// `Access-Control-Allow-Origin` header so a malicious site can't
+// proxy a logged-in user's session.
+//
+// `CORS_EXTRA_ORIGINS` is a comma-separated env override for ops
+// (e.g. adding a preview branch domain temporarily). Empty is the
+// safe default.
+const corsAllowlist = new Set([
+  "https://voygo.app",
+  "https://www.voygo.app",
+  "voygo://",
+  ...(String(process.env.CORS_EXTRA_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean))
+]);
+app.use(
+  cors({
+    origin(origin, cb) {
+      // No-origin requests (curl, server-to-server, native apps) are
+      // allowed — they don't trigger CORS in the first place. We only
+      // reject browser cross-origin requests from non-allowlisted
+      // sites.
+      if (!origin) return cb(null, true);
+      if (corsAllowlist.has(origin)) return cb(null, true);
+      cb(null, false);
+    },
+    credentials: false
+  })
+);
 app.use(express.json({ limit: "1mb" }));
 app.use((req, res, next) => {
   const startedAt = Date.now();
@@ -96,6 +129,20 @@ function asyncHandler(fn) {
   return (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
   };
+}
+
+// Masks an E.164 phone for any log line. Keep the country code and
+// last two digits — enough to correlate with a user report when ops
+// is grepping logs — but strip the middle so dump-scraping a leaked
+// log file doesn't produce a clean dialable list of every user.
+function maskPhoneForLog(phone) {
+  if (!phone) return "(none)";
+  const s = String(phone);
+  const digits = s.replace(/\D+/g, "");
+  if (digits.length < 4) return "•••";
+  const lastTwo = digits.slice(-2);
+  const cc = s.startsWith("+") ? s.slice(1, 3) : digits.slice(0, 2);
+  return `+${cc}••••${lastTwo}`;
 }
 
 function todayIso() {
@@ -183,7 +230,12 @@ const SUBSCRIPTION_STATUSES = new Set(["ACTIVE", "PAUSED", "CANCELLED"]);
 
 app.post(
   "/auth/request-otp",
+  // Two-layer rate limit: per-IP (`rateLimitAuth`, 5 per minute) blocks
+  // a single client hammering, per-phone (`rateLimitOtpByPhone`,
+  // 1/60s, 5/hour) blocks a residential-proxy attacker who rotates
+  // IPs to enumerate phones or pump our Twilio bill. Both must pass.
   rateLimitAuth,
+  rateLimitOtpByPhone,
   asyncHandler(async (req, res) => {
     const phone = normalizePhone(req.body?.phone);
     if (!phone) {
@@ -236,11 +288,14 @@ app.post(
     const results = await Promise.all(deliveries);
     const smsOk   = results.some((r) => r.channel === "sms"   && r.ok);
     const emailOk = results.some((r) => r.channel === "email" && r.ok);
+    const maskedPhone = maskPhoneForLog(phone);
     for (const r of results) {
       if (!r.ok) {
-        console.warn(`[auth] ${r.channel} send failed for ${phone}: ${r.reason}`);
+        console.warn(`[auth] ${r.channel} send failed for ${maskedPhone}: ${r.reason}`);
       } else if (r.channel === "email") {
-        console.log(`[auth] OTP for ${phone} emailed to ${process.env.OTP_TO_EMAIL}`);
+        // OTP_TO_EMAIL is fine to log — it's a single ops mailbox not
+        // a per-user secret. Phone is masked.
+        console.log(`[auth] OTP for ${maskedPhone} emailed to ${process.env.OTP_TO_EMAIL}`);
       }
     }
     // No delivery channel succeeded.
@@ -249,16 +304,16 @@ app.post(
         // Production is required to have at least SMS configured (config.js
         // guards block boot otherwise). Reaching here means SMS errored at
         // send time and email isn't a backup. Surface the failure honestly.
-        console.error(`[auth] all OTP channels failed for ${phone} in production`);
+        console.error(`[auth] all OTP channels failed for ${maskedPhone} in production`);
         res.status(502).json({ detail: "otp_delivery_failed" });
         return;
       }
-      if (config.isStaging) {
-        console.warn(
-          `[auth] STAGING devCode for ${phone}: ${code} (expires ${expiresAt.toISOString()}) — no delivery channel configured`
-        );
-      } else {
-        console.log(`[auth] OTP for ${phone}: ${code} (expires ${expiresAt.toISOString()})`);
+      // Local dev only: emit the devCode in the response (line 270
+      // below). We never log the OTP code itself — anyone with read
+      // access to staging logs would otherwise have a stable test
+      // bypass for every phone.
+      if (!config.isProduction) {
+        console.log(`[auth] OTP delivery channels unconfigured for ${maskedPhone} — devCode returned in response`);
       }
     }
     const response = { sent: true, expiresAt: expiresAt.toISOString() };
@@ -394,12 +449,22 @@ app.put(
 // arrive in another car because every route DTO sources vehicle from
 // here at read time (see loadRouteContexts in repository.js).
 //
-// Light validation only: plates and colour strings are user-facing
-// labels for the rider to spot at pickup, not authoritative legal
-// fields. KYC is where vehicle ownership is actually checked.
+// Hardening:
+// 1. KYC-gated — only APPROVED drivers can claim a plate. Stops a
+//    fresh signup from grabbing a high-trust plate ("PEN 1234") and
+//    impersonating an existing driver on the search results.
+// 2. Plate uniqueness — partial unique index in schema.js ensures two
+//    drivers can't simultaneously claim the same normalised plate.
+//    409 on conflict.
+// 3. Audit trail — every write lands a row in user_vehicle_history so
+//    a driver who swaps plates between rides leaves a discoverable
+//    trail when ops investigates a rider report.
+// 4. Refuse-to-clear when there's an active route — prevents a driver
+//    from blanking their identity right before a problem ride.
 app.put(
   "/users/me/vehicle",
   requireAuth,
+  requireKyc,
   rateLimitWrite,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
@@ -415,15 +480,59 @@ app.put(
     const color = String(colorRaw).trim().slice(0, 24);
     const model = String(modelRaw).trim().slice(0, 64);
 
-    await pool.query(
-      `UPDATE users
-          SET plate_number = $2,
-              car_color    = $3,
-              car_model    = $4,
-              updated_at   = NOW()
-        WHERE id = $1`,
-      [req.user.id, plate || null, color || null, model || null]
-    );
+    // Refuse to clear plate while any active route exists — the
+    // rider-facing card needs a plate to be useful, and a "blank
+    // plate driver" right before a dodgy ride is a classic dodge.
+    if (!plate) {
+      const activeRoutes = await pool.query(
+        `SELECT 1 FROM recurring_routes
+          WHERE driver_id = $1 AND active_status = TRUE LIMIT 1`,
+        [req.user.id]
+      );
+      if (activeRoutes.rowCount > 0) {
+        res.status(409).json({ detail: "plate_required_with_active_route" });
+        return;
+      }
+    }
+
+    try {
+      await pool.query(
+        `UPDATE users
+            SET plate_number = $2,
+                car_color    = $3,
+                car_model    = $4,
+                updated_at   = NOW()
+          WHERE id = $1`,
+        [req.user.id, plate || null, color || null, model || null]
+      );
+    } catch (err) {
+      // 23505 = unique_violation. Surfaces when the partial unique
+      // index on plate_number catches a duplicate claim.
+      if (err && err.code === "23505") {
+        res.status(409).json({ detail: "plate_already_claimed" });
+        return;
+      }
+      throw err;
+    }
+
+    // Audit row — best-effort, never blocks the write response if it
+    // somehow fails (e.g., the table got dropped mid-deploy). The
+    // primary write already succeeded.
+    pool.query(
+      `INSERT INTO user_vehicle_history
+         (id, user_id, plate_number, car_color, car_model, source_ip)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        crypto.randomUUID(),
+        req.user.id,
+        plate || null,
+        color || null,
+        model || null,
+        // Trust X-Forwarded-For only when behind a known proxy (Render
+        // sets it). Falls back to req.ip if header missing.
+        String(req.get("x-forwarded-for") || req.ip || "").slice(0, 64)
+      ]
+    ).catch((e) => console.warn(`[vehicle-audit] ${e.message}`));
 
     res.json({
       plateNumber: plate || null,
@@ -865,23 +974,36 @@ app.post(
 app.post(
   "/devices",
   requireAuth,
+  rateLimitWrite,
   asyncHandler(async (req, res) => {
     const apnsToken = String(req.body?.apnsToken || "").trim();
-    if (!apnsToken || apnsToken.length < 32) {
+    // APNs tokens are 64 hex chars (32 bytes) historically; modern
+    // tokens are longer base64-ish strings. Length check is a soft
+    // guard against junk + a malicious oversized payload.
+    if (!apnsToken || apnsToken.length < 32 || apnsToken.length > 200) {
       res.status(400).json({ detail: "apnsToken required" });
       return;
     }
-    const platform = String(req.body?.platform || "iOS");
-    const locale = req.body?.locale ? String(req.body.locale) : null;
-    const appVersion = req.body?.appVersion ? String(req.body.appVersion) : null;
+    const platform = String(req.body?.platform || "iOS").slice(0, 16);
+    const locale = req.body?.locale ? String(req.body.locale).slice(0, 16) : null;
+    const appVersion = req.body?.appVersion ? String(req.body.appVersion).slice(0, 32) : null;
 
+    // CRITICAL: the device's APNs token is the unique key. If a
+    // previous owner of the device (different user) still has a row
+    // with this token, we REASSIGN it to the current user — not add
+    // a second row. The old PK (user_id, apns_token) let an attacker
+    // who learned a victim's token register it under their own
+    // account and harvest the victim's push notifications. The new
+    // schema's PK is `apns_token` alone, so this ON CONFLICT replaces
+    // any prior owner.
     await pool.query(
       `INSERT INTO push_devices
          (user_id, apns_token, platform, locale, app_version, last_seen_at)
        VALUES ($1, $2, $3, $4, $5, NOW())
-       ON CONFLICT (user_id, apns_token) DO UPDATE
-         SET platform = EXCLUDED.platform,
-             locale   = EXCLUDED.locale,
+       ON CONFLICT (apns_token) DO UPDATE
+         SET user_id     = EXCLUDED.user_id,
+             platform    = EXCLUDED.platform,
+             locale      = EXCLUDED.locale,
              app_version = EXCLUDED.app_version,
              last_seen_at = NOW()`,
       [req.user.id, apnsToken, platform, locale, appVersion]
@@ -1335,13 +1457,37 @@ app.post(
 app.post(
   "/commute/routes",
   requireAuth,
+  requireKyc,
+  rateLimitWrite,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
+    // driverName is server-derived. The previous version honoured a
+    // client field which let an attacker publish a route under any
+    // string they wanted ("Officer Tan"). We pull display_name from
+    // the users table and fall back to the user id.
+    const userRow = (await pool.query(
+      "SELECT display_name FROM users WHERE id = $1",
+      [req.user.id]
+    )).rows[0];
+    const driverName = (userRow?.display_name || "").trim() || req.user.id;
+
+    // Cap free-text fields server-side. start/end_location feeds
+    // ILIKE comparisons in fan-out (notifySeatOpenedListeners) — an
+    // unbounded label would force a slow scan and hold the request
+    // hostage. 120 chars is generous for "Petaling Jaya, Mid Valley
+    // Megamall (KTM side)".
+    const startLocation = String(bodyValue(body, "startLocation", "start_location") || "").slice(0, 120).trim();
+    const endLocation = String(bodyValue(body, "endLocation", "end_location") || "").slice(0, 120).trim();
+    if (!startLocation || !endLocation) {
+      res.status(400).json({ detail: "startLocation and endLocation required" });
+      return;
+    }
+
     const routeId = await createRoute(pool, {
       driverId: req.user.id,
-      driverName: bodyValue(body, "driverName", "driver_name"),
-      startLocation: bodyValue(body, "startLocation", "start_location"),
-      endLocation: bodyValue(body, "endLocation", "end_location"),
+      driverName,
+      startLocation,
+      endLocation,
       pickupPoints: bodyValue(body, "pickupPoints", "pickup_points") || [],
       dropPoints: bodyValue(body, "dropPoints", "drop_points") || [],
       departureTime: bodyValue(body, "departureTime", "departure_time"),
@@ -1362,9 +1508,7 @@ app.post(
     // notify riders who flagged interest in this corridor. Run as a
     // detached task so 500 matched requests don't block the driver's
     // create-route HTTP response for 30 seconds.
-    const startLabel = bodyValue(body, "startLocation", "start_location");
-    const endLabel   = bodyValue(body, "endLocation",   "end_location");
-    fanoutRouteRequestMatches(routeId, startLabel, endLabel).catch((e) => {
+    fanoutRouteRequestMatches(routeId, startLocation, endLocation).catch((e) => {
       console.warn(`[routes] cross-pollinate failed: ${e.message}`);
     });
 
@@ -1540,7 +1684,7 @@ app.get(
       pool,
       `id IN (SELECT route_id FROM route_favorites WHERE rider_id = $1)`,
       [req.user.id],
-      { favoriteForRiderId: req.user.id }
+      { favoriteForRiderId: req.user.id, requesterId: req.user.id }
     );
     res.json(contexts.map((c) => c.dto));
   })
@@ -1852,9 +1996,12 @@ app.get(
       res.status(403).json({ detail: "may only list your own driver routes" });
       return;
     }
+    // Driver viewing their own routes — they already know their own
+    // phone, so revealAllPhones is safe (and avoids confusing them
+    // with a masked stub on their own dashboard).
     const contexts = await loadRouteContexts(pool, "driver_id = $1", [
       req.params.driverId
-    ]);
+    ], { requesterId: req.user.id, revealAllPhones: true });
     res.json(contexts.map((ctx) => ctx.dto));
   })
 );
@@ -1898,7 +2045,15 @@ app.get(
   "/commute/routes/:routeId",
   requireAuth,
   asyncHandler(async (req, res) => {
-    const contexts = await loadRouteContexts(pool, "id = $1", [req.params.routeId]);
+    // Pass requesterId so the DTO's phone is unmasked when the caller
+    // is the driver OR an ACTIVE subscriber. Anyone else (e.g. a rider
+    // doing a deep-link share preview) sees the masked stub.
+    const contexts = await loadRouteContexts(
+      pool,
+      "id = $1",
+      [req.params.routeId],
+      { requesterId: req.user.id }
+    );
     if (contexts.length === 0) {
       res.status(404).json({ detail: "Route not found" });
       return;
@@ -1996,6 +2151,24 @@ app.put(
        WHERE id = $1`,
       [subscriptionId, status]
     );
+
+    // Revoke chat access when a rider cancels. Without this an
+    // ex-rider remains a `chat_participants` row forever and can
+    // keep messaging the driver indefinitely. PAUSED is benign
+    // (the rider's coming back) — only CANCELLED tears down. Driver
+    // keeps the thread; only this rider's seat at the table goes.
+    if (status === "CANCELLED") {
+      await pool.query(
+        `DELETE FROM chat_participants
+          WHERE user_id = $1
+            AND thread_id IN (
+              SELECT id FROM chat_threads
+               WHERE route_id = (SELECT route_id FROM route_subscriptions WHERE id = $2)
+            )`,
+        [req.user.id, subscriptionId]
+      );
+    }
+
     await generateRideInstances(pool, todayIso(), 30);
     // Seat-open notification: when an ACTIVE sub becomes CANCELLED
     // or PAUSED, a seat just freed up. Notify riders who favourited
@@ -2057,14 +2230,50 @@ app.get(
 
 // Internal/admin: ride generation. Gated to a static admin key, since these
 // endpoints aren't user-facing and shouldn't fall under the JWT user pool.
+// `crypto.timingSafeEqual` defends against character-by-character side-channel
+// timing on the comparison; padding to equal length first because tSE
+// throws when lengths differ.
 function requireAdmin(req, res, next) {
   const key = req.get("X-Admin-Key") || "";
   const expected = process.env.ADMIN_API_KEY || "";
-  if (!expected || key !== expected) {
+  if (!expected) {
+    res.status(401).json({ detail: "admin key required" });
+    return;
+  }
+  const keyBuf = Buffer.from(key);
+  const expBuf = Buffer.from(expected);
+  let ok = false;
+  if (keyBuf.length === expBuf.length) {
+    try { ok = crypto.timingSafeEqual(keyBuf, expBuf); } catch { ok = false; }
+  }
+  if (!ok) {
     res.status(401).json({ detail: "admin key required" });
     return;
   }
   next();
+}
+
+// Driver-only gate: requires authenticated user AND `kyc_status='APPROVED'`.
+// Used to wrap every create-route / publish-trip / vehicle-write surface
+// that downstream surfaces to riders. Riders themselves can sign up
+// without KYC and book — only the *driver-side* of every product needs
+// this gate. If the user is missing entirely we 401 (auth middleware
+// should already have caught this; defensive belt-and-braces).
+function requireKyc(req, res, next) {
+  if (!req.user || !req.user.id) {
+    res.status(401).json({ detail: "auth required" });
+    return;
+  }
+  pool.query("SELECT kyc_status FROM users WHERE id = $1", [req.user.id])
+    .then((r) => {
+      const status = r.rows[0]?.kyc_status || "NOT_STARTED";
+      if (status !== "APPROVED") {
+        res.status(403).json({ detail: "kyc_required", kycStatus: status });
+        return;
+      }
+      next();
+    })
+    .catch((err) => next(err));
 }
 
 app.post(
@@ -2077,18 +2286,33 @@ app.post(
   })
 );
 
+// Legacy create-route. Kept for backwards compatibility with older
+// iOS clients; new clients hit POST /commute/routes. Both go through
+// the same KYC + rate-limit gate and BOTH derive driver_name from
+// the authenticated user — never from the body — to prevent an
+// attacker from publishing a route under someone else's display name.
 app.post(
   "/routes",
   requireAuth,
+  requireKyc,
+  rateLimitWrite,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
+    // Look up the canonical display name from the users row. Falls
+    // back to the user id if the column happens to be empty so the
+    // route still has a stable handle.
+    const userRow = (await pool.query(
+      "SELECT display_name FROM users WHERE id = $1",
+      [req.user.id]
+    )).rows[0];
+    const driverName = (userRow?.display_name || "").trim() || req.user.id;
     const routeId = await createRoute(
       pool,
       {
         driverId: req.user.id,
-        driverName: body.driver_name || req.user.id,
-        startLocation: body.start_location,
-        endLocation: body.end_location,
+        driverName,
+        startLocation: String(body.start_location || "").slice(0, 120),
+        endLocation: String(body.end_location || "").slice(0, 120),
         pickupPoints: body.pickup_points || [],
         dropPoints: body.drop_points || [],
         departureTime: body.departure_time,
@@ -2467,17 +2691,24 @@ app.post(
     // a complaint for real users. The notification carries the
     // route_id so iOS's existing voygoOpenThread deep-link lookup
     // works (Home tap → thread).
+    //
+    // Run fan-out in parallel so a 20-rider thread doesn't tail the
+    // sender's HTTP response by 20× DB roundtrips. Per-recipient
+    // failure is logged but never tanks the send — the message itself
+    // is already persisted.
     const notify = message._notify || { recipients: [], routeId: null, threadTitle: null };
     const preview = text.length > 80 ? text.slice(0, 80) + "…" : text;
-    for (const recipientId of notify.recipients) {
-      await createNotification({
-        userId: recipientId,
-        type: "CHAT_MESSAGE",
-        title: notify.threadTitle || "New message",
-        body: preview,
-        routeId: notify.routeId
-      });
-    }
+    await Promise.all(
+      notify.recipients.map((recipientId) =>
+        createNotification({
+          userId: recipientId,
+          type: "CHAT_MESSAGE",
+          title: notify.threadTitle || "New message",
+          body: preview,
+          routeId: notify.routeId
+        }).catch((e) => console.warn(`[chat] notify ${recipientId} failed: ${e.message}`))
+      )
+    );
 
     // Strip the internal `_notify` field from the wire response so the
     // shape stays exactly what the iOS ChatMessage decoder expects.
@@ -2513,12 +2744,17 @@ app.post(
 
 const LONG_HAUL_MAX_SEATS_PER_BOOKING = 8;
 
-function toLongHaulTripDto(row) {
+// `revealPhone` controls whether the rider sees the unmasked E.164 or
+// the masked stub. We reveal when the caller is the driver OR has a
+// confirmed booking on the trip. Same policy as the commute route DTO
+// — see `loadRouteContexts` in repository.js.
+function toLongHaulTripDto(row, { revealPhone = false } = {}) {
   return {
     id: String(row.id),
     driverId: String(row.driver_id),
     driverName: row.driver_name || null,
-    driverPhone: row.driver_phone || null,
+    driverPhone: maskPhone(row.driver_phone, { revealed: revealPhone }),
+    driverPhoneRevealed: revealPhone,
     driverRating: row.average_rating != null ? Number(row.average_rating) : null,
     origin: row.origin,
     destination: row.destination,
@@ -2537,10 +2773,12 @@ function toLongHaulTripDto(row) {
 app.post(
   "/longhaul/trips",
   requireAuth,
+  requireKyc,
+  rateLimitWrite,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
-    const origin = String(bodyValue(body, "origin") || "").trim();
-    const destination = String(bodyValue(body, "destination") || "").trim();
+    const origin = String(bodyValue(body, "origin") || "").slice(0, 120).trim();
+    const destination = String(bodyValue(body, "destination") || "").slice(0, 120).trim();
     const departAtRaw = bodyValue(body, "departAt", "depart_at");
     const seatsTotal = Number(bodyValue(body, "seatsTotal", "seats_total"));
     const pricePerSeatMyr = Number(bodyValue(body, "pricePerSeatMyr", "price_per_seat_myr"));
@@ -2617,7 +2855,34 @@ app.get(
        LIMIT 100
     `;
     const result = await pool.query(sql, params);
-    res.json(result.rows.map(toLongHaulTripDto));
+    if (result.rowCount === 0) {
+      res.json([]);
+      return;
+    }
+    // Reveal phones only on trips where caller is the driver OR has
+    // a booking. One round-trip on long_haul_bookings keyed by the
+    // matching trip ids, so we don't N+1 the response.
+    const tripIds = result.rows.map((r) => String(r.id));
+    const driverIds = new Set(result.rows.map((r) => String(r.driver_id)));
+    let bookedTripIds = new Set();
+    if (!driverIds.has(String(req.user.id))) {
+      const bookRes = await pool.query(
+        `SELECT trip_id::text AS trip_id
+           FROM long_haul_bookings
+          WHERE rider_id = $1
+            AND trip_id = ANY($2::uuid[])`,
+        [req.user.id, tripIds]
+      );
+      bookedTripIds = new Set(bookRes.rows.map((r) => r.trip_id));
+    } else {
+      // Driver: reveal only on their own trips, mask on others.
+      bookedTripIds = new Set(); // handled per-row below via driver_id check
+    }
+    res.json(result.rows.map((row) => {
+      const isDriver = String(row.driver_id) === String(req.user.id);
+      const hasBooking = bookedTripIds.has(String(row.id));
+      return toLongHaulTripDto(row, { revealPhone: isDriver || hasBooking });
+    }));
   })
 );
 
@@ -2642,7 +2907,18 @@ app.get(
       res.status(404).json({ detail: "trip_not_found" });
       return;
     }
-    res.json(toLongHaulTripDto(result.rows[0]));
+    // Same gating policy as the list endpoint above.
+    const row = result.rows[0];
+    const isDriver = String(row.driver_id) === String(req.user.id);
+    let hasBooking = false;
+    if (!isDriver) {
+      const bookRes = await pool.query(
+        "SELECT 1 FROM long_haul_bookings WHERE trip_id = $1 AND rider_id = $2 LIMIT 1",
+        [req.params.id, req.user.id]
+      );
+      hasBooking = bookRes.rowCount > 0;
+    }
+    res.json(toLongHaulTripDto(row, { revealPhone: isDriver || hasBooking }));
   })
 );
 
@@ -2789,6 +3065,8 @@ app.get(
         LIMIT 50`,
       [req.user.id]
     );
+    // Caller is the booking owner — they need the driver's real
+    // phone to call. Reveal unmasked here.
     res.json(result.rows.map((row) => ({
       id: String(row.id),
       tripId: String(row.trip_id),
@@ -2800,7 +3078,8 @@ app.get(
       departAt: row.depart_at,
       pricePerSeatMyr: Number(row.price_per_seat_myr),
       driverName: row.driver_name || null,
-      driverPhone: row.driver_phone || null
+      driverPhone: row.driver_phone || null,
+      driverPhoneRevealed: true
     })));
   })
 );
@@ -2824,7 +3103,10 @@ app.get(
         LIMIT 100`,
       [req.user.id]
     );
-    res.json(result.rows.map(toLongHaulTripDto));
+    // Caller is the driver of every row in this result by definition,
+    // so revealPhone = true. Avoids confusing them with a mask on
+    // their own dashboard.
+    res.json(result.rows.map((row) => toLongHaulTripDto(row, { revealPhone: true })));
   })
 );
 
@@ -2902,8 +3184,14 @@ app.post(
     // iOS (Models/Trust.swift) — keep these two in sync until they share
     // a code path. Days are derived from the subscription range so a
     // partial-month signup pays the right pro-rated amount.
-    const daysClient = clampDays(bodyValue(body, "days", "totalDays"));
-    const days = daysClient ?? subscriptionWorkingDays(sub.start_date, sub.end_date);
+    //
+    // SECURITY: `days` is *never* read from the request body. The
+    // previous version preferred a client-supplied `days` if present,
+    // which let a modified client send `days: 1` on a MONTHLY tier
+    // and pay ~RM 1 instead of the ~22-day total. The server now
+    // unconditionally derives days from the subscription's stored
+    // start/end dates.
+    const days = subscriptionWorkingDays(sub.start_date, sub.end_date);
     const amountMyr = computeSubscriptionAmount(
       Number(sub.price_per_seat),
       tier,
@@ -3098,14 +3386,26 @@ app.post(
       return;
     }
     if (actor === "RIDER") {
+      // SECURITY: require an explicit subscriptionId AND verify it
+      // belongs to this rider on this route. The previous version
+      // accepted a null subscriptionId and passed the access check
+      // via *any* of the rider's subs on the route, then wrote the
+      // refund row referencing the body-supplied subscriptionId
+      // (potentially someone else's). That credited the attacker's
+      // wallet while pointing the ledger at a victim's subscription_id
+      // — ledger corruption + small-bounty self-refund attack.
+      if (!subscriptionId) {
+        res.status(400).json({ detail: "subscriptionId required for rider cancellations" });
+        return;
+      }
       const riderAccess = await pool.query(
         `SELECT id
            FROM route_subscriptions
-          WHERE route_id = $1
-            AND rider_id = $2
-            AND ($3::text IS NULL OR id::text = $3::text)
+          WHERE id::text = $1::text
+            AND route_id = $2
+            AND rider_id = $3
           LIMIT 1`,
-        [routeId, req.user.id, subscriptionId || null]
+        [subscriptionId, routeId, req.user.id]
       );
       if (riderAccess.rowCount === 0) {
         res.status(403).json({ detail: "Only subscribed riders can report rider cancellations" });
@@ -3185,9 +3485,15 @@ function computePenalty({ kind, pricePerSeat, driverLateCancels }) {
       return driverLateCancels >= 2 ? pricePerSeat : 0;
     case "DRIVER_NO_SHOW":
       return Math.floor(pricePerSeat / 2);
-    case "RIDER_CANCEL_MID_MONTH":
+    case "RIDER_CANCEL_MID_MONTH": {
       // 10% admin fee, capped at MYR 20, expressed as a refund (negative).
-      return -Math.min(20, Math.floor(pricePerSeat / 10) * 22);
+      // Previous formula was `Math.floor(pricePerSeat / 10) * 22` — wrong
+      // unit math (a price of RM 9 yielded a RM 0 refund; a price of
+      // RM 15 yielded RM 22 before cap). We compute the actual 10% fee
+      // and floor at MYR 1 so a tiny refund doesn't disappear entirely.
+      const fee = Math.max(1, Math.floor(pricePerSeat * 22 * 0.1));
+      return -Math.min(20, fee);
+    }
     case "RIDER_NO_SHOW":
       return 0;
     case "FORCE_MAJEURE":

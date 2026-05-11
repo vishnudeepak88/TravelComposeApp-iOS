@@ -889,6 +889,12 @@ struct RecurringRouteDTO: Decodable {
     var driverId: String
     var driverName: String?
     var driverPhone: String?
+    /// True when `driverPhone` is the unmasked E.164. When false the
+    /// phone is a display-only stub like "+60 •• ••• ••23" — never
+    /// pass it to `tel://`. iOS uses this flag to keep the Call button
+    /// disabled until the rider has an ACTIVE subscription (the only
+    /// state where the server reveals the full number).
+    var driverPhoneRevealed: Bool?
     var startLocation: String
     var endLocation: String
     var pickupPoints: [RoutePoint]
@@ -912,6 +918,7 @@ struct RecurringRouteDTO: Decodable {
         RecurringRoute(
             id: id, driverId: driverId, driverName: driverName ?? "Driver",
             driverPhone: driverPhone,
+            driverPhoneRevealed: driverPhoneRevealed ?? false,
             startLocation: startLocation, endLocation: endLocation,
             pickupPoints: pickupPoints, dropPoints: dropPoints,
             departureTime: departureTime, daysOfWeek: daysOfWeek,

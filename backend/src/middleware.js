@@ -102,9 +102,38 @@ function rateLimitWrite(req, res, next) {
   next();
 }
 
+/// Per-PHONE OTP rate limit. Layered on top of `rateLimitAuth` (which
+/// is per-IP) to stop a rotating-IP attacker from enumerating phone
+/// numbers or driving up SMS spend. Caps a single phone at 1 OTP per
+/// 60s burst and 5 per hour sustained — enough for a genuine user
+/// who fat-fingered their number, tight enough to make a pumping
+/// attack uneconomical.
+///
+/// Reads `req.body.phone` — the OTP-request handler validates the
+/// phone before this runs upstream of bucket lookup, so we just
+/// normalise into a key here.
+function rateLimitOtpByPhone(req, res, next) {
+  const raw = String(req.body?.phone || "").trim();
+  if (!raw) return next(); // Let the handler return 400 for missing phone.
+  const phoneKey = raw.replace(/\D+/g, "");
+  if (!phoneKey) return next();
+  const key = `otp-phone:${phoneKey}`;
+  let bucket = buckets.get(key);
+  if (!bucket) {
+    bucket = new TokenBucket(1, 5 / 3600); // 1 burst, 5/hour sustained
+    buckets.set(key, bucket);
+  }
+  if (!bucket.tryConsume()) {
+    res.status(429).json({ detail: "Too many OTP requests for this number" });
+    return;
+  }
+  next();
+}
+
 module.exports = {
   rateLimitGlobal,
   rateLimitSearch,
   rateLimitAuth,
+  rateLimitOtpByPhone,
   rateLimitWrite
 };
