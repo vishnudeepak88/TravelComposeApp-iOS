@@ -192,35 +192,49 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
                           radiusMeters: Double = 5_000,
                           limit: Int = 8) async throws -> [PlaceSuggestion] {
         // Per-purpose query lists. Each phrase pulls a distinct
-        // category MapKit indexes well in Malaysia.
+        // category MapKit indexes well in Malaysia. Order matters —
+        // we break out of the loop once `limit` results are collected,
+        // so highest-value categories go first.
         let queries: [String]
         switch purpose {
         case .pickup:
-            // Where riders gather + wait. Transit nodes lead because
-            // they're the most common pre-booked meeting point;
-            // shopping malls double as casual landmarks
-            // ("see you at AEON").
+            // Where Malaysian riders actually gather + wait. Transit
+            // nodes first (formal pickup), then quintessentially
+            // Malaysian informal pickup spots: petrol stations
+            // ("jumpa kat Petronas"), convenience stores ("kat
+            // 7-Eleven"), mosques (Friday gatherings), McDonald's
+            // (24/7, well-lit), and shopping malls.
             queries = [
                 "LRT station",
                 "MRT station",
                 "bus station",
                 "KTM station",
-                "shopping mall"
+                "Petronas",          // dominant petrol brand — usually has parking + 24/7 store
+                "Shell",
+                "7-Eleven",
+                "shopping mall",
+                "McDonald's",
+                "mosque"
             ]
         case .drop:
-            // Where riders ACTUALLY GO. Offices first (the dominant
-            // commute drop), then schools/universities (school run),
-            // hospitals (medical), business/industrial parks (the
-            // Bayan Lepas / Cyberjaya pattern), then malls as a
-            // fallback category for retail-cluster drops.
+            // Where Malaysian riders ACTUALLY GO. Offices first (the
+            // dominant commute drop), then business/industrial parks
+            // (Bayan Lepas FIZ / Cyberjaya pattern), schools +
+            // universities (school run), hospitals (medical), then
+            // government complexes ("Jabatan" / JPJ / LHDN — huge
+            // morning drops), banks (CIMB/Maybank HQ clusters), and
+            // malls as a fallback retail-drop category.
             queries = [
-                "office",
                 "office tower",
+                "office",
                 "business park",
                 "industrial park",
                 "university",
-                "hospital",
                 "school",
+                "hospital",
+                "government office", // matches Bangunan Persekutuan / Jabatan / Pejabat Kerajaan
+                "Jabatan",           // Malay prefix for government departments
+                "bank",
                 "shopping mall"
             ]
         }

@@ -188,6 +188,37 @@ struct VoygoAPIClient {
         try await post(request, to: baseURL.appendingPathComponent("reviews"), as: IdResponse.self)
     }
 
+    /// Corridor-aware suggestions — learns from what real drivers
+    /// + riders have used as pickups/drops on similar routes. Goes
+    /// IN FRONT of MapKit suggestions so the rail self-improves
+    /// over time.
+    ///
+    /// At least one of (origin, dest) coords must be supplied. When
+    /// both are supplied, server filters to routes that have a pickup
+    /// near origin AND a drop near dest — strongest match. With one
+    /// coord, the filter relaxes to "near the known coord".
+    static func corridorSuggestions(
+        kind: CorridorSuggestionKind,
+        originLat: Double?, originLng: Double?,
+        destLat: Double?, destLng: Double?
+    ) async throws -> [CorridorSuggestion] {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("commute/corridor-suggestions"),
+            resolvingAgainstBaseURL: false
+        )!
+        var items: [URLQueryItem] = [URLQueryItem(name: "kind", value: kind.rawValue)]
+        if let lat = originLat, let lng = originLng {
+            items.append(URLQueryItem(name: "originLat", value: String(lat)))
+            items.append(URLQueryItem(name: "originLng", value: String(lng)))
+        }
+        if let lat = destLat, let lng = destLng {
+            items.append(URLQueryItem(name: "destLat", value: String(lat)))
+            items.append(URLQueryItem(name: "destLng", value: String(lng)))
+        }
+        components.queryItems = items
+        return try await get(components.url!, as: [CorridorSuggestion].self)
+    }
+
     // GET /places/autocomplete
     static func autocompletePlaces(query: String, lat: Double?, lon: Double?) async throws -> [PlaceSuggestion] {
         var components = URLComponents(url: baseURL.appendingPathComponent("places/autocomplete"), resolvingAgainstBaseURL: false)!
@@ -863,6 +894,30 @@ struct SoloCancelResponse: Decodable {
     var refundMyr: Int
     var refundFraction: Double
     var refundPaymentId: String?
+}
+
+// MARK: - Corridor suggestions
+
+enum CorridorSuggestionKind: String {
+    case pickup
+    case drop
+}
+
+/// A pickup/drop label learned from past route_points on similar
+/// corridors. `useCount` drives ranking — chips with higher counts
+/// render above MapKit-derived suggestions in the Create Route rail.
+struct CorridorSuggestion: Decodable, Equatable {
+    var label: String
+    var lat: Double
+    var lng: Double
+    var useCount: Int
+
+    /// Convenience — converts to the PlaceSuggestion shape the
+    /// existing pickup/drop rails consume so we can merge without
+    /// touching downstream code.
+    func toPlaceSuggestion() -> PlaceSuggestion {
+        PlaceSuggestion(displayName: label, lat: lat, lon: lng)
+    }
 }
 
 // MARK: - API DTOs (mirrors Android DTOs)

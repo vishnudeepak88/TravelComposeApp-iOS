@@ -414,6 +414,14 @@ private struct InfoBanner: View {
     var dropSuggestions: [PlaceSuggestion] = []
     var isLoadingPickupSuggestions = false
     var isLoadingDropSuggestions = false
+    /// Lowercased labels that came from the corridor-suggestions
+    /// endpoint (popular on similar routes). The view renders a small
+    /// "Popular" badge on those chips so the driver knows other people
+    /// have used them — a soft social signal that this is a real
+    /// commuter touchpoint, not just any building MapKit happens to
+    /// index nearby.
+    var popularPickupLabels: Set<String> = []
+    var popularDropLabels: Set<String> = []
 
     private var pickupSuggestionTask: Task<Void, Never>? = nil
     private var dropSuggestionTask: Task<Void, Never>? = nil
@@ -488,45 +496,58 @@ private struct InfoBanner: View {
         refreshDropSuggestions()
     }
 
-    /// Called by the view when Start coordinates change. Kicks off a debounced
-    /// MKLocalSearch for nearby transit hubs.
+    /// Called by the view when Start coordinates change. Fires two
+    /// fetches in parallel:
+    ///   1. Corridor suggestions — labels OTHER drivers used as
+    ///      pickups on similar routes (server endpoint, learns from
+    ///      route_points). Ranked first because social proof.
+    ///   2. MKLocalSearch nearby transit hubs / petrol / 7-11 / etc.
+    /// They merge into a single rail with corridor items first; the
+    /// view renders a "Popular" badge on chips whose label is in
+    /// `popularPickupLabels`.
     func refreshPickupSuggestions() {
         pickupSuggestionTask?.cancel()
-        // Default to popular KL hubs whenever Start hasn't been picked
-        // yet — the rail is never empty, so a fresh route form always
-        // shows useful one-tap-add chips. Once Start (and ideally
-        // Destination) is picked, the MapKit corridor results
-        // replace these.
         if startCoordinate == nil {
             pickupSuggestions = filteredPickupDefaults(against: pickupPoints)
+            popularPickupLabels = []
             return
         }
         guard let coord = startCoordinate else { return }
         let target = CLLocationCoordinate2D(latitude: coord.lat, longitude: coord.lon)
-        // Corridor anchor: when the driver has also picked an endpoint,
-        // pass it so suggestions include waypoints between start and
-        // end — not just hubs clustered around start.
         let corridor: CLLocationCoordinate2D? = endCoordinate.map {
             CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
         }
+        let originLat = coord.lat
+        let originLng = coord.lon
+        let destLat = endCoordinate?.lat
+        let destLng = endCoordinate?.lon
         pickupSuggestionTask = Task { [weak self] in
             await MainActor.run { self?.isLoadingPickupSuggestions = true }
-            let hubs = (try? await VoygoLocationService.shared.searchNearbyHubs(
-                near: target,
-                purpose: .pickup,
-                corridorAnchor: corridor
-            )) ?? []
+            // Run both in parallel. Either can fail independently —
+            // we tolerate either coming back empty.
+            async let corridorRows: [CorridorSuggestion] =
+                (try? await VoygoAPIClient.corridorSuggestions(
+                    kind: .pickup,
+                    originLat: originLat, originLng: originLng,
+                    destLat: destLat, destLng: destLng
+                )) ?? []
+            async let mapKitHubs: [PlaceSuggestion] =
+                (try? await VoygoLocationService.shared.searchNearbyHubs(
+                    near: target, purpose: .pickup, corridorAnchor: corridor
+                )) ?? []
+            let corridorList = await corridorRows
+            let mapKit = await mapKitHubs
             await MainActor.run {
                 guard let self else { return }
                 self.isLoadingPickupSuggestions = false
-                // Hide ones the user has already added so the rail doesn't
-                // suggest a duplicate. Fall back to KL defaults if MapKit
-                // returned nothing for this area.
-                let existing = Set(self.pickupPoints.map { $0.lowercased() })
-                let mapKit = hubs.filter { !existing.contains($0.displayName.lowercased()) }
-                self.pickupSuggestions = mapKit.isEmpty
-                    ? self.filteredPickupDefaults(against: self.pickupPoints)
-                    : mapKit
+                self.applyMergedSuggestions(
+                    corridor: corridorList,
+                    mapKit: mapKit,
+                    existing: self.pickupPoints,
+                    target: \.pickupSuggestions,
+                    popularTarget: \.popularPickupLabels,
+                    fallback: self.filteredPickupDefaults(against: self.pickupPoints)
+                )
             }
         }
     }
@@ -534,31 +555,82 @@ private struct InfoBanner: View {
         dropSuggestionTask?.cancel()
         if endCoordinate == nil {
             dropSuggestions = filteredDropDefaults(against: dropPoints)
+            popularDropLabels = []
             return
         }
         guard let coord = endCoordinate else { return }
         let target = CLLocationCoordinate2D(latitude: coord.lat, longitude: coord.lon)
-        // No corridor anchor for drops — riders want to be dropped AT
-        // the destination, not at a hub halfway there. Passing nil
-        // makes the service search only the destination area, with
-        // destination-flavored queries (office/hospital/school/etc.).
+        let originLat = startCoordinate?.lat
+        let originLng = startCoordinate?.lon
+        let destLat = coord.lat
+        let destLng = coord.lon
         dropSuggestionTask = Task { [weak self] in
             await MainActor.run { self?.isLoadingDropSuggestions = true }
-            let hubs = (try? await VoygoLocationService.shared.searchNearbyHubs(
-                near: target,
-                purpose: .drop,
-                corridorAnchor: nil
-            )) ?? []
+            async let corridorRows: [CorridorSuggestion] =
+                (try? await VoygoAPIClient.corridorSuggestions(
+                    kind: .drop,
+                    originLat: originLat, originLng: originLng,
+                    destLat: destLat, destLng: destLng
+                )) ?? []
+            // No corridor anchor for the MapKit side — riders want
+            // to be dropped AT the destination, not halfway there.
+            async let mapKitHubs: [PlaceSuggestion] =
+                (try? await VoygoLocationService.shared.searchNearbyHubs(
+                    near: target, purpose: .drop, corridorAnchor: nil
+                )) ?? []
+            let corridorList = await corridorRows
+            let mapKit = await mapKitHubs
             await MainActor.run {
                 guard let self else { return }
                 self.isLoadingDropSuggestions = false
-                let existing = Set(self.dropPoints.map { $0.lowercased() })
-                let mapKit = hubs.filter { !existing.contains($0.displayName.lowercased()) }
-                self.dropSuggestions = mapKit.isEmpty
-                    ? self.filteredDropDefaults(against: self.dropPoints)
-                    : mapKit
+                self.applyMergedSuggestions(
+                    corridor: corridorList,
+                    mapKit: mapKit,
+                    existing: self.dropPoints,
+                    target: \.dropSuggestions,
+                    popularTarget: \.popularDropLabels,
+                    fallback: self.filteredDropDefaults(against: self.dropPoints)
+                )
             }
         }
+    }
+
+    /// Merges corridor suggestions in front of MapKit results,
+    /// dedups by lowercased label, hides anything already added by
+    /// the driver, and falls back to the static popular-hubs list
+    /// if both sources came back empty. Writes the result back into
+    /// the @Observable property `target` AND tracks which labels
+    /// came from the corridor source in `popularTarget` so the UI
+    /// can render a badge.
+    private func applyMergedSuggestions(
+        corridor: [CorridorSuggestion],
+        mapKit: [PlaceSuggestion],
+        existing: [String],
+        target: ReferenceWritableKeyPath<CreateRouteViewModel, [PlaceSuggestion]>,
+        popularTarget: ReferenceWritableKeyPath<CreateRouteViewModel, Set<String>>,
+        fallback: [PlaceSuggestion]
+    ) {
+        let existingLower = Set(existing.map { $0.lowercased() })
+        var merged: [PlaceSuggestion] = []
+        var seen = Set<String>()
+        var popular = Set<String>()
+        // Corridor first — social signal wins.
+        for row in corridor {
+            let lower = row.label.lowercased()
+            if existingLower.contains(lower) || seen.contains(lower) { continue }
+            seen.insert(lower)
+            popular.insert(lower)
+            merged.append(row.toPlaceSuggestion())
+        }
+        // Then MapKit results that haven't already been seen.
+        for hub in mapKit {
+            let lower = hub.displayName.lowercased()
+            if existingLower.contains(lower) || seen.contains(lower) { continue }
+            seen.insert(lower)
+            merged.append(hub)
+        }
+        self[keyPath: target] = merged.isEmpty ? fallback : merged
+        self[keyPath: popularTarget] = popular
     }
 
     /// Filter the popular PICKUP hubs list against already-added stops
@@ -839,6 +911,7 @@ struct CreateRouteView: View {
                             suggestions: vm.pickupSuggestions,
                             isLoadingSuggestions: vm.isLoadingPickupSuggestions,
                             suggestionsAnchor: vm.startCoordinate?.displayName,
+                            popularLabels: vm.popularPickupLabels,
                             onAdd: vm.addPickup,
                             onAcceptSuggestion: vm.acceptPickupSuggestion
                         )
@@ -853,6 +926,7 @@ struct CreateRouteView: View {
                             suggestions: vm.dropSuggestions,
                             isLoadingSuggestions: vm.isLoadingDropSuggestions,
                             suggestionsAnchor: vm.endCoordinate?.displayName,
+                            popularLabels: vm.popularDropLabels,
                             onAdd: vm.addDrop,
                             onAcceptSuggestion: vm.acceptDropSuggestion
                         )
@@ -1175,6 +1249,11 @@ private struct StopsCard: View {
     /// for drops) — used in the section subtitle so the user knows where
     /// the suggestions came from.
     var suggestionsAnchor: String? = nil
+    /// Lowercased labels that came from the corridor-suggestions
+    /// endpoint (popular on similar routes). The chip renders a
+    /// "🔥 Popular" badge so the driver knows other commuters have
+    /// already picked this spot.
+    var popularLabels: Set<String> = []
     let onAdd: () -> Void
     var onAcceptSuggestion: ((PlaceSuggestion) -> Void)? = nil
 
@@ -1243,21 +1322,35 @@ private struct StopsCard: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(suggestions) { s in
+                            let isPopular = popularLabels.contains(s.displayName.lowercased())
                             Button {
                                 onAcceptSuggestion?(s)
                             } label: {
                                 HStack(spacing: 6) {
-                                    Image(systemName: "plus.circle.fill")
+                                    // Popular chips lead with a flame
+                                    // so the social signal is visible
+                                    // even before the label.
+                                    Image(systemName: isPopular ? "flame.fill" : "plus.circle.fill")
                                         .font(.caption.weight(.bold))
                                     Text(s.displayName)
                                         .font(.caption.weight(.semibold))
                                         .lineLimit(1)
+                                    if isPopular {
+                                        Text("Popular")
+                                            .font(.system(size: 9, weight: .black))
+                                            .tracking(0.3)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 1)
+                                            .background(Color.white)
+                                            .foregroundColor(color)
+                                            .clipShape(Capsule())
+                                    }
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .foregroundColor(color)
-                                .background(color.opacity(0.12))
-                                .overlay(Capsule().stroke(color.opacity(0.35), lineWidth: 1))
+                                .foregroundColor(isPopular ? .white : color)
+                                .background(isPopular ? color : color.opacity(0.12))
+                                .overlay(Capsule().stroke(isPopular ? color : color.opacity(0.35), lineWidth: 1))
                                 .clipShape(Capsule())
                             }
                             .buttonStyle(.plain)

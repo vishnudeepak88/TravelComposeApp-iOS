@@ -1690,6 +1690,142 @@ app.get(
   })
 );
 
+// ─── Corridor-aware pickup / drop suggestions ─────────────────────────
+//
+// Learns from what real drivers + riders have used as pickup/drop
+// points on similar corridors. Given (originLat, originLng, destLat,
+// destLng, kind), returns the most-frequently-used labels from
+// existing routes whose pickup is near `origin` AND drop is near
+// `dest`. Surfaced on the Create Route form ABOVE MapKit results so
+// the rail self-improves as more routes get published.
+//
+// Privacy: every pickup/drop label is already public on the matching
+// route detail pages, so we're not leaking new information — we're
+// aggregating already-visible data. Counts are public too.
+//
+// Performance: ST_DWithin on a `geometry` cast to `geography` for
+// metre-accurate distance, capped at 5km per side. The route_points
+// table has a geom column with a SRID-4326 point so PostGIS uses the
+// existing GIST index automatically.
+//
+// Rate-limited via `rateLimitSearch` (10 req/min/IP) — same bucket
+// as autocomplete, because this gets called on every Create Route
+// coord change.
+app.get(
+  "/commute/corridor-suggestions",
+  requireAuth,
+  rateLimitSearch,
+  asyncHandler(async (req, res) => {
+    const kindRaw = String(req.query.kind || "").toLowerCase();
+    if (kindRaw !== "pickup" && kindRaw !== "drop") {
+      res.status(400).json({ detail: "kind must be pickup or drop" });
+      return;
+    }
+    // Parse + validate all four coords. We allow either pair to be
+    // missing IF the caller only knows one endpoint (the other is
+    // still being filled in) — in that case we fall back to "near
+    // the known coord" without the corridor constraint.
+    const num = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    };
+    const originLat = num(req.query.originLat);
+    const originLng = num(req.query.originLng);
+    const destLat   = num(req.query.destLat);
+    const destLng   = num(req.query.destLng);
+    const hasOrigin = originLat != null && originLng != null;
+    const hasDest   = destLat != null && destLng != null;
+    if (!hasOrigin && !hasDest) {
+      res.status(400).json({ detail: "originLat/originLng or destLat/destLng required" });
+      return;
+    }
+    // Sanity range check — keeps a malicious caller from forcing
+    // weird ST_DWithin coords or sending lat=999.
+    const inRange = (lat, lng) =>
+      lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    if (hasOrigin && !inRange(originLat, originLng)) {
+      res.status(400).json({ detail: "origin coords out of range" });
+      return;
+    }
+    if (hasDest && !inRange(destLat, destLng)) {
+      res.status(400).json({ detail: "dest coords out of range" });
+      return;
+    }
+
+    // The candidate route set: every active route that has BOTH a
+    // pickup near `origin` AND a drop near `dest`. When only one
+    // coord is supplied, we relax the join to one side.
+    //
+    // The aggregation then pulls all route_points of the requested
+    // `kind` from those routes, groups by label + rounded coord (so
+    // "Komtar" at 5.4148,100.3299 doesn't double-count with a tiny
+    // ±0.0001 drift), and orders by use count.
+    const PICKUP_RADIUS_M = 5000;
+    const DROP_RADIUS_M = 5000;
+    const params = [kindRaw];
+    let pickupNearOriginSql = "TRUE";
+    let dropNearDestSql = "TRUE";
+    if (hasOrigin) {
+      params.push(originLng, originLat); // lng then lat — ST_MakePoint(x=lng, y=lat)
+      pickupNearOriginSql = `
+        EXISTS (
+          SELECT 1 FROM route_points pp
+          WHERE pp.route_id = r.id
+            AND pp.kind = 'pickup'
+            AND ST_DWithin(
+              pp.geom::geography,
+              ST_SetSRID(ST_MakePoint($${params.length - 1}, $${params.length}), 4326)::geography,
+              ${PICKUP_RADIUS_M}
+            )
+        )
+      `;
+    }
+    if (hasDest) {
+      params.push(destLng, destLat);
+      dropNearDestSql = `
+        EXISTS (
+          SELECT 1 FROM route_points dp
+          WHERE dp.route_id = r.id
+            AND dp.kind = 'drop'
+            AND ST_DWithin(
+              dp.geom::geography,
+              ST_SetSRID(ST_MakePoint($${params.length - 1}, $${params.length}), 4326)::geography,
+              ${DROP_RADIUS_M}
+            )
+        )
+      `;
+    }
+
+    const sql = `
+      WITH matching_routes AS (
+        SELECT r.id
+          FROM recurring_routes r
+         WHERE r.active_status = TRUE
+           AND ${pickupNearOriginSql}
+           AND ${dropNearDestSql}
+      )
+      SELECT
+        rp.label                         AS label,
+        ROUND(rp.lat::numeric, 4)::float AS lat,
+        ROUND(rp.lng::numeric, 4)::float AS lng,
+        COUNT(*)::int                    AS use_count
+      FROM route_points rp
+      WHERE rp.kind = $1
+        AND rp.route_id IN (SELECT id FROM matching_routes)
+      GROUP BY rp.label, ROUND(rp.lat::numeric, 4), ROUND(rp.lng::numeric, 4)
+      ORDER BY use_count DESC, label ASC
+      LIMIT 12
+    `;
+    const result = await pool.query(sql, params);
+    res.json(result.rows.map((row) => ({
+      label: row.label,
+      lat: Number(row.lat),
+      lng: Number(row.lng),
+      useCount: Number(row.use_count)
+    })));
+  })
+);
+
 // ─── Saved commute search ─────────────────────────────────────────────
 app.put(
   "/commute/saved-search",
