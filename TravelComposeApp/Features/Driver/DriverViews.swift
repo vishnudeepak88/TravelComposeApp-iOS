@@ -411,19 +411,34 @@ private struct InfoBanner: View {
             pickupPoints.append(s.displayName)
         }
         pickupSuggestions.removeAll { $0.id == s.id }
+        // Top up the rail so multiple accepts don't drain it to empty.
+        // The refresh re-runs the MapKit search (or pulls defaults if
+        // no Start coord is set), filtering against the freshly-added
+        // stop. Cached MapKit responses make this near-free.
+        refreshPickupSuggestions()
     }
     func acceptDropSuggestion(_ s: PlaceSuggestion) {
         if !dropPoints.contains(where: { $0.caseInsensitiveCompare(s.displayName) == .orderedSame }) {
             dropPoints.append(s.displayName)
         }
         dropSuggestions.removeAll { $0.id == s.id }
+        refreshDropSuggestions()
     }
 
     /// Called by the view when Start coordinates change. Kicks off a debounced
     /// MKLocalSearch for nearby transit hubs.
     func refreshPickupSuggestions() {
         pickupSuggestionTask?.cancel()
-        guard let coord = startCoordinate else { pickupSuggestions = []; return }
+        // Default to popular KL hubs whenever Start hasn't been picked
+        // yet — the rail is never empty, so a fresh route form always
+        // shows useful one-tap-add chips. Once Start (and ideally
+        // Destination) is picked, the MapKit corridor results
+        // replace these.
+        if startCoordinate == nil {
+            pickupSuggestions = filteredDefaults(against: pickupPoints)
+            return
+        }
+        guard let coord = startCoordinate else { return }
         let target = CLLocationCoordinate2D(latitude: coord.lat, longitude: coord.lon)
         // Corridor anchor: when the driver has also picked an endpoint,
         // pass it so suggestions include waypoints between start and
@@ -441,15 +456,23 @@ private struct InfoBanner: View {
                 guard let self else { return }
                 self.isLoadingPickupSuggestions = false
                 // Hide ones the user has already added so the rail doesn't
-                // suggest a duplicate.
+                // suggest a duplicate. Fall back to KL defaults if MapKit
+                // returned nothing for this area.
                 let existing = Set(self.pickupPoints.map { $0.lowercased() })
-                self.pickupSuggestions = hubs.filter { !existing.contains($0.displayName.lowercased()) }
+                let mapKit = hubs.filter { !existing.contains($0.displayName.lowercased()) }
+                self.pickupSuggestions = mapKit.isEmpty
+                    ? self.filteredDefaults(against: self.pickupPoints)
+                    : mapKit
             }
         }
     }
     func refreshDropSuggestions() {
         dropSuggestionTask?.cancel()
-        guard let coord = endCoordinate else { dropSuggestions = []; return }
+        if endCoordinate == nil {
+            dropSuggestions = filteredDefaults(against: dropPoints)
+            return
+        }
+        guard let coord = endCoordinate else { return }
         let target = CLLocationCoordinate2D(latitude: coord.lat, longitude: coord.lon)
         // Symmetric: drops benefit from the same midpoint sampling so a
         // "between source and destination" mall shows up on both rails.
@@ -466,8 +489,21 @@ private struct InfoBanner: View {
                 guard let self else { return }
                 self.isLoadingDropSuggestions = false
                 let existing = Set(self.dropPoints.map { $0.lowercased() })
-                self.dropSuggestions = hubs.filter { !existing.contains($0.displayName.lowercased()) }
+                let mapKit = hubs.filter { !existing.contains($0.displayName.lowercased()) }
+                self.dropSuggestions = mapKit.isEmpty
+                    ? self.filteredDefaults(against: self.dropPoints)
+                    : mapKit
             }
+        }
+    }
+
+    /// Filter the popular hubs list against already-added stops so we
+    /// don't suggest a duplicate. Used as the empty-state fallback
+    /// for both pickup and drop rails.
+    private func filteredDefaults(against existing: [String]) -> [PlaceSuggestion] {
+        let lower = Set(existing.map { $0.lowercased() })
+        return VoygoLocationService.popularKlangValleyHubs.filter {
+            !lower.contains($0.displayName.lowercased())
         }
     }
 
@@ -735,7 +771,15 @@ struct CreateRouteView: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         }
-        .onAppear { vm.store = store }
+        .onAppear {
+            vm.store = store
+            // Seed the suggestion rails immediately with popular KL
+            // hubs so the form has visible chips before the user picks
+            // Start/Destination. MapKit corridor results replace these
+            // once both endpoints are picked.
+            vm.refreshPickupSuggestions()
+            vm.refreshDropSuggestions()
+        }
         .onChange(of: { if case .success(let id) = vm.createState { return id }; return "" }()) { _, id in
             if !id.isEmpty { onCreated(id) }
         }

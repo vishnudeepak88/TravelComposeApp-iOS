@@ -139,6 +139,22 @@ final class VoygoLocationService: NSObject, CLLocationManagerDelegate {
     /// the midpoint between `coordinate` and `corridorAnchor` so the
     /// rail surfaces waypoints riders along the route can join from,
     /// not just hubs clustered around the endpoints.
+    /// Klang Valley commute hubs — used as the default suggestion set
+    /// when no Start/Destination has been picked yet, so the Create
+    /// Route form always has something for the driver to one-tap-add.
+    /// Pulled from the busiest LRT/MRT interchanges and the malls
+    /// Malaysian commuters reflexively name as meet-points.
+    static let popularKlangValleyHubs: [PlaceSuggestion] = [
+        PlaceSuggestion(displayName: "KL Sentral",          lat: 3.1338, lon: 101.6869),
+        PlaceSuggestion(displayName: "KLCC",                lat: 3.1579, lon: 101.7123),
+        PlaceSuggestion(displayName: "Mid Valley",          lat: 3.1175, lon: 101.6770),
+        PlaceSuggestion(displayName: "Sunway Pyramid",      lat: 3.0728, lon: 101.6075),
+        PlaceSuggestion(displayName: "Bangsar South",       lat: 3.1102, lon: 101.6679),
+        PlaceSuggestion(displayName: "USJ 9 LRT",           lat: 3.0445, lon: 101.5850),
+        PlaceSuggestion(displayName: "Pavilion KL",         lat: 3.1492, lon: 101.7129),
+        PlaceSuggestion(displayName: "Subang Parade",       lat: 3.0850, lon: 101.5824)
+    ]
+
     func searchNearbyHubs(near coordinate: CLLocationCoordinate2D,
                           corridorAnchor: CLLocationCoordinate2D? = nil,
                           radiusMeters: Double = 5_000,
