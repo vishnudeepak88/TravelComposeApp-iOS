@@ -39,6 +39,7 @@ struct HomeTab: View {
                 },
                 onCarpoolTapped:      { path.append(.findRides) },
                 onLongHaulTapped:     { path.append(.longHaulBrowse) },
+                onSoloTapped:         { path.append(.soloPick) },
                 onOpenRoute:          { id in path.append(.routeDetails(routeId: id)) },
                 onOpenNotifications:  { path.append(.notifications) },
                 onOpenCalendar:       { path.append(.calendar()) },
@@ -82,6 +83,10 @@ struct HomeView: View {
     /// `LongHaulBrowseView`; previously this raised the same
     /// "coming soon" alert as the other aspirational tiles.
     var onLongHaulTapped: () -> Void = {}
+    /// Tap on the Ride solo service tile. Routes to `SoloPickRouteView`
+    /// — rider picks a route, picks a date, sees the 2× quote, confirms.
+    /// Replaces the previous "Coming soon" alert.
+    var onSoloTapped: () -> Void = {}
     /// Callback when a "Heading your way" card is tapped. Closures the
     /// route id rather than the row so HomeTab can drill straight into
     /// the shared `AppRoute.routeDetails(...)` without HomeView needing
@@ -633,6 +638,8 @@ struct HomeView: View {
                         onCarpoolTapped()
                     } else if tile.isLongHaul || tile.label == "Long-haul" {
                         onLongHaulTapped()
+                    } else if tile.label == "Ride solo" {
+                        onSoloTapped()
                     } else {
                         showComingSoonFor = tile.label
                     }

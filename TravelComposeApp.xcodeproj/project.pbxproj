@@ -59,6 +59,7 @@
 		B2C3D4E5F60718BBBB000A /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718AAAA000A /* FavoritesView.swift */; };
 		B2C3D4E5F60718BBBB000B /* RouteRequestsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718AAAA000B /* RouteRequestsListView.swift */; };
 		B2C3D4E5F60718BBBB000C /* DriverDemandView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718AAAA000C /* DriverDemandView.swift */; };
+		B2C3D4E5F60718BBBB000D /* SoloViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718AAAA000D /* SoloViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -116,6 +117,7 @@
 		B2C3D4E5F60718AAAA000A /* FavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesView.swift; sourceTree = "<group>"; };
 		B2C3D4E5F60718AAAA000B /* RouteRequestsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteRequestsListView.swift; sourceTree = "<group>"; };
 		B2C3D4E5F60718AAAA000C /* DriverDemandView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverDemandView.swift; sourceTree = "<group>"; };
+		B2C3D4E5F60718AAAA000D /* SoloViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoloViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -270,6 +272,7 @@
 				E1A2B3D4E5F607182939A10A /* PlacePickerSheet.swift */,
 				B2C3D4E5F60718AAAA000A /* FavoritesView.swift */,
 				B2C3D4E5F60718AAAA000B /* RouteRequestsListView.swift */,
+				B2C3D4E5F60718AAAA000D /* SoloViews.swift */,
 			);
 			path = Commute;
 			sourceTree = "<group>";
@@ -449,6 +452,7 @@
 				B2C3D4E5F60718BBBB000A /* FavoritesView.swift in Sources */,
 				B2C3D4E5F60718BBBB000B /* RouteRequestsListView.swift in Sources */,
 				B2C3D4E5F60718BBBB000C /* DriverDemandView.swift in Sources */,
+				B2C3D4E5F60718BBBB000D /* SoloViews.swift in Sources */,
 
 			);
 			runOnlyForDeploymentPostprocessing = 0;

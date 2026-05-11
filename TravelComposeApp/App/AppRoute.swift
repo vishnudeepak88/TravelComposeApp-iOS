@@ -48,6 +48,12 @@ enum AppRoute: Hashable {
     case favorites           // Rider's saved routes
     case routeRequestsList   // Rider's own route demand posts (manage / withdraw)
     case driverDemand        // Driver-side aggregate demand list
+    // Solo-seat — rider pays 2x the seat price to claim the whole car
+    // for a specific day's ride. `soloPick` is the entry list (pick a
+    // route → pick a date), `soloConfirm` is the price-quote + confirm
+    // sheet's destination.
+    case soloPick
+    case soloConfirm(rideInstanceId: String)
 }
 
 // MARK: - Shared destination builder
@@ -321,6 +327,26 @@ struct AppRouteDestinations: ViewModifier {
                 DriverDemandView(
                     onBack: { if !path.isEmpty { path.removeLast() } },
                     onCreateRoute: { path.append(.createRoute) }
+                )
+                .navigationBarHidden(true)
+
+            case .soloPick:
+                SoloPickRouteView(
+                    onBack:    { if !path.isEmpty { path.removeLast() } },
+                    onPickRide: { rideId in path.append(.soloConfirm(rideInstanceId: rideId)) }
+                )
+                .navigationBarHidden(true)
+
+            case .soloConfirm(let rideInstanceId):
+                SoloConfirmView(
+                    rideInstanceId: rideInstanceId,
+                    onBack: { if !path.isEmpty { path.removeLast() } },
+                    onBooked: { _ in
+                        // After a successful book, pop back to root —
+                        // the rider sees the booking on Home/Calendar
+                        // via the usual refresh path.
+                        path.removeAll()
+                    }
                 )
                 .navigationBarHidden(true)
             }

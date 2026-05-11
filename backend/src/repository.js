@@ -252,6 +252,24 @@ async function loadRouteContexts(pool, whereClause = "TRUE", params = [], option
     subscribedRouteIds = new Set(subRes.rows.map((r) => r.route_id));
   }
 
+  // Routes where the caller has an UPCOMING solo booking. Treated the
+  // same as an active subscription for phone-reveal: a rider who paid
+  // 2× to lock the whole car needs to be able to call the driver if
+  // anything goes wrong. Filtered to future rides only — a past solo
+  // booking doesn't keep the phone unlocked forever.
+  if (requesterId && !revealAllPhones) {
+    const soloRes = await pool.query(
+      `SELECT route_id::text AS route_id
+         FROM commute_ride_instances
+        WHERE solo_rider_id = $1
+          AND is_solo = TRUE
+          AND date >= CURRENT_DATE
+          AND route_id = ANY($2::uuid[])`,
+      [requesterId, routeIds]
+    );
+    for (const r of soloRes.rows) subscribedRouteIds.add(r.route_id);
+  }
+
   return routeRes.rows.map((route) => {
     const driverKey = String(route.driver_id);
     const points = pointsByRoute.get(String(route.id)) || [];

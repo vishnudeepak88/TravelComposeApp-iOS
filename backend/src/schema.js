@@ -164,6 +164,29 @@ async function initSchema(pool) {
     "CREATE INDEX IF NOT EXISTS ix_commute_ride_instances_date ON commute_ride_instances(date)"
   );
 
+  // Solo-seat columns. A rider can claim a SPECIFIC day's ride
+  // exclusively (no other passengers picked up) by paying ~2x the
+  // normal seat price. The driver doesn't need to deviate routes —
+  // they're going there anyway — so this stays inside the cost-
+  // sharing legal model (no LPKP / PSV trigger). When `is_solo` is
+  // true, server-side booking logic must:
+  //   - reject any new commute_ride_passengers inserts for this
+  //     instance (other riders are locked out for that day);
+  //   - reveal the driver's phone to `solo_rider_id` the same way
+  //     it would to an ACTIVE subscriber on the route.
+  // Idempotent ALTERs so existing deploys migrate forward without
+  // touching any data.
+  await pool.query("ALTER TABLE commute_ride_instances ADD COLUMN IF NOT EXISTS is_solo BOOLEAN NOT NULL DEFAULT FALSE");
+  await pool.query("ALTER TABLE commute_ride_instances ADD COLUMN IF NOT EXISTS solo_rider_id TEXT NULL");
+  await pool.query("ALTER TABLE commute_ride_instances ADD COLUMN IF NOT EXISTS solo_price_myr INTEGER NULL");
+  await pool.query("ALTER TABLE commute_ride_instances ADD COLUMN IF NOT EXISTS solo_payment_id UUID NULL");
+  await pool.query("ALTER TABLE commute_ride_instances ADD COLUMN IF NOT EXISTS solo_booked_at TIMESTAMPTZ NULL");
+  // Partial index so the "is this ride still solo-available?" lookup
+  // doesn't scan every instance, only the small set already flagged.
+  await pool.query(
+    "CREATE INDEX IF NOT EXISTS ix_commute_ride_instances_solo ON commute_ride_instances(solo_rider_id) WHERE is_solo = TRUE"
+  );
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS commute_ride_passengers (
       id UUID PRIMARY KEY,

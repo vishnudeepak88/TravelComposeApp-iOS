@@ -2410,6 +2410,7 @@ app.post(
       await client.query("BEGIN");
       const rideRes = await client.query(
         `SELECT i.id, i.route_id, i.seat_availability, i.ride_status,
+                i.is_solo, i.solo_rider_id,
                 r.driver_id, r.start_location, r.end_location
            FROM commute_ride_instances i
            JOIN recurring_routes r ON r.id = i.route_id
@@ -2430,6 +2431,16 @@ app.post(
       }
       if (ride.ride_status !== "SCHEDULED") {
         res.status(409).json({ detail: "Ride is not bookable" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      // Solo booking locks out every other rider for that day's
+      // instance. The original solo booker themselves still passes
+      // this check (they own the ride), but they shouldn't be hitting
+      // this endpoint — solo bookings are charged through the
+      // dedicated /commute/rides/:id/solo-book flow.
+      if (ride.is_solo) {
+        res.status(409).json({ detail: "Ride is exclusively booked today" });
         await client.query("ROLLBACK");
         return;
       }
@@ -2497,6 +2508,449 @@ app.post(
     } finally {
       client.release();
     }
+  })
+);
+
+// ─── Solo seat (book the whole car) ──────────────────────────────────
+//
+// Rider pays SOLO_PRICE_MULTIPLIER × normal seat price to claim the
+// entire car for a specific day's ride. Driver doesn't pick up other
+// passengers — same trusted driver, same route, exclusive vehicle.
+//
+// Malaysia legal note: this stays inside the cost-sharing model
+// (driver was going there anyway, rider pays a higher slice of the
+// petrol/wear cost) so no LPKP / PSV trigger. The 2× multiplier
+// reflects that the driver foregoes other seat revenue + accepts a
+// premium for exclusivity.
+
+const SOLO_PRICE_MULTIPLIER = 2;
+// Cancellation policy. Time deltas in hours before scheduled depart:
+//   >= 12h  : full refund
+//   2..12h  : 50% refund (driver may have turned away other bookings)
+//   <  2h   : no refund (driver is en-route / committed)
+const SOLO_CANCEL_FULL_REFUND_HOURS = 12;
+const SOLO_CANCEL_HALF_REFUND_HOURS = 2;
+
+/// Computes the solo price + a depart-at timestamp for a ride instance.
+/// Returns null when the ride can't be solo-booked at all (already has
+/// passengers, already solo'd, past, cancelled). The reason string
+/// drives the iOS UI's disabled-state messaging.
+async function loadSoloRideContext(pool, rideInstanceId) {
+  const res = await pool.query(
+    `SELECT i.id, i.route_id, i.date, i.seat_availability, i.ride_status,
+            i.is_solo, i.solo_rider_id, i.solo_price_myr,
+            r.driver_id, r.driver_name, r.departure_time,
+            r.start_location, r.end_location, r.price_per_seat, r.seat_count,
+            (SELECT COUNT(*)::int FROM commute_ride_passengers WHERE instance_id = i.id) AS passenger_count
+       FROM commute_ride_instances i
+       JOIN recurring_routes r ON r.id = i.route_id
+      WHERE i.id = $1
+      LIMIT 1`,
+    [rideInstanceId]
+  );
+  return res.rows[0] || null;
+}
+
+/// Combines the ride's `date` (DATE) and the route's `departure_time`
+/// (HH:mm string) into a single JS Date. Used to compute refund tier
+/// and to reject past-departure bookings. Returns null on malformed
+/// input so callers can fail with a clear 4xx.
+function rideDepartAt(ride) {
+  if (!ride?.date || !ride?.departure_time) return null;
+  const [hh, mm] = String(ride.departure_time).split(":").map((n) => Number(n));
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  // ride.date can come back as a Date (pg auto-parses DATE) or string.
+  const baseIso = ride.date instanceof Date
+    ? ride.date.toISOString().slice(0, 10)
+    : String(ride.date).slice(0, 10);
+  // Anchor in Asia/Kuala_Lumpur (UTC+8) by treating HH:mm as KL time
+  // and converting to UTC. Avoids the trap of `new Date('YYYY-MM-DD')`
+  // landing at midnight UTC instead of midnight KL.
+  const ms = Date.UTC(
+    Number(baseIso.slice(0, 4)),
+    Number(baseIso.slice(5, 7)) - 1,
+    Number(baseIso.slice(8, 10)),
+    hh - 8, // KL is UTC+8
+    mm,
+    0
+  );
+  return new Date(ms);
+}
+
+// GET /commute/rides/:id/solo-quote
+//   Returns whether this ride is bookable solo + the server-computed
+//   price. iOS uses this to render the confirm sheet — never trust
+//   the client to compute the price.
+app.get(
+  "/commute/rides/:id/solo-quote",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const ride = await loadSoloRideContext(pool, req.params.id);
+    if (!ride) {
+      res.status(404).json({ detail: "Ride not found" });
+      return;
+    }
+    if (String(ride.driver_id) === req.user.id) {
+      res.status(403).json({ detail: "Drivers cannot solo-book their own ride" });
+      return;
+    }
+    const departAt = rideDepartAt(ride);
+    const departIso = departAt ? departAt.toISOString() : null;
+    const pricePerSeat = Number(ride.price_per_seat || 0);
+    const soloPrice = pricePerSeat * SOLO_PRICE_MULTIPLIER;
+    let available = true;
+    let reason = null;
+    if (ride.ride_status !== "SCHEDULED") {
+      available = false; reason = "ride_not_scheduled";
+    } else if (departAt && departAt.getTime() < Date.now()) {
+      available = false; reason = "ride_in_past";
+    } else if (ride.is_solo) {
+      available = false;
+      reason = String(ride.solo_rider_id) === req.user.id
+        ? "you_already_solo_booked"
+        : "already_solo_booked";
+    } else if (Number(ride.passenger_count) > 0) {
+      available = false; reason = "other_passengers_already_booked";
+    }
+    res.json({
+      rideInstanceId: String(ride.id),
+      routeId: String(ride.route_id),
+      driverName: ride.driver_name || null,
+      startLocation: ride.start_location,
+      endLocation: ride.end_location,
+      date: ride.date instanceof Date ? ride.date.toISOString().slice(0, 10) : String(ride.date),
+      departureTime: ride.departure_time,
+      departAt: departIso,
+      pricePerSeatMyr: pricePerSeat,
+      soloPriceMyr: soloPrice,
+      soloMultiplier: SOLO_PRICE_MULTIPLIER,
+      available,
+      reason,
+      // Surfaces the cancellation policy on the confirm sheet so the
+      // rider sees the rules BEFORE paying, not in fine print after.
+      cancellationPolicy: {
+        fullRefundUntilHours: SOLO_CANCEL_FULL_REFUND_HOURS,
+        halfRefundUntilHours: SOLO_CANCEL_HALF_REFUND_HOURS
+      }
+    });
+  })
+);
+
+// POST /commute/rides/:id/solo-book
+//   Atomic claim of the ride + charge via existing payments pipeline.
+//   Server-derived price, transactional FOR UPDATE so two riders can't
+//   race to claim the same ride, write-rate-limited.
+app.post(
+  "/commute/rides/:id/solo-book",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const client = await pool.connect();
+    let committed = false;
+    let booking = null;
+    try {
+      await client.query("BEGIN");
+      const rideRes = await client.query(
+        `SELECT i.id, i.route_id, i.date, i.ride_status,
+                i.is_solo, i.solo_rider_id,
+                r.driver_id, r.driver_name, r.departure_time,
+                r.start_location, r.end_location, r.price_per_seat,
+                (SELECT COUNT(*)::int FROM commute_ride_passengers WHERE instance_id = i.id) AS passenger_count
+           FROM commute_ride_instances i
+           JOIN recurring_routes r ON r.id = i.route_id
+          WHERE i.id = $1
+          FOR UPDATE`,
+        [req.params.id]
+      );
+      const ride = rideRes.rows[0];
+      if (!ride) {
+        res.status(404).json({ detail: "Ride not found" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (String(ride.driver_id) === req.user.id) {
+        res.status(403).json({ detail: "Drivers cannot solo-book their own ride" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (ride.ride_status !== "SCHEDULED") {
+        res.status(409).json({ detail: "ride_not_scheduled" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      const departAt = rideDepartAt(ride);
+      if (!departAt || departAt.getTime() < Date.now()) {
+        res.status(409).json({ detail: "ride_in_past" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (ride.is_solo) {
+        res.status(409).json({ detail: "already_solo_booked" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (Number(ride.passenger_count) > 0) {
+        res.status(409).json({ detail: "other_passengers_already_booked" });
+        await client.query("ROLLBACK");
+        return;
+      }
+
+      // Server-derived price. The /payments/days saga taught us not
+      // to honour any client-supplied amount here.
+      const pricePerSeat = Number(ride.price_per_seat || 0);
+      const soloPriceMyr = pricePerSeat * SOLO_PRICE_MULTIPLIER;
+      if (!Number.isFinite(soloPriceMyr) || soloPriceMyr < 1) {
+        res.status(409).json({ detail: "price_unavailable" });
+        await client.query("ROLLBACK");
+        return;
+      }
+
+      // Flip the instance to solo + zero remaining seats so the
+      // regular booking path (/trips/:id/book) bounces other riders.
+      await client.query(
+        `UPDATE commute_ride_instances
+            SET is_solo        = TRUE,
+                solo_rider_id  = $2,
+                solo_price_myr = $3,
+                solo_booked_at = NOW(),
+                seat_availability = 0
+          WHERE id = $1`,
+        [req.params.id, req.user.id, soloPriceMyr]
+      );
+
+      // Insert a passenger row so the existing rides-by-rider lookups
+      // see this booking. The `solo_*` flag on the instance is the
+      // authoritative source — this row is for joins.
+      const passengerId = crypto.randomUUID();
+      await client.query(
+        `INSERT INTO commute_ride_passengers (id, instance_id, rider_id, status)
+           VALUES ($1, $2, $3, 'CONFIRMED')`,
+        [passengerId, req.params.id, req.user.id]
+      );
+
+      await client.query("COMMIT");
+      committed = true;
+      booking = {
+        rideInstanceId: String(ride.id),
+        routeId: String(ride.route_id),
+        passengerId,
+        amountMyr: soloPriceMyr,
+        driverId: ride.driver_id,
+        startLocation: ride.start_location,
+        endLocation: ride.end_location
+      };
+    } catch (error) {
+      if (!committed) await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    // Charge via the existing Billplz pipeline. subscriptionId is
+    // null — solo bookings are one-off payments. tier='SOLO' lets the
+    // payments + payout aggregators distinguish them from subscription
+    // and long-haul revenue without a schema change.
+    let charge = null;
+    try {
+      charge = await chargeSubscription(pool, {
+        userId: req.user.id,
+        subscriptionId: null,
+        routeId: booking.routeId,
+        amountMyr: booking.amountMyr,
+        tier: "SOLO",
+        contact: bodyValue(req.body || {}, "contact") || {}
+      });
+      await pool.query(
+        "UPDATE commute_ride_instances SET solo_payment_id = $1 WHERE id = $2",
+        [charge.paymentId, booking.rideInstanceId]
+      );
+    } catch (chargeErr) {
+      // Charge failed AFTER we already locked the instance. Roll back
+      // the solo flag so other riders can book and the customer isn't
+      // billed for a phantom hold. We DO leave an audit trail in
+      // cancellation_records-like logging via console.warn.
+      console.warn(`[solo-book] charge failed, releasing ride ${booking.rideInstanceId}: ${chargeErr.message}`);
+      await pool.query(
+        `UPDATE commute_ride_instances
+            SET is_solo = FALSE,
+                solo_rider_id = NULL,
+                solo_price_myr = NULL,
+                solo_booked_at = NULL,
+                seat_availability = (SELECT seat_count FROM recurring_routes WHERE id = $2)
+          WHERE id = $1`,
+        [booking.rideInstanceId, booking.routeId]
+      );
+      await pool.query(
+        "DELETE FROM commute_ride_passengers WHERE instance_id = $1 AND rider_id = $2",
+        [booking.rideInstanceId, req.user.id]
+      );
+      res.status(502).json({ detail: "charge_failed", reason: chargeErr.message });
+      return;
+    }
+
+    // Notify both sides. Parallel fan-out — never block the response.
+    Promise.all([
+      createNotification({
+        userId: req.user.id,
+        type: "SOLO_BOOKED",
+        title: "Solo ride confirmed",
+        body: `${booking.startLocation} → ${booking.endLocation}`,
+        routeId: booking.routeId,
+        rideInstanceId: booking.rideInstanceId
+      }),
+      createNotification({
+        userId: booking.driverId,
+        type: "SOLO_BOOKED_DRIVER",
+        title: "Solo booking — exclusive ride today",
+        body: `A rider booked your full car for ${booking.startLocation} → ${booking.endLocation}.`,
+        routeId: booking.routeId,
+        rideInstanceId: booking.rideInstanceId
+      })
+    ]).catch((e) => console.warn(`[solo-book] notify failed: ${e.message}`));
+
+    res.status(201).json({
+      rideInstanceId: booking.rideInstanceId,
+      routeId: booking.routeId,
+      amountMyr: booking.amountMyr,
+      payment: charge
+    });
+  })
+);
+
+// POST /commute/rides/:id/solo-cancel
+//   Cancels a solo booking. Tiered refund based on time-to-departure
+//   so we don't burn drivers who've already cleared their calendar.
+app.post(
+  "/commute/rides/:id/solo-cancel",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const client = await pool.connect();
+    let committed = false;
+    let refundResult = null;
+    try {
+      await client.query("BEGIN");
+      const rideRes = await client.query(
+        `SELECT i.id, i.route_id, i.date, i.is_solo,
+                i.solo_rider_id, i.solo_price_myr, i.solo_payment_id,
+                r.driver_id, r.departure_time, r.seat_count,
+                r.start_location, r.end_location
+           FROM commute_ride_instances i
+           JOIN recurring_routes r ON r.id = i.route_id
+          WHERE i.id = $1
+          FOR UPDATE`,
+        [req.params.id]
+      );
+      const ride = rideRes.rows[0];
+      if (!ride) {
+        res.status(404).json({ detail: "Ride not found" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (!ride.is_solo || !ride.solo_rider_id) {
+        res.status(409).json({ detail: "not_solo_booked" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      // OWNERSHIP CHECK — only the solo booker can cancel their own
+      // booking. The route driver has a separate path (route pause,
+      // ride cancellation) and goes through the cancellations
+      // endpoint, not here.
+      if (String(ride.solo_rider_id) !== req.user.id) {
+        res.status(403).json({ detail: "not_your_solo_booking" });
+        await client.query("ROLLBACK");
+        return;
+      }
+
+      const departAt = rideDepartAt(ride);
+      const hoursToDepart = departAt
+        ? (departAt.getTime() - Date.now()) / 3_600_000
+        : -1;
+      let refundFraction = 0;
+      if (hoursToDepart >= SOLO_CANCEL_FULL_REFUND_HOURS) refundFraction = 1.0;
+      else if (hoursToDepart >= SOLO_CANCEL_HALF_REFUND_HOURS) refundFraction = 0.5;
+      const refundMyr = Math.floor(Number(ride.solo_price_myr || 0) * refundFraction);
+
+      // Release the instance. We restore seat_availability from
+      // route.seat_count so the regular booking path becomes available
+      // again. If the rider cancels last-minute (<2h), the seat stays
+      // released but they get no refund — same trade-off Grab applies.
+      await client.query(
+        `UPDATE commute_ride_instances
+            SET is_solo = FALSE,
+                solo_rider_id = NULL,
+                solo_price_myr = NULL,
+                solo_booked_at = NULL,
+                seat_availability = $2
+          WHERE id = $1`,
+        [req.params.id, Number(ride.seat_count)]
+      );
+      await client.query(
+        "DELETE FROM commute_ride_passengers WHERE instance_id = $1 AND rider_id = $2",
+        [req.params.id, req.user.id]
+      );
+
+      // Write a REFUNDED payment row so the wallet credit shows up.
+      // Same shape as the cancellation refund elsewhere — keeps the
+      // ledger consistent. amountMyr is the REFUND amount (positive),
+      // not the original charge.
+      let refundPaymentId = null;
+      if (refundMyr > 0) {
+        refundPaymentId = crypto.randomUUID();
+        await client.query(
+          `INSERT INTO payments
+             (id, user_id, subscription_id, route_id, amount_myr, status, tier, paid_at)
+           VALUES ($1, $2, NULL, $3, $4, 'REFUNDED', 'REFUND', NOW())`,
+          [refundPaymentId, req.user.id, ride.route_id, refundMyr]
+        );
+      }
+
+      await client.query("COMMIT");
+      committed = true;
+      refundResult = {
+        refundMyr,
+        refundFraction,
+        refundPaymentId,
+        hoursToDepart,
+        driverId: ride.driver_id,
+        startLocation: ride.start_location,
+        endLocation: ride.end_location,
+        routeId: String(ride.route_id)
+      };
+    } catch (error) {
+      if (!committed) await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    Promise.all([
+      createNotification({
+        userId: req.user.id,
+        type: "SOLO_CANCELLED",
+        title: "Solo ride cancelled",
+        body: refundResult.refundMyr > 0
+          ? `Refund: RM ${refundResult.refundMyr} credited.`
+          : "No refund — cancelled inside the no-refund window.",
+        routeId: refundResult.routeId,
+        rideInstanceId: req.params.id
+      }),
+      createNotification({
+        userId: refundResult.driverId,
+        type: "SOLO_CANCELLED_DRIVER",
+        title: "Solo booking cancelled",
+        body: `${refundResult.startLocation} → ${refundResult.endLocation} — seats reopened.`,
+        routeId: refundResult.routeId,
+        rideInstanceId: req.params.id
+      })
+    ]).catch((e) => console.warn(`[solo-cancel] notify failed: ${e.message}`));
+
+    res.json({
+      cancelled: true,
+      refundMyr: refundResult.refundMyr,
+      refundFraction: refundResult.refundFraction,
+      refundPaymentId: refundResult.refundPaymentId
+    });
   })
 );
 

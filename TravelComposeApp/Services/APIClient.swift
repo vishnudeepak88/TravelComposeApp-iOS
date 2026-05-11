@@ -145,6 +145,45 @@ struct VoygoAPIClient {
         try await get(baseURL.appendingPathComponent("bookings/me"), as: [RideBooking].self)
     }
 
+    // MARK: - Solo seat
+    //
+    // "Solo seat" lets a rider pay ~2x the normal seat price to claim
+    // the entire car for a specific day's ride. The driver doesn't
+    // pick up any other passengers that day. Server is authoritative
+    // for price + availability — never compute or trust client price.
+
+    /// Returns whether `rideInstanceId` can be solo-booked + the
+    /// server-derived price. Render the confirm sheet using THIS
+    /// price, not a locally-multiplied one.
+    static func soloQuote(rideInstanceId: String) async throws -> SoloQuoteResponse {
+        try await get(
+            baseURL.appendingPathComponent("commute/rides/\(rideInstanceId)/solo-quote"),
+            as: SoloQuoteResponse.self
+        )
+    }
+
+    /// Atomically claims the ride + kicks off the charge. Returns the
+    /// payment record (BillPlz URL in prod, mock paid in dev/staging).
+    static func soloBook(rideInstanceId: String) async throws -> SoloBookResponse {
+        try await post(
+            EmptyRequest(),
+            to: baseURL.appendingPathComponent("commute/rides/\(rideInstanceId)/solo-book"),
+            as: SoloBookResponse.self
+        )
+    }
+
+    /// Cancels the caller's own solo booking. Refund tier is computed
+    /// server-side based on hours-to-departure (>=12h full, >=2h half,
+    /// otherwise none) — UI surfaces the value from the response, not
+    /// a locally-computed estimate.
+    static func soloCancel(rideInstanceId: String) async throws -> SoloCancelResponse {
+        try await post(
+            EmptyRequest(),
+            to: baseURL.appendingPathComponent("commute/rides/\(rideInstanceId)/solo-cancel"),
+            as: SoloCancelResponse.self
+        )
+    }
+
     static func submitReview(_ request: RideReviewRequest) async throws -> IdResponse {
         try await post(request, to: baseURL.appendingPathComponent("reviews"), as: IdResponse.self)
     }
@@ -779,6 +818,51 @@ struct BookLongHaulTripRequest: Encodable {
 struct SkipRideResponse: Decodable {
     var ok: Bool
     var alreadySkipped: Bool?
+}
+
+// MARK: - Solo seat DTOs
+
+/// Quote response — drives the confirm sheet's content. `available`
+/// + `reason` tell the UI whether to enable the Confirm CTA and what
+/// to display when it can't. NEVER compute the price locally — show
+/// `soloPriceMyr` straight from this response.
+struct SoloQuoteResponse: Decodable {
+    var rideInstanceId: String
+    var routeId: String
+    var driverName: String?
+    var startLocation: String
+    var endLocation: String
+    var date: String           // YYYY-MM-DD
+    var departureTime: String  // HH:mm
+    var departAt: String?      // ISO 8601 UTC
+    var pricePerSeatMyr: Int
+    var soloPriceMyr: Int
+    var soloMultiplier: Int
+    var available: Bool
+    /// One of: ride_not_scheduled, ride_in_past, already_solo_booked,
+    /// you_already_solo_booked, other_passengers_already_booked. Used
+    /// for messaging only — the UI just shows a human string.
+    var reason: String?
+    var cancellationPolicy: SoloCancelPolicy
+}
+
+struct SoloCancelPolicy: Decodable {
+    var fullRefundUntilHours: Int
+    var halfRefundUntilHours: Int
+}
+
+struct SoloBookResponse: Decodable {
+    var rideInstanceId: String
+    var routeId: String
+    var amountMyr: Int
+    var payment: PaymentChargeResult
+}
+
+struct SoloCancelResponse: Decodable {
+    var cancelled: Bool
+    var refundMyr: Int
+    var refundFraction: Double
+    var refundPaymentId: String?
 }
 
 // MARK: - API DTOs (mirrors Android DTOs)
