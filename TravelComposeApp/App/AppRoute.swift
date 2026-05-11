@@ -44,6 +44,10 @@ enum AppRoute: Hashable {
     case longHaulBrowse
     case longHaulTripDetail(tripId: String)
     case longHaulPostTrip
+    // Recent commute features
+    case favorites           // Rider's saved routes
+    case routeRequestsList   // Rider's own route demand posts (manage / withdraw)
+    case driverDemand        // Driver-side aggregate demand list
 }
 
 // MARK: - Shared destination builder
@@ -126,7 +130,8 @@ struct AppRouteDestinations: ViewModifier {
                     onBack:         { if !path.isEmpty { path.removeLast() } },
                     onOpenCalendar: { path.append(.driverCalendar(routeId: $0)) },
                     onOpenPayouts:  { path.append(.driverPayouts) },
-                    onCreateRoute:  { path.append(.createRoute) }
+                    onCreateRoute:  { path.append(.createRoute) },
+                    onOpenDemand:   { path.append(.driverDemand) }
                 )
                 .navigationBarHidden(true)
 
@@ -296,6 +301,26 @@ struct AppRouteDestinations: ViewModifier {
                         // appears in the public listing.
                         if !path.isEmpty { path.removeLast() }
                     }
+                )
+                .navigationBarHidden(true)
+
+            case .favorites:
+                FavoritesView(
+                    onBack:      { if !path.isEmpty { path.removeLast() } },
+                    onOpenRoute: { path.append(.routeDetails(routeId: $0)) }
+                )
+                .navigationBarHidden(true)
+
+            case .routeRequestsList:
+                RouteRequestsListView(
+                    onBack: { if !path.isEmpty { path.removeLast() } }
+                )
+                .navigationBarHidden(true)
+
+            case .driverDemand:
+                DriverDemandView(
+                    onBack: { if !path.isEmpty { path.removeLast() } },
+                    onCreateRoute: { path.append(.createRoute) }
                 )
                 .navigationBarHidden(true)
             }

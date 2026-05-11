@@ -401,6 +401,28 @@ final class AppStore {
     /// refreshes payments, and surfaces a success/failure banner. The actual
     /// PAID flip happens server-side via the Billplz webhook; this routine
     /// just brings the iOS state up to date eagerly.
+    /// Entry-point for every `voygo://…` URL the app receives. Dispatches
+    /// share-link routes to a NotificationCenter post (so the Carpool
+    /// tab can deep-link into the route detail) and falls through to
+    /// the Billplz return handler for everything else. Pulled into a
+    /// separate method to keep TravelComposeApp.swift's `.onOpenURL`
+    /// closure tiny — Swift 6's compiler trips on multi-branch logic
+    /// inline in SwiftUI builders.
+    func handleDeepLink(url: URL) {
+        if url.scheme == "voygo", url.host == "routes" {
+            let routeId = url.lastPathComponent
+            if !routeId.isEmpty, routeId != "/" {
+                NotificationCenter.default.post(
+                    name: .voygoOpenRoute,
+                    object: nil,
+                    userInfo: ["routeId": routeId]
+                )
+                return
+            }
+        }
+        handlePaymentReturn(url: url)
+    }
+
     func handlePaymentReturn(url: URL) {
         guard url.scheme?.lowercased() == "voygo" else { return }
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -955,6 +977,20 @@ final class AppStore {
         do {
             routeRequests = try await VoygoAPIClient.myRouteRequests()
         } catch { /* non-fatal */ }
+    }
+
+    /// Withdraw an open request — used by the rider's request list
+    /// "X" button. Optimistically removes from the local array;
+    /// rolls back on failure.
+    func withdrawRouteRequest(_ id: String) async {
+        guard isAuthenticated else { return }
+        let snapshot = routeRequests
+        routeRequests.removeAll { $0.id == id }
+        do {
+            try await VoygoAPIClient.deleteRouteRequest(id)
+        } catch {
+            routeRequests = snapshot
+        }
     }
 
     func refreshRouteRequestDemand() async {

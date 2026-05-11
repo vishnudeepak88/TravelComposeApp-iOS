@@ -544,7 +544,11 @@ async function findCommuteMatches(pool, payload) {
   const requestedDays = payload.daysOfWeek
     ? normalizeDaysOfWeek(payload.daysOfWeek)
     : null;
-  const hasDayFilter = requestedDays && Object.values(requestedDays).some((v) => v);
+  // Filter activates whenever the rider sent a daysOfWeek payload, even
+  // if all flags are false. Previous behaviour silently dropped the
+  // filter when the rider toggled every chip off — counterintuitive and
+  // surfaced as "I disabled all days but still see Sat routes."
+  const hasDayFilter = requestedDays != null;
   const maxPriceMyr = Number.isFinite(Number(payload.maxPriceMyr))
     ? Number(payload.maxPriceMyr)
     : null;

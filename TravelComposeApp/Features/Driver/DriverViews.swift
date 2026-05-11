@@ -11,6 +11,9 @@ struct DriverDashboardView: View {
     /// Empty-state CTA — drills the driver into the create-route flow
     /// so "No routes yet" stops being a dead-end.
     var onCreateRoute: (() -> Void)? = nil
+    /// Pushes to the demand screen — riders' waiting list of corridors
+    /// they want drivers to add. Wired from AppRoute → DriverDemandView.
+    var onOpenDemand: (() -> Void)? = nil
 
     @State private var actionResult: String? = nil
     @State private var actionError: String? = nil
@@ -37,17 +40,31 @@ struct DriverDashboardView: View {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VPolishedNavBar(title: "Driver Dashboard", onBack: onBack) {
-                    if let onOpenPayouts {
-                        Button(action: onOpenPayouts) {
-                            Image(systemName: "banknote.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(VPalette.primary)
-                                .frame(width: 40, height: 40)
-                                .background(VPalette.primaryContainer)
-                                .clipShape(Circle())
+                    HStack(spacing: 8) {
+                        if let onOpenDemand {
+                            Button(action: onOpenDemand) {
+                                Image(systemName: "hand.raised.fill")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(VPalette.primary)
+                                    .frame(width: 40, height: 40)
+                                    .background(VPalette.primaryContainer)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Rider demand")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Payouts")
+                        if let onOpenPayouts {
+                            Button(action: onOpenPayouts) {
+                                Image(systemName: "banknote.fill")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(VPalette.primary)
+                                    .frame(width: 40, height: 40)
+                                    .background(VPalette.primaryContainer)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Payouts")
+                        }
                     }
                 }
 
@@ -123,6 +140,9 @@ struct DriverDashboardView: View {
         }
         .task {
             await store.refreshAll()
+            // Pull rider-demand counts so the nav-bar hand-raised
+            // button knows whether to badge.
+            await store.refreshRouteRequestDemand()
             hasLoaded = true
         }
         .alert(
@@ -329,6 +349,11 @@ private struct InfoBanner: View {
     var seatCount: Int = 3
     var pricePerSeat: Int = 8
     var carType: CarType = .sedan
+    /// Plate + colour — surfaced on the rider's search card so they can
+    /// identify the vehicle at the pickup point. Optional, but strongly
+    /// encouraged via the placeholder copy.
+    var plateNumber: String = ""
+    var carColor: String = ""
     var monday = true; var tuesday = true; var wednesday = true
     var thursday = true; var friday = true; var saturday = false; var sunday = false
     var pickupPoints: [String] = []
@@ -543,10 +568,14 @@ private struct InfoBanner: View {
         guard let store else { return }
         createState = .loading
         Task {
+            let trimmedPlate = plateNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedColor = carColor.trimmingCharacters(in: .whitespacesAndNewlines)
             let result = await store.createRoute(startLocation: startLocation, endLocation: endLocation,
                                                 departureTime: departureTime, seatCount: seatCount, pricePerSeat: pricePerSeat,
                                                 carType: carType, daysOfWeek: daysOfWeek,
-                                                pickupNames: pickupPoints, dropNames: dropPoints)
+                                                pickupNames: pickupPoints, dropNames: dropPoints,
+                                                plateNumber: trimmedPlate.isEmpty ? nil : trimmedPlate.uppercased(),
+                                                carColor: trimmedColor.isEmpty ? nil : trimmedColor)
             switch result {
             case .success(let id): createState = .success(id)
             case .failure(let err): createState = .error(err.localizedDescription)
@@ -693,6 +722,19 @@ struct CreateRouteView: View {
                                         }
                                     }
                                 }
+                                // Plate + colour. Shown on the rider's
+                                // search card so they can identify the
+                                // vehicle at the pickup. Both optional
+                                // so a driver can save a route without
+                                // them, but strongly recommended via
+                                // placeholder copy.
+                                HStack(spacing: 10) {
+                                    VoygoTextField(label: "Plate", text: $vm.plateNumber, placeholder: "PEN 1234")
+                                    VoygoTextField(label: "Car colour", text: $vm.carColor, placeholder: "White")
+                                }
+                                Text("Plate + colour help riders spot you at the pickup point. Optional but strongly recommended.")
+                                    .font(.caption2)
+                                    .foregroundColor(VPalette.textHint)
                             }
                             .padding(16)
                         }

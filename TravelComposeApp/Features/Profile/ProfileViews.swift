@@ -46,6 +46,11 @@ struct ProfileView: View {
                                 kycCard
                                 quickStats
                                 walletStatsRow
+                                // Favorites + requests entry points —
+                                // surfaced as compact tiles so a rider
+                                // can find what they saved + what they
+                                // asked for without buried navigation.
+                                myCommuteSection
                                 settingsCard
                                 // Driver mode card only when the user has at
                                 // least one published route. Riders who've
@@ -180,6 +185,63 @@ struct ProfileView: View {
             .background(VPalette.surface)
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Two-tile row for the rider's commute lists. Compact entry
+    /// points to Favorites (the routes they starred) and My Requests
+    /// (the corridors they asked drivers to add). Counts come from
+    /// in-memory caches refreshed by AppStore.
+    private var myCommuteSection: some View {
+        HStack(spacing: 10) {
+            commuteTile(
+                icon: "star.fill",
+                tint: VPalette.starGold,
+                title: "Favourites",
+                subtitle: store.favoriteRouteIds.isEmpty
+                    ? "None saved"
+                    : "\(store.favoriteRouteIds.count) saved"
+            ) {
+                path.append(.favorites)
+            }
+            commuteTile(
+                icon: "hand.raised.fill",
+                tint: VPalette.primary,
+                title: "My requests",
+                subtitle: {
+                    let n = store.routeRequests.filter { $0.status == "OPEN" }.count
+                    return n == 0 ? "None waiting" : "\(n) waiting"
+                }()
+            ) {
+                path.append(.routeRequestsList)
+            }
+        }
+        .task {
+            await store.refreshFavorites()
+            await store.refreshRouteRequests()
+        }
+    }
+
+    private func commuteTile(icon: String, tint: Color, title: String,
+                             subtitle: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .heavy))
+                    .foregroundColor(tint)
+                Text(title)
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundColor(VPalette.text)
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundColor(VPalette.textHint)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(VPalette.surface)
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VPalette.border))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
     }

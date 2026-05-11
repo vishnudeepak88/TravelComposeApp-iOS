@@ -29,8 +29,21 @@ enum CommuteSortOption: String, CaseIterable, Identifiable {
     var daysOfWeek: DaysOfWeekFlags = .weekdays
     /// Budget cap (RM/seat). `nil` means no cap.
     var maxPriceMyr: Int? = nil
-    /// Sort order — applied client-side over the server's match result.
-    var sortBy: CommuteSortOption = .bestMatch
+    /// Sort order — applied client-side over the server's match
+    /// result. Persisted in UserDefaults so a rider's last-chosen
+    /// sort survives app restarts. Initialised from the stored
+    /// value (or `.bestMatch` on first launch).
+    var sortBy: CommuteSortOption = {
+        if let raw = UserDefaults.standard.string(forKey: "voygo.commute.sortBy"),
+           let v = CommuteSortOption(rawValue: raw) {
+            return v
+        }
+        return .bestMatch
+    }() {
+        didSet {
+            UserDefaults.standard.set(sortBy.rawValue, forKey: "voygo.commute.sortBy")
+        }
+    }
     var results: [CommuteRouteMatchResult] = []
     var isSearching = false
     var isLocatingHome = false
@@ -44,6 +57,12 @@ enum CommuteSortOption: String, CaseIterable, Identifiable {
     var selectedHomeLng: Double? = nil
     var selectedOfficeLat: Double? = nil
     var selectedOfficeLng: Double? = nil
+
+    /// True when both home coords are known — drives whether the walk
+    /// distance pill on each result card is shown (the backend's
+    /// fallback constant when no coord is provided isn't worth
+    /// surfacing).
+    var hasRealHomeCoord: Bool { selectedHomeLat != nil && selectedHomeLng != nil }
     private var suppressNextHomeChange = false
     private var suppressNextOfficeChange = false
 
@@ -421,12 +440,21 @@ struct FindCommuteRoutesView: View {
                                     match: match,
                                     accentSeed: index,
                                     onTap: { onOpenRoute(match.route.id) },
-                                    onToggleFavorite: {
+                                    // Hide the star on the driver's own
+                                    // routes — favouriting yourself is
+                                    // meaningless and surfaces in the
+                                    // Favorites list as noise.
+                                    onToggleFavorite: match.route.driverId == store.currentUser.id ? nil : {
                                         Task { await store.toggleFavorite(routeId: match.route.id) }
                                     },
                                     onShare: {
                                         shareRoute(match.route)
-                                    }
+                                    },
+                                    // Walk pill only shown when the rider
+                                    // supplied home coords — otherwise
+                                    // `pickupDistanceMeters` is the
+                                    // backend fallback constant (1200m).
+                                    hasRealPickupDistance: vm.hasRealHomeCoord
                                 )
                                     .padding(.horizontal, 16)
                             }
@@ -461,6 +489,10 @@ struct FindCommuteRoutesView: View {
                 initialOrigin: vm.homeQuery,
                 initialDestination: vm.officeQuery,
                 initialDays: vm.daysOfWeek,
+                initialOriginLat: vm.selectedHomeLat,
+                initialOriginLng: vm.selectedHomeLng,
+                initialDestLat:   vm.selectedOfficeLat,
+                initialDestLng:   vm.selectedOfficeLng,
                 onSubmit: { payload in
                     let result = await store.postRouteRequest(payload)
                     if case .success = result { showRequestSheet = false }
@@ -625,11 +657,18 @@ struct PolishedRouteCard: View {
     let onTap: () -> Void
     /// Optional favorite-toggle handler. When provided, a star button
     /// appears in the corner; tapping it fires this without
-    /// propagating to the card's main tap.
+    /// propagating to the card's main tap. Set to nil to hide the
+    /// star (e.g. on the driver's own routes, where favouriting your
+    /// own route makes no sense).
     var onToggleFavorite: (() -> Void)? = nil
     /// Optional share-this-route handler. Renders a small share icon
     /// next to the star.
     var onShare: (() -> Void)? = nil
+    /// True when the rider supplied a home coordinate, so
+    /// `pickupDistanceMeters` is a real measurement rather than the
+    /// backend's fallback constant. When false we hide the walk pill
+    /// so we don't show a fictional "1200m walk" number.
+    var hasRealPickupDistance: Bool = true
 
     private var accent: Color {
         switch accentSeed % 3 {
@@ -651,31 +690,42 @@ struct PolishedRouteCard: View {
 
     /// "Why this route" one-liner — surfaces the strongest reason this
     /// card outranked the others. Replaces three small metric chips
-    /// with one human sentence.
+    /// with one human sentence. Skips the walk distance when the
+    /// rider hasn't supplied a home coord (we don't have a real
+    /// number to report).
     private var whyThisRoute: String {
         let m = Int(match.pickupDistanceMeters)
         let onTime = Int(match.reliabilityScore * 100)
-        let walk = m < 1000 ? "\(m)m walk" : String(format: "%.1fkm walk", Double(m)/1000.0)
-        return "\(walk) · \(onTime)% on-time · departs \(match.route.departureTime)"
+        let walkPart: String? = hasRealPickupDistance
+            ? (m < 1000 ? "\(m)m walk" : String(format: "%.1fkm walk", Double(m)/1000.0))
+            : nil
+        let parts = [walkPart, "\(onTime)% on-time", "departs \(match.route.departureTime)"]
+            .compactMap { $0 }
+        return parts.joined(separator: " · ")
     }
 
     var body: some View {
         Button(action: onTap) {
             VStack(spacing: 12) {
                 // Walk-distance + favourite/share top strip. Walk-distance
-                // is the headline metric the rider actually decides on.
+                // is the headline metric the rider actually decides on —
+                // but only show it when we actually have a real distance
+                // (rider supplied a home coord). Without that, the
+                // backend's fallback constant would lie to the user.
                 HStack {
-                    HStack(spacing: 4) {
-                        Image(systemName: "figure.walk")
-                            .font(.caption.weight(.bold))
-                        Text(walkBand.label)
-                            .font(.caption.weight(.heavy))
+                    if hasRealPickupDistance {
+                        HStack(spacing: 4) {
+                            Image(systemName: "figure.walk")
+                                .font(.caption.weight(.bold))
+                            Text(walkBand.label)
+                                .font(.caption.weight(.heavy))
+                        }
+                        .foregroundColor(walkBand.color)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(walkBand.color.opacity(0.14))
+                        .clipShape(Capsule())
+                        .accessibilityLabel(walkBand.accessibility)
                     }
-                    .foregroundColor(walkBand.color)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(walkBand.color.opacity(0.14))
-                    .clipShape(Capsule())
-                    .accessibilityLabel(walkBand.accessibility)
                     Spacer()
                     if let onShare {
                         Button(action: onShare) {
@@ -1322,6 +1372,14 @@ struct RequestRouteSheet: View {
     let initialOrigin: String
     let initialDestination: String
     let initialDays: DaysOfWeekFlags
+    /// Initial coords from the rider's current search — when present
+    /// we pass them through to the backend so corridor matching can
+    /// use coord distance later instead of relying on substring on
+    /// labels alone. Optional — labels still work.
+    var initialOriginLat: Double? = nil
+    var initialOriginLng: Double? = nil
+    var initialDestLat: Double? = nil
+    var initialDestLng: Double? = nil
     let onSubmit: (RouteRequestPayload) async -> Result<String, AppError>
 
     @Environment(\.dismiss) private var dismiss
@@ -1420,6 +1478,10 @@ struct RequestRouteSheet: View {
         let payload = RouteRequestPayload(
             origin: origin.trimmingCharacters(in: .whitespaces),
             destination: destination.trimmingCharacters(in: .whitespaces),
+            originLat: initialOriginLat,
+            originLng: initialOriginLng,
+            destLat:   initialDestLat,
+            destLng:   initialDestLng,
             preferredTime: preferredTime,
             daysOfWeek: days.asDictionary,
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)

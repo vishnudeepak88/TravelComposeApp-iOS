@@ -308,6 +308,13 @@ struct VoygoAPIClient {
                       as: [RouteRequest].self)
     }
 
+    static func deleteRouteRequest(_ id: String) async throws {
+        let url = baseURL.appendingPathComponent("commute/route-requests/\(id)")
+        let req = authedRequest(url, method: "DELETE")
+        let (data, response) = try await session.data(for: req)
+        try validate(response, data: data, url: url)
+    }
+
     static func routeRequestDemand() async throws -> [RouteRequestDemand] {
         try await get(baseURL.appendingPathComponent("commute/route-requests/demand"),
                       as: [RouteRequestDemand].self)

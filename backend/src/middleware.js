@@ -84,8 +84,27 @@ function rateLimitAuth(req, res, next) {
   next();
 }
 
+/// Write endpoints (favorites toggle, route requests, chat send, saved
+/// search PUT). Higher ceiling than auth but tight enough to block a
+/// runaway client from spamming the DB. Keyed by IP — once we have
+/// a sticky user id at this layer we can flip to per-user bucketing.
+function rateLimitWrite(req, res, next) {
+  const key = bucketKey(req, "write");
+  let bucket = buckets.get(key);
+  if (!bucket) {
+    bucket = new TokenBucket(30, 30 / 60); // 30 burst, 30/min sustained
+    buckets.set(key, bucket);
+  }
+  if (!bucket.tryConsume()) {
+    res.status(429).json({ detail: "Too many writes — slow down" });
+    return;
+  }
+  next();
+}
+
 module.exports = {
   rateLimitGlobal,
   rateLimitSearch,
-  rateLimitAuth
+  rateLimitAuth,
+  rateLimitWrite
 };

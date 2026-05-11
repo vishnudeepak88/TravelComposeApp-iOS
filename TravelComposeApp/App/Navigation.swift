@@ -93,6 +93,14 @@ struct MainTabView: View {
                 selectedTab = 1
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRoute)) { _ in
+            // Deep-link from voygo://routes/X — switch to the Carpool
+            // tab; CommuteTab listens for the same notification and
+            // appends the route detail to its path.
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                selectedTab = 1
+            }
+        }
     }
 }
 
@@ -140,6 +148,9 @@ extension Notification.Name {
     /// path. Used by notification taps and Driver-dashboard "Message rider"
     /// without giving every tab a shared NavigationPath.
     static let voygoOpenThread = Notification.Name("voygo.openThread")
+    // `voygoOpenRoute` lives in PushRegistration.swift — the share-link
+    // deep-link and APNs route-tap both fire it. AppStore.handleDeepLink
+    // posts it; MainTabView + CommuteTab listen below.
 }
 
 struct VoygoTabBar: View {
@@ -240,6 +251,14 @@ struct CommuteTab: View {
             )
             .navigationBarHidden(true)
             .enableSwipeBack()
+            .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRoute)) { note in
+                guard let info = note.userInfo,
+                      let routeId = info["routeId"] as? String else { return }
+                // Avoid stacking duplicates if the user re-taps the same link.
+                if path.last != .routeDetails(routeId: routeId) {
+                    path.append(.routeDetails(routeId: routeId))
+                }
+            }
         }
     }
 }

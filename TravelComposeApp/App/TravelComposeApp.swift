@@ -20,12 +20,10 @@ struct TravelComposeApp: App {
                     Telemetry.track(TelemetryEvents.appOpened)
                 }
                 .onOpenURL { url in
-                    // Closes the loop opened in `AppStore.startCharge`: when
-                    // the rider returns from the Billplz hosted checkout via
-                    // `voygo://payments/return?paid=true&id=…`, this fires
-                    // and AppStore dismisses the SFSafariViewController +
-                    // refreshes payments.
-                    store.handlePaymentReturn(url: url)
+                    // AppStore dispatches: voygo://routes/<id> → posts
+                    // .voygoOpenRoute; voygo://payments/return → closes
+                    // the Billplz hosted-checkout loop.
+                    store.handleDeepLink(url: url)
                 }
         }
     }

@@ -47,7 +47,8 @@ const { computeWeeklyPayout } = require("./payouts");
 const {
   rateLimitGlobal,
   rateLimitSearch,
-  rateLimitAuth
+  rateLimitAuth,
+  rateLimitWrite
 } = require("./middleware");
 
 const app = express();
@@ -1041,7 +1042,7 @@ app.post(
 
       // Notify the driver so they don't wait. Best-effort.
       const ride = await pool.query(
-        `SELECT r.driver_id, r.start_location, r.end_location
+        `SELECT r.id AS route_id, r.driver_id, r.start_location, r.end_location
            FROM commute_ride_instances i
            JOIN recurring_routes r ON r.id = i.route_id
           WHERE i.id = $1`,
@@ -1056,6 +1057,13 @@ app.post(
           body: `${row.start_location} → ${row.end_location}`,
           rideInstanceId: rideId
         });
+      }
+      // A skip frees a seat for tomorrow's pickup — fan out a
+      // SEAT_OPENED to favorites + saved-search corridor matches.
+      // Detached so we don't block the rider's HTTP response.
+      if (row?.route_id) {
+        notifySeatOpenedListeners(row.route_id, row.start_location, row.end_location)
+          .catch((e) => console.warn(`[notify] skip seat-open fanout: ${e.message}`));
       }
       res.json({ ok: true });
     } catch (err) {
@@ -1294,42 +1302,14 @@ app.post(
     await generateRideInstances(pool, todayIso(), 30);
 
     // Cross-pollinate with route_requests: when a new route lands,
-    // notify riders who flagged interest in this corridor so they
-    // see the supply immediately. Simple substring match — good
-    // enough for the pilot's small request volume.
-    try {
-      const startLow = String(bodyValue(body, "startLocation", "start_location") || "").toLowerCase();
-      const endLow   = String(bodyValue(body, "endLocation",   "end_location")   || "").toLowerCase();
-      if (startLow && endLow) {
-        const matched = await pool.query(
-          `SELECT id, rider_id
-             FROM route_requests
-            WHERE status = 'OPEN'
-              AND LOWER(origin) LIKE '%' || $1 || '%'
-              AND LOWER(destination) LIKE '%' || $2 || '%'`,
-          [startLow, endLow]
-        );
-        for (const row of matched.rows) {
-          await createNotification({
-            userId: row.rider_id,
-            type: "ROUTE_REQUEST_MATCHED",
-            title: "A driver added your corridor!",
-            body: `${bodyValue(body, "startLocation", "start_location")} → ${bodyValue(body, "endLocation", "end_location")} is now available. Tap to subscribe.`,
-            routeId
-          });
-        }
-        // Auto-close the matched requests so the rider's "waiting"
-        // list stops growing stale.
-        if (matched.rowCount > 0) {
-          await pool.query(
-            `UPDATE route_requests SET status = 'FULFILLED' WHERE id = ANY($1::uuid[])`,
-            [matched.rows.map((r) => r.id)]
-          );
-        }
-      }
-    } catch (e) {
+    // notify riders who flagged interest in this corridor. Run as a
+    // detached task so 500 matched requests don't block the driver's
+    // create-route HTTP response for 30 seconds.
+    const startLabel = bodyValue(body, "startLocation", "start_location");
+    const endLabel   = bodyValue(body, "endLocation",   "end_location");
+    fanoutRouteRequestMatches(routeId, startLabel, endLabel).catch((e) => {
       console.warn(`[routes] cross-pollinate failed: ${e.message}`);
-    }
+    });
 
     res.json({ id: routeId });
   })
@@ -1345,12 +1325,24 @@ app.post(
 app.post(
   "/commute/route-requests",
   requireAuth,
+  rateLimitWrite,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     const origin = String(bodyValue(body, "origin") || "").trim();
     const destination = String(bodyValue(body, "destination") || "").trim();
     if (!origin || !destination) {
       res.status(400).json({ detail: "origin and destination required" });
+      return;
+    }
+    // Cap open requests per rider at 20 — generous enough for daily
+    // commute experimentation, tight enough to stop a runaway client
+    // from filling the table.
+    const openCount = (await pool.query(
+      "SELECT COUNT(*)::int AS n FROM route_requests WHERE rider_id = $1 AND status = 'OPEN'",
+      [req.user.id]
+    )).rows[0]?.n || 0;
+    if (openCount >= 20) {
+      res.status(409).json({ detail: "too_many_open_requests" });
       return;
     }
     const id = crypto.randomUUID();
@@ -1374,6 +1366,25 @@ app.post(
       ]
     );
     res.status(201).json({ id });
+  })
+);
+
+// Rider can withdraw an open request — useful when they no longer
+// need that corridor or it gets posted.
+app.delete(
+  "/commute/route-requests/:id",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `DELETE FROM route_requests
+        WHERE id = $1 AND rider_id = $2`,
+      [req.params.id, req.user.id]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ detail: "not_found" });
+      return;
+    }
+    res.status(204).send();
   })
 );
 
@@ -1429,7 +1440,18 @@ app.get(
 app.post(
   "/commute/routes/:routeId/favorite",
   requireAuth,
+  rateLimitWrite,
   asyncHandler(async (req, res) => {
+    // Cap favorites per rider at 50. Plenty for a power user
+    // comparison-shopping; prevents runaway-toggle floods.
+    const count = (await pool.query(
+      "SELECT COUNT(*)::int AS n FROM route_favorites WHERE rider_id = $1",
+      [req.user.id]
+    )).rows[0]?.n || 0;
+    if (count >= 50) {
+      res.status(409).json({ detail: "favorites_limit" });
+      return;
+    }
     await pool.query(
       `INSERT INTO route_favorites (route_id, rider_id)
        VALUES ($1, $2)
@@ -1443,6 +1465,7 @@ app.post(
 app.delete(
   "/commute/routes/:routeId/favorite",
   requireAuth,
+  rateLimitWrite,
   asyncHandler(async (req, res) => {
     await pool.query(
       `DELETE FROM route_favorites WHERE route_id = $1 AND rider_id = $2`,
@@ -1470,6 +1493,7 @@ app.get(
 app.put(
   "/commute/saved-search",
   requireAuth,
+  rateLimitWrite,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
     await pool.query(
@@ -1570,8 +1594,14 @@ async function canAccessRouteRideData(routeId, userId) {
 
 /// Pushes a SEAT_OPENED notification to riders who have either
 /// favourited this route or have a saved-search whose corridor
-/// (origin/destination labels) substring-matches this route. Used
-/// when a sub turns ACTIVE → CANCELLED / PAUSED, freeing a seat.
+/// (origin/destination labels) substring-matches this route. Triggered
+/// whenever capacity expands or a sub releases — sub cancel/pause,
+/// route resume, seat_count bump, ride-instance passenger skip.
+///
+/// Fan-out runs in parallel via Promise.all so a popular route with
+/// 200 listeners doesn't block the triggering HTTP request for
+/// minutes. Errors are swallowed per-notification — one bad row
+/// shouldn't poison the whole batch.
 async function notifySeatOpenedListeners(routeId, startLocation, endLocation) {
   try {
     const favRes = await pool.query(
@@ -1593,18 +1623,57 @@ async function notifySeatOpenedListeners(routeId, startLocation, endLocation) {
       ...favRes.rows.map((r) => String(r.rider_id)),
       ...corridorRes.rows.map((r) => String(r.rider_id))
     ]);
-    for (const riderId of recipients) {
-      await createNotification({
-        userId: riderId,
-        type: "SEAT_OPENED",
-        title: "A seat just opened up",
-        body: `${startLocation} → ${endLocation} has space. Tap to book.`,
-        routeId
-      });
-    }
+    await Promise.all(
+      [...recipients].map((riderId) =>
+        createNotification({
+          userId: riderId,
+          type: "SEAT_OPENED",
+          title: "A seat just opened up",
+          body: `${startLocation} → ${endLocation} has space. Tap to book.`,
+          routeId
+        }).catch((err) => {
+          console.warn(`[notify] seat-opened to ${riderId} failed: ${err.message}`);
+        })
+      )
+    );
   } catch (err) {
     console.warn(`[notify] seat-opened fanout failed: ${err.message}`);
   }
+}
+
+/// Fan-out for route-request matches. Mirror shape of seat-opens —
+/// parallel, per-row error isolated, runs detached from the HTTP
+/// request that triggered it.
+async function fanoutRouteRequestMatches(routeId, startLocation, endLocation) {
+  const startLow = String(startLocation || "").toLowerCase();
+  const endLow   = String(endLocation   || "").toLowerCase();
+  if (!startLow || !endLow) return;
+  const matched = await pool.query(
+    `SELECT id, rider_id
+       FROM route_requests
+      WHERE status = 'OPEN'
+        AND LOWER(origin) LIKE '%' || $1 || '%'
+        AND LOWER(destination) LIKE '%' || $2 || '%'`,
+    [startLow, endLow]
+  );
+  if (matched.rowCount === 0) return;
+  await Promise.all(
+    matched.rows.map((row) =>
+      createNotification({
+        userId: row.rider_id,
+        type: "ROUTE_REQUEST_MATCHED",
+        title: "A driver added your corridor!",
+        body: `${startLocation} → ${endLocation} is now available. Tap to subscribe.`,
+        routeId
+      }).catch((err) => {
+        console.warn(`[notify] route-request-match to ${row.rider_id} failed: ${err.message}`);
+      })
+    )
+  );
+  await pool.query(
+    `UPDATE route_requests SET status = 'FULFILLED' WHERE id = ANY($1::uuid[])`,
+    [matched.rows.map((r) => r.id)]
+  );
 }
 
 async function notifyRouteSubscribers(routeId, type, title, body) {
@@ -1695,6 +1764,17 @@ app.put(
         "Driver resumed this route",
         "Your scheduled pickups are back on. Check the calendar."
       );
+      // Resume reopens seats. Ping favorites + saved-search matches
+      // so anyone watching gets a heads-up. Detached so the resume
+      // HTTP response isn't blocked by the fanout.
+      const routeRow = (await pool.query(
+        "SELECT start_location, end_location FROM recurring_routes WHERE id = $1",
+        [routeId]
+      )).rows[0];
+      if (routeRow) {
+        notifySeatOpenedListeners(routeId, routeRow.start_location, routeRow.end_location)
+          .catch((e) => console.warn(`[notify] resume seat-open fanout: ${e.message}`));
+      }
     } else {
       await notifyRouteSubscribers(
         routeId,
@@ -1870,7 +1950,10 @@ app.put(
         [subscriptionId]
       )).rows[0];
       if (routeRow) {
-        await notifySeatOpenedListeners(routeRow.route_id, routeRow.start_location, routeRow.end_location);
+        // Detach the fanout so a 200-listener route doesn't block the
+        // subscription-update HTTP response by minutes.
+        notifySeatOpenedListeners(routeRow.route_id, routeRow.start_location, routeRow.end_location)
+          .catch((e) => console.warn(`[notify] subscription seat-open fanout: ${e.message}`));
       }
     }
     const sub = (await pool.query(
@@ -2309,6 +2392,7 @@ app.get(
 app.post(
   "/chats/:threadId/send",
   requireAuth,
+  rateLimitWrite,
   asyncHandler(async (req, res) => {
     const text = String(req.body?.text || "");
     // Pre-validate length so the client gets a clean 413 rather than the
