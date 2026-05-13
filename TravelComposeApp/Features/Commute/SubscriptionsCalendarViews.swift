@@ -23,14 +23,11 @@ struct MySubscriptionsView: View {
     /// Tracks whether the initial refresh has completed so we can
     /// show a skeleton instead of the empty-state on first paint.
     @State private var hasLoaded: Bool = false
-    /// Multi-select mode + accumulated selection. When the rider taps
-    /// "Select" in the nav bar, the cards swap their tap target from
-    /// "open route" to "toggle in `selectedIds`" and a bottom action
-    /// bar appears with bulk-cancel + select-all controls.
-    @State private var isSelectMode: Bool = false
-    @State private var selectedIds: Set<String> = []
-    @State private var pendingBulkCancel: Bool = false
-    @State private var bulkCancelInFlight: Bool = false
+    // Multi-select moved to Upcoming Commutes (calendar view), where
+    // bulk-action operates on per-day rides via SKIP — the real
+    // common case ("I'm on vacation Mon–Fri, skip all 5"). Cancelling
+    // a recurring subscription is a deliberate per-row act, so the
+    // single × on each card is the right affordance here.
 
     var items: [RouteSubscriptionWithRoute] { store.mySubscriptions() }
 
@@ -39,45 +36,16 @@ struct MySubscriptionsView: View {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VPolishedNavBar(title: S.subscriptionsTitle, onBack: onBack) {
-                    HStack(spacing: 8) {
-                        // Calendar shortcut hides in select-mode to make
-                        // room for Select-all + Done. Riders can still
-                        // get there by exiting select-mode first.
-                        if !isSelectMode {
-                            Button(action: onOpenCalendar) {
-                                Image(systemName: "calendar")
-                                    .font(.callout.weight(.bold))
-                                    .foregroundColor(VPalette.primary)
-                                    .frame(width: 40, height: 40)
-                                    .background(VPalette.primaryContainer)
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(S.subsCalendarA11y)
-                        }
-                        // Toggle Select / Done. Hidden when there's
-                        // nothing to select so we don't tease an
-                        // affordance the empty state can't fulfill.
-                        if !items.isEmpty {
-                            Button {
-                                if isSelectMode {
-                                    isSelectMode = false
-                                    selectedIds = []
-                                } else {
-                                    isSelectMode = true
-                                }
-                            } label: {
-                                Text(isSelectMode ? S.subsDone : S.subsSelect)
-                                    .font(.footnote.weight(.heavy))
-                                    .foregroundColor(VPalette.primary)
-                                    .padding(.horizontal, 14).padding(.vertical, 10)
-                                    .background(VPalette.primaryContainer)
-                                    .clipShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(isSelectMode ? S.subsDone : S.subsSelect)
-                        }
+                    Button(action: onOpenCalendar) {
+                        Image(systemName: "calendar")
+                            .font(.callout.weight(.bold))
+                            .foregroundColor(VPalette.primary)
+                            .frame(width: 40, height: 40)
+                            .background(VPalette.primaryContainer)
+                            .clipShape(Circle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(S.subsCalendarA11y)
                 }
 
                 if items.isEmpty && !hasLoaded {
@@ -117,71 +85,22 @@ struct MySubscriptionsView: View {
                                 }
 
                                 ForEach(items) { item in
-                                    HStack(spacing: 12) {
-                                        if isSelectMode {
-                                            // Per-row selection checkbox. Tap target
-                                            // is the entire card row when in select
-                                            // mode so the rider doesn't need to hit
-                                            // the small circle precisely.
-                                            Image(systemName: selectedIds.contains(item.subscription.id)
-                                                  ? "checkmark.circle.fill"
-                                                  : "circle")
-                                                .font(.title3.weight(.semibold))
-                                                .foregroundColor(
-                                                    selectedIds.contains(item.subscription.id)
-                                                        ? VPalette.primary
-                                                        : VPalette.textHint
-                                                )
-                                                .transition(.opacity)
-                                        }
-                                        SubscriptionCard(
-                                            item: item,
-                                            onOpen:   {
-                                                if isSelectMode {
-                                                    toggleSelection(item.subscription.id)
-                                                } else {
-                                                    onOpenRoute(item.route.id)
-                                                }
-                                            },
-                                            onPause:  { updateSubscription(item.subscription.id, status: .paused) },
-                                            onResume: { updateSubscription(item.subscription.id, status: .active) },
-                                            onCancel: { pendingCancellation = item },
-                                            onRetryPayment: { retryPayment(item) },
-                                            isRetryingPayment: retryingId == item.subscription.id,
-                                            // Suppress in-card action buttons in
-                                            // select mode so the row reads as
-                                            // selectable, not as a per-action
-                                            // surface.
-                                            actionsHidden: isSelectMode
-                                        )
-                                    }
+                                    SubscriptionCard(
+                                        item: item,
+                                        onOpen:   { onOpenRoute(item.route.id) },
+                                        onPause:  { updateSubscription(item.subscription.id, status: .paused) },
+                                        onResume: { updateSubscription(item.subscription.id, status: .active) },
+                                        onCancel: { pendingCancellation = item },
+                                        onRetryPayment: { retryPayment(item) },
+                                        isRetryingPayment: retryingId == item.subscription.id
+                                    )
                                     .padding(.horizontal, 16)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        if isSelectMode {
-                                            toggleSelection(item.subscription.id)
-                                        }
-                                    }
                                 }
                             }
                             .padding(.vertical, 16)
                         }
                         .refreshable {
                             await store.refreshAll()
-                        }
-                        // Bulk-action bar pinned ABOVE the native tab
-                        // bar (not replacing it) via safeAreaInset.
-                        // The inset both reserves layout space inside
-                        // the ScrollView (so the bottom cards aren't
-                        // covered) AND renders above the Liquid Glass
-                        // tab bar. Result: rider can still navigate
-                        // between tabs while selecting, and the
-                        // action buttons are fully visible.
-                        .safeAreaInset(edge: .bottom, spacing: 0) {
-                            if isSelectMode {
-                                bulkActionBar
-                                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                            }
                         }
                         .onReceive(NotificationCenter.default.publisher(for: .voygoTabReselected)) { note in
                             if (note.userInfo?["index"] as? Int) == 2 {
@@ -194,7 +113,6 @@ struct MySubscriptionsView: View {
                 }
             }
         }
-        .animation(.easeOut(duration: 0.18), value: isSelectMode)
         .task {
             await store.refreshAll()
             hasLoaded = true
@@ -222,148 +140,6 @@ struct MySubscriptionsView: View {
             // don't enter into it). Prefix the route name so the
             // rider sees which sub they're cancelling.
             Text("\(item.route.startLocation) → \(item.route.endLocation).\n\(S.cancelSubscriptionMessage)")
-        }
-        // Bulk-cancel confirm alert. Body interpolates the chosen
-        // count so the rider sees exactly how many subscriptions are
-        // about to be cancelled. Disabled buttons while in-flight to
-        // prevent double-firing.
-        .alert(
-            S.subsBulkCancelTitle(selectedIds.count),
-            isPresented: $pendingBulkCancel
-        ) {
-            Button(S.subsBulkCancelConfirm(selectedIds.count), role: .destructive) {
-                Task { await runBulkCancel() }
-            }
-            Button(S.subKeepIt, role: .cancel) { }
-        } message: {
-            Text(S.subsBulkCancelBody)
-        }
-    }
-
-    /// Pinned bottom toolbar for multi-select mode. Mirrors the
-    /// iOS Mail / Photos delete-many pattern: Select all (left),
-    /// destructive primary (centre/wide), Cancel (right).
-    private var bulkActionBar: some View {
-        // No outer VStack / Spacer / ignoresSafeArea — the parent now
-        // hosts this via `.safeAreaInset(edge: .bottom)` which sizes
-        // the inset to wrap the content and places it above the
-        // native tab bar's safe area.
-        HStack(spacing: 10) {
-            Button {
-                if selectedIds.count == items.count {
-                    // Already all selected → tap means "clear".
-                    selectedIds = []
-                } else {
-                    selectedIds = Set(items.map { $0.subscription.id })
-                }
-            } label: {
-                Text(selectedIds.count == items.count && !items.isEmpty
-                     ? S.subsClearAll
-                     : S.subsSelectAll)
-                    .font(.footnote.weight(.heavy))
-                    .foregroundColor(VPalette.primary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(VPalette.primaryContainer)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-
-            Spacer(minLength: 0)
-
-            Button {
-                pendingBulkCancel = true
-            } label: {
-                HStack(spacing: 6) {
-                    if bulkCancelInFlight {
-                        ProgressView().tint(.white).controlSize(.small)
-                    } else {
-                        Image(systemName: "xmark.bin.fill")
-                    }
-                    Text(S.subsBulkCancelCTA(selectedIds.count))
-                }
-                .font(.footnote.weight(.heavy))
-                .foregroundColor(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(selectedIds.isEmpty || bulkCancelInFlight ? VPalette.textHint : VPalette.danger)
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(selectedIds.isEmpty || bulkCancelInFlight)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
-        .overlay(Rectangle().fill(VPalette.border).frame(height: 1), alignment: .top)
-    }
-
-    /// Toggle a subscription's selection state. Used by the row tap
-    /// and the per-row checkbox.
-    private func toggleSelection(_ id: String) {
-        if selectedIds.contains(id) {
-            selectedIds.remove(id)
-        } else {
-            selectedIds.insert(id)
-        }
-    }
-
-    /// Cancel every selected subscription in parallel. Each one goes
-    /// through the same two-step `cancelSubscription` flow as the
-    /// single-row tap (status flip → cancellation record), so the
-    /// refund/penalty ledger stays consistent. Failures are surfaced
-    /// per-item in a comma-joined error banner — the rider can retry
-    /// the failed ones individually.
-    private func runBulkCancel() async {
-        guard !bulkCancelInFlight else { return }
-        bulkCancelInFlight = true
-        defer { bulkCancelInFlight = false }
-        let chosen = items.filter { selectedIds.contains($0.subscription.id) }
-        var failures: [String] = []
-        // Fan out in parallel — these are independent server calls
-        // against different subscription ids; serial would cost the
-        // rider one round-trip per item.
-        await withTaskGroup(of: (String, AppError?).self) { group in
-            for item in chosen {
-                group.addTask {
-                    let cancelResult = await store.updateSubscription(id: item.subscription.id, status: .cancelled)
-                    if case .failure(let err) = cancelResult {
-                        return (item.route.startLocation, err)
-                    }
-                    let report = await store.reportCancellation(
-                        rideInstanceId: nil,
-                        routeId: item.route.id,
-                        subscriptionId: item.subscription.id,
-                        actor: .rider,
-                        kind: .riderCancelMidMonth,
-                        notes: nil
-                    )
-                    if case .failure(let err) = report {
-                        // Rollback the status flip so the ledger
-                        // doesn't drift — same recovery the single
-                        // cancel path uses.
-                        _ = await store.updateSubscription(id: item.subscription.id, status: .active)
-                        return (item.route.startLocation, err)
-                    }
-                    return (item.route.startLocation, nil)
-                }
-            }
-            for await (routeLabel, err) in group {
-                if err != nil { failures.append(routeLabel) }
-            }
-        }
-        if failures.isEmpty {
-            // All clean — exit select mode and clear selection.
-            isSelectMode = false
-            selectedIds = []
-        } else {
-            actionError = S.subsBulkCancelFailed(failures.joined(separator: ", "))
-            // Keep select-mode on so the rider can retry just the
-            // failures (the successful ones already disappeared from
-            // `items` via the status filter).
-            selectedIds = selectedIds.filter { id in
-                items.contains { $0.subscription.id == id }
-            }
         }
     }
 
@@ -585,20 +361,71 @@ struct UpcomingCalendarView: View {
 
     var items: [CommuteRideCalendarItem] { store.calendarItems(routeId: routeId) }
 
+    /// Subset of items that can be batch-skipped — future, scheduled,
+    /// with a usable rideInstanceId. Past / completed rides aren't
+    /// part of the selection pool even when the rider taps "Select
+    /// all".
+    private var skippableItems: [CommuteRideCalendarItem] {
+        let today = Calendar.current.startOfDay(for: Date())
+        return items.filter { item in
+            item.rideInstanceId != nil &&
+            item.rideStatus == .scheduled &&
+            item.date >= today
+        }
+    }
+
+    @State private var actionError: String? = nil
+    /// Multi-select state. The Select button in the nav bar flips this;
+    /// each card row grows a checkmark; a bottom action bar pinned via
+    /// `.safeAreaInset` lets the rider Select-all + "Skip N rides".
+    /// Real use case: skipping a vacation week in one go.
+    @State private var isSelectMode: Bool = false
+    @State private var selectedRideIds: Set<String> = []
+    @State private var pendingBulkSkip: Bool = false
+    @State private var bulkSkipInFlight: Bool = false
+
     var body: some View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Upcoming Commutes", onBack: onBack)
-                    .background(VoygoTheme.background)
+                VPolishedNavBar(title: S.upcomingCommutesTitle, onBack: onBack) {
+                    // Select / Done toggle. Hidden when there's nothing
+                    // skippable so we don't tease an empty action.
+                    if !skippableItems.isEmpty {
+                        Button {
+                            if isSelectMode {
+                                isSelectMode = false
+                                selectedRideIds = []
+                            } else {
+                                isSelectMode = true
+                            }
+                        } label: {
+                            Text(isSelectMode ? S.subsDone : S.subsSelect)
+                                .font(.footnote.weight(.heavy))
+                                .foregroundColor(VPalette.primary)
+                                .padding(.horizontal, 14).padding(.vertical, 10)
+                                .background(VPalette.primaryContainer)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(isSelectMode ? S.subsDone : S.subsSelect)
+                    }
+                }
+                .background(VoygoTheme.background)
 
                 if items.isEmpty {
                     EmptyStateView(icon: "calendar.badge.exclamationmark",
-                                   title: "No upcoming commutes",
-                                   subtitle: "Subscribe to a route to see your schedule here")
+                                   title: S.upcomingEmptyTitle,
+                                   subtitle: S.upcomingEmptyBody)
                         .frame(maxHeight: .infinity)
                 } else {
                     ScrollView {
+                        if let err = actionError {
+                            VErrorBanner(message: err)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 12)
+                                .onTapGesture { actionError = nil }
+                        }
                         // Group by week
                         let grouped = Dictionary(grouping: items) { i -> String in
                             let cal = Calendar.current
@@ -612,7 +439,33 @@ struct UpcomingCalendarView: View {
                                 VStack(alignment: .leading, spacing: 10) {
                                     SectionHeader(title: key).padding(.horizontal, 16)
                                     ForEach(grouped[key] ?? []) { item in
-                                        CalendarItemCard(item: item).padding(.horizontal, 16)
+                                        HStack(spacing: 12) {
+                                            if isSelectMode, let rideId = item.rideInstanceId {
+                                                let canSelect = isSkippable(item)
+                                                Image(systemName: selectedRideIds.contains(rideId)
+                                                      ? "checkmark.circle.fill"
+                                                      : (canSelect ? "circle" : "minus.circle"))
+                                                    .font(.title3.weight(.semibold))
+                                                    .foregroundColor(
+                                                        selectedRideIds.contains(rideId)
+                                                            ? VPalette.primary
+                                                            : (canSelect ? VPalette.textHint : VPalette.textHint.opacity(0.4))
+                                                    )
+                                                    .transition(.opacity)
+                                                    .padding(.leading, 16)
+                                            }
+                                            // In select mode, suppress per-card "Skip"
+                                            // button to keep the row reading as
+                                            // selectable. The whole row toggles
+                                            // selection on tap.
+                                            CalendarItemCard(item: item, skipHidden: isSelectMode)
+                                                .padding(.horizontal, isSelectMode ? 0 : 16)
+                                        }
+                                        .padding(.trailing, isSelectMode ? 16 : 0)
+                                        .contentShape(Rectangle())
+                                        .onTapGesture {
+                                            if isSelectMode { toggleSelection(item) }
+                                        }
                                     }
                                 }
                             }
@@ -622,11 +475,145 @@ struct UpcomingCalendarView: View {
                     .refreshable {
                         await store.refreshCalendar(routeId: routeId)
                     }
+                    // Bottom action bar pinned ABOVE the native tab bar
+                    // via `.safeAreaInset` — same pattern shipped for
+                    // My commutes' bulk-cancel. Tab bar stays visible.
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        if isSelectMode {
+                            bulkSkipBar
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
+                    }
                 }
             }
         }
+        .animation(.easeOut(duration: 0.18), value: isSelectMode)
         .task(id: routeId ?? "all") {
             await store.refreshCalendar(routeId: routeId)
+        }
+        // Bulk-skip confirm alert. Body interpolates the chosen
+        // count so the rider sees exactly how many rides are about
+        // to be skipped.
+        .alert(
+            S.bulkSkipTitle(selectedRideIds.count),
+            isPresented: $pendingBulkSkip
+        ) {
+            Button(S.bulkSkipConfirm(selectedRideIds.count), role: .destructive) {
+                Task { await runBulkSkip() }
+            }
+            Button(S.subKeepIt, role: .cancel) { }
+        } message: {
+            Text(S.bulkSkipBody)
+        }
+    }
+
+    private func isSkippable(_ item: CommuteRideCalendarItem) -> Bool {
+        let today = Calendar.current.startOfDay(for: Date())
+        return item.rideInstanceId != nil &&
+            item.rideStatus == .scheduled &&
+            item.date >= today
+    }
+
+    private func toggleSelection(_ item: CommuteRideCalendarItem) {
+        guard let rideId = item.rideInstanceId, isSkippable(item) else { return }
+        if selectedRideIds.contains(rideId) {
+            selectedRideIds.remove(rideId)
+        } else {
+            selectedRideIds.insert(rideId)
+        }
+    }
+
+    /// Pinned bottom toolbar for multi-select mode. Same shape as the
+    /// My commutes bulk-cancel bar but the destructive action is
+    /// SKIP (gentler — frees seat, sub stays active) not CANCEL.
+    private var bulkSkipBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                let allSkippableIds = Set(skippableItems.compactMap { $0.rideInstanceId })
+                if selectedRideIds == allSkippableIds {
+                    selectedRideIds = []
+                } else {
+                    selectedRideIds = allSkippableIds
+                }
+            } label: {
+                Text({
+                    let allIds = Set(skippableItems.compactMap { $0.rideInstanceId })
+                    return selectedRideIds == allIds && !allIds.isEmpty
+                        ? S.subsClearAll : S.subsSelectAll
+                }())
+                    .font(.footnote.weight(.heavy))
+                    .foregroundColor(VPalette.primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(VPalette.primaryContainer)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+
+            Button {
+                pendingBulkSkip = true
+            } label: {
+                HStack(spacing: 6) {
+                    if bulkSkipInFlight {
+                        ProgressView().tint(.white).controlSize(.small)
+                    } else {
+                        Image(systemName: "calendar.badge.minus")
+                    }
+                    Text(S.bulkSkipCTA(selectedRideIds.count))
+                }
+                .font(.footnote.weight(.heavy))
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(selectedRideIds.isEmpty || bulkSkipInFlight ? VPalette.textHint : VPalette.warning)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(selectedRideIds.isEmpty || bulkSkipInFlight)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .overlay(Rectangle().fill(VPalette.border).frame(height: 1), alignment: .top)
+    }
+
+    /// Skip every selected ride in parallel. Each call goes through
+    /// the same `store.skipRide` flow as the per-card Skip button so
+    /// the server's free-seat / notify-driver side-effects fire
+    /// consistently. Failures are surfaced per-item.
+    private func runBulkSkip() async {
+        guard !bulkSkipInFlight else { return }
+        bulkSkipInFlight = true
+        defer { bulkSkipInFlight = false }
+        let chosenIds = Array(selectedRideIds)
+        var failures: [String] = []
+        await withTaskGroup(of: (String, String?).self) { group in
+            for rideId in chosenIds {
+                group.addTask {
+                    let result = await store.skipRide(rideInstanceId: rideId)
+                    switch result {
+                    case .success:        return (rideId, nil)
+                    case .failure(let e): return (rideId, e.localizedDescription)
+                    }
+                }
+            }
+            for await (_, err) in group {
+                if let err { failures.append(err) }
+            }
+        }
+        if failures.isEmpty {
+            isSelectMode = false
+            selectedRideIds = []
+        } else {
+            actionError = S.bulkSkipFailed(failures.count)
+            // Keep selectMode on; SKIPPED rows fall out of
+            // `skippableItems` naturally on next refresh.
+            await store.refreshCalendar(routeId: routeId)
+            selectedRideIds = selectedRideIds.intersection(
+                Set(skippableItems.compactMap { $0.rideInstanceId })
+            )
         }
     }
 }
@@ -635,12 +622,18 @@ struct CalendarItemCard: View {
     @Environment(AppStore.self) private var store
     let item: CommuteRideCalendarItem
     var onSkipped: (() -> Void)? = nil
+    /// When true, the per-row "Skip" pill is suppressed. The parent
+    /// (UpcomingCalendarView in multi-select mode) wants the whole row
+    /// to read as one selectable unit instead of advertising its own
+    /// per-row action.
+    var skipHidden: Bool = false
     @State private var pendingSkip: Bool = false
     @State private var skipError: String? = nil
 
     /// Riders can skip future rides only — past rides are immutable
     /// so we hide the action entirely on those rows.
     private var canSkip: Bool {
+        !skipHidden &&
         item.rideInstanceId != nil &&
         item.rideStatus == .scheduled &&
         item.date >= Calendar.current.startOfDay(for: Date())

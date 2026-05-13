@@ -76,6 +76,19 @@
 "subs.bulkCancel.body" = "Perjalanan yang berbaki akan dibatalkan. Bayaran balik dikira oleh enjin polisi kami dan dikreditkan ke Voygo Credit anda.";
 "subs.bulkCancel.failed" = "Tidak dapat batalkan: %@. Cuba lagi atau batalkan satu persatu.";
 
+/* Perjalanan Akan Datang — pilih berbilang & langkau pukal */
+"upcoming.title" = "Perjalanan Akan Datang";
+"upcoming.empty.title" = "Tiada perjalanan akan datang";
+"upcoming.empty.body" = "Langgan laluan untuk lihat jadual anda di sini";
+"upcoming.bulkSkip.title.one" = "Langkau 1 perjalanan?";
+"upcoming.bulkSkip.title.many" = "Langkau %d perjalanan?";
+"upcoming.bulkSkip.confirm.one" = "Ya, langkau 1";
+"upcoming.bulkSkip.confirm.many" = "Ya, langkau %d";
+"upcoming.bulkSkip.body" = "Perjalanan ini tidak akan mengambil anda. Langganan anda kekal aktif dan disambung semula keesokan harinya.";
+"upcoming.bulkSkip.cta" = "Langkau %d";
+"upcoming.bulkSkip.failed.one" = "Tidak dapat langkau 1 perjalanan. Cuba lagi.";
+"upcoming.bulkSkip.failed.many" = "Tidak dapat langkau %d perjalanan. Cuba lagi.";
+
 /* Driver dashboard — empty state */
 "driver.empty.title" = "Belum ada laluan";
 "driver.empty.body" = "Cipta laluan ulang-alik pertama anda untuk mula mengambil penumpang";
@@ -386,6 +399,16 @@
 "wallet.payAtCheckout" = "Bayar di check-out";
 "wallet.checkoutBlurb" = "DuitNow, FPX, TNG dan kad boleh dipilih pada halaman check-out Billplz.";
 "wallet.creditBlurb" = "Kredit terkumpul daripada bayaran balik pembatalan dan digunakan secara automatik pada perjalanan seterusnya.";
+
+/* Wallet — pratonton caj berikutnya + chip kaedah diterima */
+"wallet.nextCharge.title" = "CAJ BERIKUTNYA";
+"wallet.nextCharge.none.title" = "Tiada caj akan datang";
+"wallet.nextCharge.none.body" = "Langgan laluan dan tarikh serta jumlah pembaharuan akan dipaparkan di sini.";
+"wallet.nextCharge.amountOn" = "%@ pada %@";
+"wallet.nextCharge.routeTier" = "%@ · %@";
+"wallet.nextCharge.hint" = "Diperbaharui automatik · Jeda dari My commutes untuk langkau";
+"wallet.acceptedAtCheckout" = "DITERIMA SEMASA CHECK-OUT";
+"wallet.pickAtCheckout" = "Pilih kaedah pilihan anda di halaman Billplz.";
 
 /* KYC — extras */
 "kyc.title" = "Pengesahan Identiti";

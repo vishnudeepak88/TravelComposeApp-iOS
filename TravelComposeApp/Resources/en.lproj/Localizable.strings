@@ -75,6 +75,19 @@
 "subs.bulkCancel.body" = "Remaining rides will be cancelled. Refunds are calculated by our policy engine and applied to your Voygo Credit.";
 "subs.bulkCancel.failed" = "Couldn't cancel: %@. Try again or cancel individually.";
 
+/* Upcoming Commutes — multi-select bulk-skip */
+"upcoming.title" = "Upcoming Commutes";
+"upcoming.empty.title" = "No upcoming commutes";
+"upcoming.empty.body" = "Subscribe to a route to see your schedule here";
+"upcoming.bulkSkip.title.one" = "Skip 1 ride?";
+"upcoming.bulkSkip.title.many" = "Skip %d rides?";
+"upcoming.bulkSkip.confirm.one" = "Yes, skip 1";
+"upcoming.bulkSkip.confirm.many" = "Yes, skip %d";
+"upcoming.bulkSkip.body" = "These rides won't pick you up. Your subscription stays active and resumes the next day.";
+"upcoming.bulkSkip.cta" = "Skip %d";
+"upcoming.bulkSkip.failed.one" = "Couldn't skip 1 ride. Try again.";
+"upcoming.bulkSkip.failed.many" = "Couldn't skip %d rides. Try again.";
+
 /* Driver dashboard — empty state */
 "driver.empty.title" = "No routes yet";
 "driver.empty.body" = "Create your first recurring route to start picking up riders";
@@ -385,6 +398,16 @@
 "wallet.payAtCheckout" = "Pay at checkout";
 "wallet.checkoutBlurb" = "DuitNow, FPX, TNG and cards are selectable on the Billplz checkout page.";
 "wallet.creditBlurb" = "Credit accumulates from cancellation refunds and applies to your next ride automatically.";
+
+/* Wallet — next-charge preview + accepted-methods chips */
+"wallet.nextCharge.title" = "NEXT CHARGE";
+"wallet.nextCharge.none.title" = "No upcoming charge";
+"wallet.nextCharge.none.body" = "Subscribe to a route and the next renewal date and amount appear here.";
+"wallet.nextCharge.amountOn" = "%@ on %@";
+"wallet.nextCharge.routeTier" = "%@ · %@";
+"wallet.nextCharge.hint" = "Auto-renews · Pause from My commutes to skip";
+"wallet.acceptedAtCheckout" = "ACCEPTED AT CHECKOUT";
+"wallet.pickAtCheckout" = "Pick your preferred method on the Billplz page.";
 
 /* KYC — extras */
 "kyc.title" = "Identity Verification";

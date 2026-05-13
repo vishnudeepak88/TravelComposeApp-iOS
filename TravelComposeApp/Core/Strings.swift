@@ -410,6 +410,26 @@ enum S {
     static var walletCheckoutBlurb: String { Self.t("wallet.checkoutBlurb", "DuitNow, FPX, TNG and cards are selectable on the Billplz checkout page.") }
     static var walletCreditBlurb: String { Self.t("wallet.creditBlurb", "Credit accumulates from cancellation refunds and applies to your next ride automatically.") }
 
+    // Wallet — Next-charge preview + accepted-methods chips
+    // (replaces the old empty "Payment methods" placeholder).
+    static var walletNextChargeTitle: String  { Self.t("wallet.nextCharge.title",  "NEXT CHARGE") }
+    static var walletNextChargeNoneTitle: String { Self.t("wallet.nextCharge.none.title", "No upcoming charge") }
+    static var walletNextChargeNoneBody: String  { Self.t("wallet.nextCharge.none.body",  "Subscribe to a route and the next renewal date and amount appear here.") }
+    /// "RM {amount} on {date}" headline for the next-charge card.
+    static func walletNextChargeAmountOn(_ amount: String, _ date: String) -> String {
+        let template = Self.t("wallet.nextCharge.amountOn", "%@ on %@")
+        return String(format: template, amount, date)
+    }
+    /// Subtitle: "{route} · {tier}". Joined here so translators see one
+    /// string instead of two `·`-glued fragments.
+    static func walletNextChargeRouteTier(_ route: String, _ tier: String) -> String {
+        let template = Self.t("wallet.nextCharge.routeTier", "%@ · %@")
+        return String(format: template, route, tier)
+    }
+    static var walletNextChargeHint: String   { Self.t("wallet.nextCharge.hint",   "Auto-renews · Pause from My commutes to skip") }
+    static var walletAcceptedAtCheckout: String { Self.t("wallet.acceptedAtCheckout", "ACCEPTED AT CHECKOUT") }
+    static var walletPickAtCheckout: String     { Self.t("wallet.pickAtCheckout",   "Pick your preferred method on the Billplz page.") }
+
     // MARK: KYC (visible-screen extras)
 
     static var kycTitle: String { Self.t("kyc.title", "Identity Verification") }
@@ -605,6 +625,48 @@ enum S {
     static func subsBulkCancelFailed(_ routes: String) -> String {
         let template = Self.t("subs.bulkCancel.failed", "Couldn't cancel: %@. Try again or cancel individually.")
         return String(format: template, routes)
+    }
+
+    // MARK: Upcoming Commutes (calendar view) — multi-select bulk-skip
+
+    /// Nav-bar title for the Upcoming Commutes view. We renamed it from
+    /// "Calendar" to "Upcoming Commutes" once bulk-skip moved here from
+    /// My commutes — "Upcoming" makes the per-day instance scope obvious,
+    /// where "Calendar" suggested the whole month view.
+    static var upcomingCommutesTitle: String { Self.t("upcoming.title", "Upcoming Commutes") }
+    static var upcomingEmptyTitle: String    { Self.t("upcoming.empty.title", "No upcoming commutes") }
+    static var upcomingEmptyBody: String     { Self.t("upcoming.empty.body",  "Subscribe to a route to see your schedule here") }
+
+    /// Confirm-dialog title for bulk-skip. Two branches so the singular
+    /// reads naturally instead of "Skip 1 rides?".
+    static func bulkSkipTitle(_ n: Int) -> String {
+        let template = n == 1
+            ? Self.t("upcoming.bulkSkip.title.one",  "Skip 1 ride?")
+            : Self.t("upcoming.bulkSkip.title.many", "Skip %d rides?")
+        return n == 1 ? template : String(format: template, n)
+    }
+    static func bulkSkipConfirm(_ n: Int) -> String {
+        let template = n == 1
+            ? Self.t("upcoming.bulkSkip.confirm.one",  "Yes, skip 1")
+            : Self.t("upcoming.bulkSkip.confirm.many", "Yes, skip %d")
+        return n == 1 ? template : String(format: template, n)
+    }
+    /// Body explains why skip is gentler than cancel — sub stays active,
+    /// resumes the next day. Lifts the rider's fear that "skipping" a
+    /// vacation week kills their subscription.
+    static var bulkSkipBody: String {
+        Self.t("upcoming.bulkSkip.body",
+               "These rides won't pick you up. Your subscription stays active and resumes the next day.")
+    }
+    static func bulkSkipCTA(_ n: Int) -> String {
+        let template = Self.t("upcoming.bulkSkip.cta", "Skip %d")
+        return String(format: template, n)
+    }
+    static func bulkSkipFailed(_ n: Int) -> String {
+        let template = n == 1
+            ? Self.t("upcoming.bulkSkip.failed.one",  "Couldn't skip 1 ride. Try again.")
+            : Self.t("upcoming.bulkSkip.failed.many", "Couldn't skip %d rides. Try again.")
+        return n == 1 ? template : String(format: template, n)
     }
 
     // MARK: Tab bar
