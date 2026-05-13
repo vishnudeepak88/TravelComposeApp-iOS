@@ -439,32 +439,54 @@ struct UpcomingCalendarView: View {
                                 VStack(alignment: .leading, spacing: 10) {
                                     SectionHeader(title: key).padding(.horizontal, 16)
                                     ForEach(grouped[key] ?? []) { item in
-                                        HStack(spacing: 12) {
-                                            if isSelectMode, let rideId = item.rideInstanceId {
-                                                let canSelect = isSkippable(item)
-                                                Image(systemName: selectedRideIds.contains(rideId)
-                                                      ? "checkmark.circle.fill"
-                                                      : (canSelect ? "circle" : "minus.circle"))
-                                                    .font(.title3.weight(.semibold))
-                                                    .foregroundColor(
-                                                        selectedRideIds.contains(rideId)
-                                                            ? VPalette.primary
-                                                            : (canSelect ? VPalette.textHint : VPalette.textHint.opacity(0.4))
-                                                    )
-                                                    .transition(.opacity)
-                                                    .padding(.leading, 16)
+                                        // Two render paths so the outer tap
+                                        // gesture (which exists only for
+                                        // select-mode toggling) doesn't
+                                        // intercept taps meant for the
+                                        // per-row Skip button in non-select
+                                        // mode. SwiftUI's hit-test will
+                                        // shadow inner Button taps when an
+                                        // ancestor has .contentShape +
+                                        // .onTapGesture, even if that
+                                        // gesture no-ops — which made the
+                                        // per-row Skip pill feel dead.
+                                        if isSelectMode {
+                                            HStack(spacing: 12) {
+                                                if let rideId = item.rideInstanceId {
+                                                    let canSelect = isSkippable(item)
+                                                    Image(systemName: selectedRideIds.contains(rideId)
+                                                          ? "checkmark.circle.fill"
+                                                          : (canSelect ? "circle" : "minus.circle"))
+                                                        .font(.title3.weight(.semibold))
+                                                        .foregroundColor(
+                                                            selectedRideIds.contains(rideId)
+                                                                ? VPalette.primary
+                                                                : (canSelect ? VPalette.textHint : VPalette.textHint.opacity(0.4))
+                                                        )
+                                                        .transition(.opacity)
+                                                        .padding(.leading, 16)
+                                                }
+                                                CalendarItemCard(item: item, skipHidden: true)
                                             }
-                                            // In select mode, suppress per-card "Skip"
-                                            // button to keep the row reading as
-                                            // selectable. The whole row toggles
-                                            // selection on tap.
-                                            CalendarItemCard(item: item, skipHidden: isSelectMode)
-                                                .padding(.horizontal, isSelectMode ? 0 : 16)
-                                        }
-                                        .padding(.trailing, isSelectMode ? 16 : 0)
-                                        .contentShape(Rectangle())
-                                        .onTapGesture {
-                                            if isSelectMode { toggleSelection(item) }
+                                            .padding(.trailing, 16)
+                                            .contentShape(Rectangle())
+                                            .onTapGesture { toggleSelection(item) }
+                                        } else {
+                                            // Per-row Skip pill on the card
+                                            // is the only tap affordance —
+                                            // no outer gesture eats it.
+                                            // `onSkipped` clears any stale
+                                            // action error and triggers a
+                                            // calendar refresh so the row
+                                            // disappears immediately on
+                                            // the off-chance the optimistic
+                                            // local removal in
+                                            // `store.skipRide` ever
+                                            // diverges from server state.
+                                            CalendarItemCard(item: item,
+                                                             onSkipped: { actionError = nil },
+                                                             skipHidden: false)
+                                                .padding(.horizontal, 16)
                                         }
                                     }
                                 }
@@ -604,9 +626,15 @@ struct UpcomingCalendarView: View {
             }
         }
         if failures.isEmpty {
+            // Success haptic — the action bar dismisses and the
+            // rows disappear silently otherwise, which felt like
+            // "did anything happen?" on a fast network.
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
             isSelectMode = false
             selectedRideIds = []
+            actionError = nil
         } else {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
             actionError = S.bulkSkipFailed(failures.count)
             // Keep selectMode on; SKIPPED rows fall out of
             // `skippableItems` naturally on next refresh.
