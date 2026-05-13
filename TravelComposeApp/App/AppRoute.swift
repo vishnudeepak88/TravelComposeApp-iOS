@@ -39,6 +39,7 @@ enum AppRoute: Hashable {
     case kyc
     case privacy
     case help
+    case language
     // Long-haul (one-off inter-city). Browse is the rider entry point,
     // tripDetail is the drilldown, postTrip is the driver create form.
     case longHaulBrowse
@@ -284,6 +285,10 @@ struct AppRouteDestinations: ViewModifier {
 
             case .help:
                 HelpCenterView(onBack: { if !path.isEmpty { path.removeLast() } })
+                    .navigationBarHidden(true)
+
+            case .language:
+                LanguageSettingsView(onBack: { if !path.isEmpty { path.removeLast() } })
                     .navigationBarHidden(true)
 
             case .longHaulBrowse:

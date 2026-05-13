@@ -23,6 +23,14 @@ struct MySubscriptionsView: View {
     /// Tracks whether the initial refresh has completed so we can
     /// show a skeleton instead of the empty-state on first paint.
     @State private var hasLoaded: Bool = false
+    /// Multi-select mode + accumulated selection. When the rider taps
+    /// "Select" in the nav bar, the cards swap their tap target from
+    /// "open route" to "toggle in `selectedIds`" and a bottom action
+    /// bar appears with bulk-cancel + select-all controls.
+    @State private var isSelectMode: Bool = false
+    @State private var selectedIds: Set<String> = []
+    @State private var pendingBulkCancel: Bool = false
+    @State private var bulkCancelInFlight: Bool = false
 
     var items: [RouteSubscriptionWithRoute] { store.mySubscriptions() }
 
@@ -31,16 +39,45 @@ struct MySubscriptionsView: View {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VPolishedNavBar(title: S.subscriptionsTitle, onBack: onBack) {
-                    Button(action: onOpenCalendar) {
-                        Image(systemName: "calendar")
-                            .font(.callout.weight(.bold))
-                            .foregroundColor(VPalette.primary)
-                            .frame(width: 40, height: 40)
-                            .background(VPalette.primaryContainer)
-                            .clipShape(Circle())
+                    HStack(spacing: 8) {
+                        // Calendar shortcut hides in select-mode to make
+                        // room for Select-all + Done. Riders can still
+                        // get there by exiting select-mode first.
+                        if !isSelectMode {
+                            Button(action: onOpenCalendar) {
+                                Image(systemName: "calendar")
+                                    .font(.callout.weight(.bold))
+                                    .foregroundColor(VPalette.primary)
+                                    .frame(width: 40, height: 40)
+                                    .background(VPalette.primaryContainer)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(S.subsCalendarA11y)
+                        }
+                        // Toggle Select / Done. Hidden when there's
+                        // nothing to select so we don't tease an
+                        // affordance the empty state can't fulfill.
+                        if !items.isEmpty {
+                            Button {
+                                if isSelectMode {
+                                    isSelectMode = false
+                                    selectedIds = []
+                                } else {
+                                    isSelectMode = true
+                                }
+                            } label: {
+                                Text(isSelectMode ? S.subsDone : S.subsSelect)
+                                    .font(.footnote.weight(.heavy))
+                                    .foregroundColor(VPalette.primary)
+                                    .padding(.horizontal, 14).padding(.vertical, 10)
+                                    .background(VPalette.primaryContainer)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(isSelectMode ? S.subsDone : S.subsSelect)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Calendar")
                 }
 
                 if items.isEmpty && !hasLoaded {
@@ -80,16 +117,51 @@ struct MySubscriptionsView: View {
                                 }
 
                                 ForEach(items) { item in
-                                    SubscriptionCard(
-                                        item: item,
-                                        onOpen:   { onOpenRoute(item.route.id) },
-                                        onPause:  { updateSubscription(item.subscription.id, status: .paused) },
-                                        onResume: { updateSubscription(item.subscription.id, status: .active) },
-                                        onCancel: { pendingCancellation = item },
-                                        onRetryPayment: { retryPayment(item) },
-                                        isRetryingPayment: retryingId == item.subscription.id
-                                    )
+                                    HStack(spacing: 12) {
+                                        if isSelectMode {
+                                            // Per-row selection checkbox. Tap target
+                                            // is the entire card row when in select
+                                            // mode so the rider doesn't need to hit
+                                            // the small circle precisely.
+                                            Image(systemName: selectedIds.contains(item.subscription.id)
+                                                  ? "checkmark.circle.fill"
+                                                  : "circle")
+                                                .font(.title3.weight(.semibold))
+                                                .foregroundColor(
+                                                    selectedIds.contains(item.subscription.id)
+                                                        ? VPalette.primary
+                                                        : VPalette.textHint
+                                                )
+                                                .transition(.opacity)
+                                        }
+                                        SubscriptionCard(
+                                            item: item,
+                                            onOpen:   {
+                                                if isSelectMode {
+                                                    toggleSelection(item.subscription.id)
+                                                } else {
+                                                    onOpenRoute(item.route.id)
+                                                }
+                                            },
+                                            onPause:  { updateSubscription(item.subscription.id, status: .paused) },
+                                            onResume: { updateSubscription(item.subscription.id, status: .active) },
+                                            onCancel: { pendingCancellation = item },
+                                            onRetryPayment: { retryPayment(item) },
+                                            isRetryingPayment: retryingId == item.subscription.id,
+                                            // Suppress in-card action buttons in
+                                            // select mode so the row reads as
+                                            // selectable, not as a per-action
+                                            // surface.
+                                            actionsHidden: isSelectMode
+                                        )
+                                    }
                                     .padding(.horizontal, 16)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        if isSelectMode {
+                                            toggleSelection(item.subscription.id)
+                                        }
+                                    }
                                 }
                             }
                             .padding(.vertical, 16)
@@ -107,7 +179,18 @@ struct MySubscriptionsView: View {
                     }
                 }
             }
+
+            // Bottom action bar — appears only in multi-select mode.
+            // Pinned to the bottom via the parent ZStack so it floats
+            // above the ScrollView like a contextual toolbar. The
+            // primary destructive button is disabled until at least
+            // one row is checked.
+            if isSelectMode {
+                bulkActionBar
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.easeOut(duration: 0.18), value: isSelectMode)
         .task {
             await store.refreshAll()
             hasLoaded = true
@@ -135,6 +218,148 @@ struct MySubscriptionsView: View {
             // don't enter into it). Prefix the route name so the
             // rider sees which sub they're cancelling.
             Text("\(item.route.startLocation) → \(item.route.endLocation).\n\(S.cancelSubscriptionMessage)")
+        }
+        // Bulk-cancel confirm alert. Body interpolates the chosen
+        // count so the rider sees exactly how many subscriptions are
+        // about to be cancelled. Disabled buttons while in-flight to
+        // prevent double-firing.
+        .alert(
+            S.subsBulkCancelTitle(selectedIds.count),
+            isPresented: $pendingBulkCancel
+        ) {
+            Button(S.subsBulkCancelConfirm(selectedIds.count), role: .destructive) {
+                Task { await runBulkCancel() }
+            }
+            Button(S.subKeepIt, role: .cancel) { }
+        } message: {
+            Text(S.subsBulkCancelBody)
+        }
+    }
+
+    /// Pinned bottom toolbar for multi-select mode. Mirrors the
+    /// iOS Mail / Photos delete-many pattern: Select all (left),
+    /// destructive primary (centre/wide), Cancel (right).
+    private var bulkActionBar: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            HStack(spacing: 10) {
+                Button {
+                    if selectedIds.count == items.count {
+                        // Already all selected → tap means "clear".
+                        selectedIds = []
+                    } else {
+                        selectedIds = Set(items.map { $0.subscription.id })
+                    }
+                } label: {
+                    Text(selectedIds.count == items.count && !items.isEmpty
+                         ? S.subsClearAll
+                         : S.subsSelectAll)
+                        .font(.footnote.weight(.heavy))
+                        .foregroundColor(VPalette.primary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(VPalette.primaryContainer)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
+
+                Button {
+                    pendingBulkCancel = true
+                } label: {
+                    HStack(spacing: 6) {
+                        if bulkCancelInFlight {
+                            ProgressView().tint(.white).controlSize(.small)
+                        } else {
+                            Image(systemName: "xmark.bin.fill")
+                        }
+                        Text(S.subsBulkCancelCTA(selectedIds.count))
+                    }
+                    .font(.footnote.weight(.heavy))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(selectedIds.isEmpty || bulkCancelInFlight ? VPalette.textHint : VPalette.danger)
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(selectedIds.isEmpty || bulkCancelInFlight)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.ultraThinMaterial)
+            .overlay(Rectangle().fill(VPalette.border).frame(height: 1), alignment: .top)
+        }
+        .ignoresSafeArea(edges: .bottom)
+    }
+
+    /// Toggle a subscription's selection state. Used by the row tap
+    /// and the per-row checkbox.
+    private func toggleSelection(_ id: String) {
+        if selectedIds.contains(id) {
+            selectedIds.remove(id)
+        } else {
+            selectedIds.insert(id)
+        }
+    }
+
+    /// Cancel every selected subscription in parallel. Each one goes
+    /// through the same two-step `cancelSubscription` flow as the
+    /// single-row tap (status flip → cancellation record), so the
+    /// refund/penalty ledger stays consistent. Failures are surfaced
+    /// per-item in a comma-joined error banner — the rider can retry
+    /// the failed ones individually.
+    private func runBulkCancel() async {
+        guard !bulkCancelInFlight else { return }
+        bulkCancelInFlight = true
+        defer { bulkCancelInFlight = false }
+        let chosen = items.filter { selectedIds.contains($0.subscription.id) }
+        var failures: [String] = []
+        // Fan out in parallel — these are independent server calls
+        // against different subscription ids; serial would cost the
+        // rider one round-trip per item.
+        await withTaskGroup(of: (String, AppError?).self) { group in
+            for item in chosen {
+                group.addTask {
+                    let cancelResult = await store.updateSubscription(id: item.subscription.id, status: .cancelled)
+                    if case .failure(let err) = cancelResult {
+                        return (item.route.startLocation, err)
+                    }
+                    let report = await store.reportCancellation(
+                        rideInstanceId: nil,
+                        routeId: item.route.id,
+                        subscriptionId: item.subscription.id,
+                        actor: .rider,
+                        kind: .riderCancelMidMonth,
+                        notes: nil
+                    )
+                    if case .failure(let err) = report {
+                        // Rollback the status flip so the ledger
+                        // doesn't drift — same recovery the single
+                        // cancel path uses.
+                        _ = await store.updateSubscription(id: item.subscription.id, status: .active)
+                        return (item.route.startLocation, err)
+                    }
+                    return (item.route.startLocation, nil)
+                }
+            }
+            for await (routeLabel, err) in group {
+                if err != nil { failures.append(routeLabel) }
+            }
+        }
+        if failures.isEmpty {
+            // All clean — exit select mode and clear selection.
+            isSelectMode = false
+            selectedIds = []
+        } else {
+            actionError = S.subsBulkCancelFailed(failures.joined(separator: ", "))
+            // Keep select-mode on so the rider can retry just the
+            // failures (the successful ones already disappeared from
+            // `items` via the status filter).
+            selectedIds = selectedIds.filter { id in
+                items.contains { $0.subscription.id == id }
+            }
         }
     }
 
@@ -219,6 +444,11 @@ struct SubscriptionCard: View {
     let onCancel: () -> Void
     var onRetryPayment: (() -> Void)? = nil
     var isRetryingPayment: Bool = false
+    /// When true the per-row action buttons (Open Route / Pause / X)
+    /// are suppressed so the card reads as a single selectable unit
+    /// in multi-select mode. The whole card tap fires `onOpen` which
+    /// the parent re-routes to selection-toggle.
+    var actionsHidden: Bool = false
 
     var statusColor: Color {
         switch item.subscription.status {
@@ -258,7 +488,9 @@ struct SubscriptionCard: View {
                                          value: item.nextRideDate.map { formatDate($0) } ?? "–")
                 }
 
-                // Actions
+                // Actions — suppressed in multi-select mode so the
+                // whole card reads as one selectable unit.
+                if !actionsHidden {
                 HStack(spacing: 8) {
                     SecondaryButton(title: "Open Route", action: onOpen)
                     if item.subscription.status == .active {
@@ -290,13 +522,14 @@ struct SubscriptionCard: View {
                         .accessibilityLabel("Cancel subscription")
                     }
                 }
+                } // end if !actionsHidden
 
                 // Retry-payment CTA — only on paused subscriptions, only if
                 // the parent supplied an onRetryPayment handler. The QA
                 // report flagged that the "Subscription paused — payment
                 // failed" error message had nowhere to go; this is the
                 // missing affordance.
-                if item.subscription.status == .paused, let onRetryPayment {
+                if !actionsHidden, item.subscription.status == .paused, let onRetryPayment {
                     Button(action: onRetryPayment) {
                         HStack(spacing: 6) {
                             if isRetryingPayment {

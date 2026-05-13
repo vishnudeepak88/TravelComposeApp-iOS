@@ -63,6 +63,18 @@
 "subs.empty.title" = "Tiada langganan";
 "subs.empty.body" = "Cari laluan ulang-alik dan langgan untuk mula menaiki";
 "subs.empty.cta" = "Cari laluan";
+"subs.select" = "Pilih";
+"subs.done" = "Selesai";
+"subs.selectAll" = "Pilih semua";
+"subs.clearAll" = "Kosongkan";
+"subs.calendarA11y" = "Buka jadual";
+"subs.bulkCancel.cta" = "Batal %d";
+"subs.bulkCancel.title.one" = "Batalkan 1 langganan?";
+"subs.bulkCancel.title.many" = "Batalkan %d langganan?";
+"subs.bulkCancel.confirm.one" = "Ya, batalkan 1";
+"subs.bulkCancel.confirm.many" = "Ya, batalkan %d";
+"subs.bulkCancel.body" = "Perjalanan yang berbaki akan dibatalkan. Bayaran balik dikira oleh enjin polisi kami dan dikreditkan ke Voygo Credit anda.";
+"subs.bulkCancel.failed" = "Tidak dapat batalkan: %@. Cuba lagi atau batalkan satu persatu.";
 
 /* Driver dashboard — empty state */
 "driver.empty.title" = "Belum ada laluan";
@@ -177,6 +189,14 @@
 "profile.name.sheetSubtitle" = "Ini adalah bagaimana pemandu dan penumpang melihat anda pada resit, perbualan sembang dan pengesahan perjalanan.";
 "profile.name.placeholder" = "cth. Vishnu Kumar";
 "profile.name.editHint" = "Ketik untuk sunting nama paparan anda";
+
+/* Language picker */
+"profile.settings.language" = "Bahasa";
+"lang.picker.title" = "Bahasa";
+"lang.picker.subtitle" = "Pilih bahasa untuk Voygo. Tidak terikat dengan tetapan bahasa iPhone anda.";
+"lang.system" = "Ikut bahasa iPhone";
+"lang.english" = "English";
+"lang.bahasa" = "Bahasa Malaysia";
 
 /* Help Center */
 "help.center.title" = "Pusat Bantuan";

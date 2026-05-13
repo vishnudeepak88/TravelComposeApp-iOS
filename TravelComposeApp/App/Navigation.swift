@@ -5,6 +5,12 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppStore.self) private var store
     @State private var authStep: AuthStep = .phone
+    /// In-app language override. When the rider picks a non-`.system`
+    /// value from Profile → Settings → Language, this @AppStorage
+    /// fires a refresh and the `.id(...)` on the view tree below
+    /// remounts everything — the entire app re-resolves its strings
+    /// through the chosen `.lproj` without requiring a cold restart.
+    @AppStorage(AppLocale.storageKey) private var appLanguage: String = AppLocale.system.rawValue
 
     enum AuthStep: Equatable { case phone, otp(phone: String) }
 
@@ -25,6 +31,14 @@ struct RootView: View {
                 }
             }
         }
+        // `.id(appLanguage)` is the key trick: when the rider taps a
+        // new language, the SwiftUI engine sees a different identity
+        // and rebuilds the subtree from scratch — every `S.t(...)`
+        // call below this point re-resolves against the new bundle.
+        // Combined with `.environment(\.locale, ...)` it also
+        // refreshes Date/Number formatters that follow Locale.
+        .id(appLanguage)
+        .environment(\.locale, AppLocale.current.locale)
         // Ask for push permission the first time the user lands
         // signed-in, then re-register on every subsequent
         // authenticated launch so token rotations get picked up.

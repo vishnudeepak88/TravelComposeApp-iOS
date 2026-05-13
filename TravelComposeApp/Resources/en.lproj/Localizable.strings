@@ -62,6 +62,18 @@
 "subs.empty.title" = "No subscriptions";
 "subs.empty.body" = "Search for commute routes and subscribe to start riding";
 "subs.empty.cta" = "Find a route";
+"subs.select" = "Select";
+"subs.done" = "Done";
+"subs.selectAll" = "Select all";
+"subs.clearAll" = "Clear all";
+"subs.calendarA11y" = "Open calendar";
+"subs.bulkCancel.cta" = "Cancel %d";
+"subs.bulkCancel.title.one" = "Cancel 1 subscription?";
+"subs.bulkCancel.title.many" = "Cancel %d subscriptions?";
+"subs.bulkCancel.confirm.one" = "Yes, cancel 1";
+"subs.bulkCancel.confirm.many" = "Yes, cancel %d";
+"subs.bulkCancel.body" = "Remaining rides will be cancelled. Refunds are calculated by our policy engine and applied to your Voygo Credit.";
+"subs.bulkCancel.failed" = "Couldn't cancel: %@. Try again or cancel individually.";
 
 /* Driver dashboard — empty state */
 "driver.empty.title" = "No routes yet";
@@ -176,6 +188,14 @@
 "profile.name.sheetSubtitle" = "This is how drivers and riders see you on receipts, chat threads and ride confirmations.";
 "profile.name.placeholder" = "e.g. Vishnu Kumar";
 "profile.name.editHint" = "Tap to edit your display name";
+
+/* Language picker */
+"profile.settings.language" = "Language";
+"lang.picker.title" = "Language";
+"lang.picker.subtitle" = "Choose the language Voygo uses in the app. This is independent of your iPhone's language setting.";
+"lang.system" = "Follow iPhone language";
+"lang.english" = "English";
+"lang.bahasa" = "Bahasa Malaysia";
 
 /* Help Center */
 "help.center.title" = "Help Center";

@@ -368,6 +368,15 @@ struct ProfileView: View {
                 divider()
                 row(icon: "shield.lefthalf.filled", color: VPalette.accent, title: S.profileSettingsPrivacy, chevron: true) { path.append(.privacy) }
                 divider()
+                // In-app language picker. Trailing-text shows the
+                // current choice so the rider can see what's set
+                // without drilling in.
+                row(icon: "globe", color: VPalette.secondary,
+                    title: S.profileSettingsLanguage,
+                    chevron: true,
+                    trailingText: AppLocale.current.displayName,
+                    action: { path.append(.language) })
+                divider()
                 // Payment methods row no longer lies about a default
                 // method when no methods are configured. Subtitle is
                 // sourced from the wallet (real method count) so it

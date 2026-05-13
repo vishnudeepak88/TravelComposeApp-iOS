@@ -166,6 +166,14 @@ enum S {
     static var profileNamePlaceholder: String { Self.t("profile.name.placeholder", "e.g. Vishnu Kumar") }
     static var profileNameEditHint: String { Self.t("profile.name.editHint", "Tap to edit your display name") }
 
+    // Language picker
+    static var profileSettingsLanguage: String { Self.t("profile.settings.language", "Language") }
+    static var langPickerTitle: String         { Self.t("lang.picker.title", "Language") }
+    static var langPickerSubtitle: String      { Self.t("lang.picker.subtitle", "Choose the language Voygo uses in the app. This is independent of your iPhone's language setting.") }
+    static var langSystem: String              { Self.t("lang.system", "Follow iPhone language") }
+    static var langEnglish: String             { Self.t("lang.english", "English") }
+    static var langBahasa: String              { Self.t("lang.bahasa", "Bahasa Malaysia") }
+
     // Help Center
     static var helpCenterTitle: String   { Self.t("help.center.title", "Help Center") }
     static var helpNeedHelp: String      { Self.t("help.needHelp",     "Need help?") }
@@ -538,6 +546,33 @@ enum S {
     static var subscriptionsEmptyTitle: String { Self.t("subs.empty.title", "No subscriptions") }
     static var subscriptionsEmptyBody: String { Self.t("subs.empty.body", "Search for commute routes and subscribe to start riding") }
     static var subscriptionsEmptyCTA: String { Self.t("subs.empty.cta", "Find a route") }
+    // Multi-select / bulk-cancel
+    static var subsSelect: String        { Self.t("subs.select",        "Select") }
+    static var subsDone: String          { Self.t("subs.done",          "Done") }
+    static var subsSelectAll: String     { Self.t("subs.selectAll",     "Select all") }
+    static var subsClearAll: String      { Self.t("subs.clearAll",      "Clear all") }
+    static var subsCalendarA11y: String  { Self.t("subs.calendarA11y",  "Open calendar") }
+    static func subsBulkCancelCTA(_ n: Int) -> String {
+        let template = Self.t("subs.bulkCancel.cta", "Cancel %d")
+        return String(format: template, n)
+    }
+    static func subsBulkCancelTitle(_ n: Int) -> String {
+        let template = n == 1
+            ? Self.t("subs.bulkCancel.title.one",  "Cancel 1 subscription?")
+            : Self.t("subs.bulkCancel.title.many", "Cancel %d subscriptions?")
+        return n == 1 ? template : String(format: template, n)
+    }
+    static func subsBulkCancelConfirm(_ n: Int) -> String {
+        let template = n == 1
+            ? Self.t("subs.bulkCancel.confirm.one",  "Yes, cancel 1")
+            : Self.t("subs.bulkCancel.confirm.many", "Yes, cancel %d")
+        return n == 1 ? template : String(format: template, n)
+    }
+    static var subsBulkCancelBody: String { Self.t("subs.bulkCancel.body", "Remaining rides will be cancelled. Refunds are calculated by our policy engine and applied to your Voygo Credit.") }
+    static func subsBulkCancelFailed(_ routes: String) -> String {
+        let template = Self.t("subs.bulkCancel.failed", "Couldn't cancel: %@. Try again or cancel individually.")
+        return String(format: template, routes)
+    }
 
     // MARK: Tab bar
 
@@ -925,7 +960,87 @@ enum S {
     /// the English literal we drew the value from. The fallback keeps
     /// partial translation passes safe — a missing Malay row doesn't
     /// blank the UI.
+    ///
+    /// Bundle resolution honours the in-app language override the
+    /// rider chose via Profile → Settings → Language. When the
+    /// override is `.system` (or unset) we hand the lookup to
+    /// `Bundle.main`, which respects the OS-level language pref.
+    /// When the rider picks "English" or "Bahasa Malaysia" inside
+    /// the app, we resolve against the matching `.lproj` bundle so
+    /// the choice survives without requiring the user to change
+    /// their device language.
     private static func t(_ key: String, _ value: String) -> String {
-        NSLocalizedString(key, value: value, comment: "")
+        NSLocalizedString(key, tableName: nil, bundle: AppLocale.bundle, value: value, comment: "")
+    }
+}
+
+// MARK: - In-app language override
+
+/// Picks the localization bundle for `S.t(...)`. The rider can
+/// override the OS-level language from Profile → Settings → Language
+/// without changing their device's system language.
+///
+/// Three values:
+///   - `.system`: follow the OS language (`Bundle.main`)
+///   - `.en`: force English regardless of OS
+///   - `.ms`: force Bahasa Malaysia regardless of OS
+///
+/// The choice is persisted in UserDefaults under `voygo.appLanguage`.
+/// `RootView` reads the same key via `@AppStorage` and uses it as a
+/// SwiftUI `id` so changing the language hot-remounts the view tree;
+/// no app restart needed.
+enum AppLocale: String, CaseIterable {
+    case system
+    case en
+    case ms
+
+    static let storageKey = "voygo.appLanguage"
+
+    /// Returns the currently-selected language, falling back to
+    /// `.system` if no override has been written yet.
+    static var current: AppLocale {
+        let raw = UserDefaults.standard.string(forKey: storageKey) ?? ""
+        return AppLocale(rawValue: raw) ?? .system
+    }
+
+    /// Localization bundle for the override. `nil` would fall through
+    /// to `Bundle.main` (OS-language behaviour); we return a real
+    /// Bundle to keep the call-site branch simple.
+    static var bundle: Bundle {
+        switch current {
+        case .system: return .main
+        case .en, .ms:
+            // Look up the `.lproj` directory for the chosen language
+            // inside the app bundle. If the resource isn't present
+            // (build-config edge case) fall through to .main so the
+            // app still shows English instead of a sea of `S.t` keys.
+            if let path = Bundle.main.path(forResource: current.rawValue, ofType: "lproj"),
+               let b = Bundle(path: path) {
+                return b
+            }
+            return .main
+        }
+    }
+
+    /// Locale value to push into the SwiftUI environment so native
+    /// formatters (`Date.FormatStyle`, `.formatted(...)`, etc.) align
+    /// with the rider's choice.
+    var locale: Locale {
+        switch self {
+        case .system: return .current
+        case .en:     return Locale(identifier: "en_MY")
+        case .ms:     return Locale(identifier: "ms_MY")
+        }
+    }
+
+    /// Human-readable label for the language-picker rows. Sourced
+    /// through the regular `S.*` lookup so the picker itself is
+    /// localized too.
+    var displayName: String {
+        switch self {
+        case .system: return S.langSystem
+        case .en:     return S.langEnglish
+        case .ms:     return S.langBahasa
+        }
     }
 }
