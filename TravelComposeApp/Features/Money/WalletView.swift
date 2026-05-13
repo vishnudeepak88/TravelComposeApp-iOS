@@ -5,6 +5,11 @@ import SwiftUI
 struct WalletView: View {
     @Environment(AppStore.self) private var store
     var onBack: () -> Void
+    /// Optional drilldown — when wired by the AppRoute switch, the
+    /// "See all" affordance on the Recent section pushes Trip History
+    /// onto the nav stack. Nil-defaulted so the preview / older call
+    /// sites compile.
+    var onOpenTripHistory: (() -> Void)? = nil
 
     /// Distinguishes "we haven't synced yet" from "you genuinely have RM 0
     /// in credit". Without it the empty state and the API-down state
@@ -47,15 +52,17 @@ struct WalletView: View {
             let sign = p.status == .refunded ? "+" : (isCharge ? "−" : "")
             let label: String = {
                 switch p.status {
-                case .paid:     return "Charged"
-                case .pending:  return "Pending"
-                case .failed:   return "Failed"
-                case .refunded: return "Refunded"
+                case .paid:     return S.paymentStatusCharged
+                case .pending:  return S.paymentStatusPending
+                case .failed:   return S.paymentStatusFailed
+                case .refunded: return S.paymentStatusRefunded
                 }
             }()
             return Tx(
-                title: p.routeId.map { "Route \($0.prefix(6))" } ?? "Voygo subscription",
-                subtitle: "\(formatDate(p.createdAt)) · \(p.tier ?? "Monthly")",
+                title: p.routeId.map { S.walletRouteTitle(String($0.prefix(6))) } ?? S.walletSubscriptionTitle,
+                // Localized date (Malay device renders "Mei 12" not
+                // "May 12") and tier label ("Bulanan" not "monthly").
+                subtitle: S.walletTxSubtitle(formatDate(p.createdAt), S.tierLabel(p.tier)),
                 amount: "\(sign)RM \(p.amountMyr)",
                 kind: p.status == .refunded ? .credit : .debit,
                 label: label
@@ -65,6 +72,11 @@ struct WalletView: View {
 
     private func formatDate(_ date: Date) -> String {
         let f = DateFormatter()
+        // Locale-aware: previously a fixed "MMM d" without a locale
+        // rendered the device's default (typically en-US) regardless
+        // of app language. Binding to Locale.current keeps it in
+        // step with the rest of the BM UI.
+        f.locale = Locale.current
         f.dateFormat = "MMM d"
         return f.string(from: date)
     }
@@ -77,11 +89,11 @@ struct WalletView: View {
 
     private var creditSubtitle: String {
         if isPaymentsLoading && store.payments.isEmpty {
-            return "Syncing your wallet…"
+            return S.walletSyncing
         }
         return store.voygoCreditMyr > 0
-            ? "Auto-applied to next ride"
-            : "Earn credit from referrals & cancellations"
+            ? S.walletAutoApplied
+            : S.walletEarnPrompt
     }
 
     var body: some View {
@@ -161,9 +173,9 @@ struct WalletView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        VKicker(text: "Voygo Credit", color: .white.opacity(0.8))
+                        VKicker(text: S.walletHeroLabel, color: .white.opacity(0.8))
                         HStack(alignment: .lastTextBaseline, spacing: 6) {
-                            Text("RM").font(.body.weight(.bold)).foregroundColor(.white.opacity(0.85))
+                            Text(S.walletHeroPrefix).font(.body.weight(.bold)).foregroundColor(.white.opacity(0.85))
                             // Bind to the live credit derived from payment
                             // history. While the first sync is in flight
                             // we show a skeleton instead of "0.00" — the
@@ -176,7 +188,7 @@ struct WalletView: View {
                                     .font(.largeTitle.weight(.black))
                                     .tracking(-1.4)
                                     .foregroundColor(.white.opacity(0.6))
-                                    .accessibilityLabel("Loading wallet balance")
+                                    .accessibilityLabel(S.walletLoadingBalanceA11y)
                             } else {
                                 Text(formattedCredit)
                                     .font(.largeTitle.weight(.black))
@@ -189,7 +201,7 @@ struct WalletView: View {
                             .foregroundColor(.white.opacity(0.85))
                     }
                     Spacer()
-                    Text("VOYGO")
+                    Text(S.walletHeroBadge)
                         .font(.caption2.weight(.black))
                         .tracking(0.4)
                         .padding(.horizontal, 9).padding(.vertical, 4)
@@ -205,7 +217,7 @@ struct WalletView: View {
                 // actually flows in today: refunds. When real
                 // Billplz FPX top-up / DuitNow IBG withdraw land,
                 // restore both buttons.
-                Text("Credit accumulates from cancellation refunds and applies to your next ride automatically.")
+                Text(S.walletCreditBlurb)
                     .font(.caption2.weight(.semibold))
                     .foregroundColor(.white.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
@@ -218,7 +230,7 @@ struct WalletView: View {
     private var paymentMethods: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                VKicker(text: "Payment methods")
+                VKicker(text: S.walletPaymentMethods)
                 Spacer()
                 // "+ Add" removed — pressed a coming-soon alert with
                 // no real flow. Until /users/me/payment-methods ships,
@@ -237,14 +249,14 @@ struct WalletView: View {
                         Image(systemName: "creditcard")
                             .font(.title2)
                             .foregroundColor(VPalette.textHint)
-                        Text("Pay at checkout")
+                        Text(S.walletPayAtCheckout)
                             .font(.footnote.weight(.heavy))
                             .foregroundColor(VPalette.textSec)
                         // Honest: we use Billplz hosted checkout so
                         // the rider picks DuitNow / FPX / TNG /
                         // GrabPay at pay time. There's no "saved
                         // method" yet — old copy promised one.
-                        Text("DuitNow, FPX, TNG and cards are selectable on the Billplz checkout page.")
+                        Text(S.walletCheckoutBlurb)
                             .font(.caption2)
                             .foregroundColor(VPalette.textHint)
                             .multilineTextAlignment(.center)
@@ -266,7 +278,7 @@ struct WalletView: View {
                                 Text(m.info).font(.caption2).foregroundColor(VPalette.textSec)
                             }
                             Spacer()
-                            if m.isDefault { VBadge(text: "Default", color: VPalette.primary, container: VPalette.primaryContainer) }
+                            if m.isDefault { VBadge(text: S.walletDefault, color: VPalette.primary, container: VPalette.primaryContainer) }
                         }
                         .padding(.horizontal, 16).padding(.vertical, 14)
                         if idx < methods.count - 1 {
@@ -284,9 +296,24 @@ struct WalletView: View {
     private var recent: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                VKicker(text: "Recent")
+                VKicker(text: S.walletRecentTitle)
                 Spacer()
-                Text("See all").font(.caption.weight(.semibold)).foregroundColor(VPalette.primary)
+                // "See all" now drills into Trip History when the
+                // parent wires the callback. Previously a static Text,
+                // a clear false affordance the QA report flagged.
+                if let onOpenTripHistory {
+                    Button(action: onOpenTripHistory) {
+                        Text(S.walletSeeAll)
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(VPalette.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(S.tripHistoryTitle)
+                } else {
+                    Text(S.walletSeeAll)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(VPalette.primary)
+                }
             }
             .padding(.horizontal, 4)
 
@@ -296,10 +323,10 @@ struct WalletView: View {
                         Image(systemName: "tray")
                             .font(.title2)
                             .foregroundColor(VPalette.textHint)
-                        Text("No payments yet")
+                        Text(S.walletNoPayments)
                             .font(.footnote.weight(.heavy))
                             .foregroundColor(VPalette.textSec)
-                        Text("Subscribe to a route and your charges appear here")
+                        Text(S.walletNoPaymentsBody)
                             .font(.caption2)
                             .foregroundColor(VPalette.textHint)
                             .multilineTextAlignment(.center)

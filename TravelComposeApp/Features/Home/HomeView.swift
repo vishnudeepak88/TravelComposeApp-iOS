@@ -118,10 +118,10 @@ struct HomeView: View {
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 5..<12:  return "Good morning"
-        case 12..<17: return "Good afternoon"
-        case 17..<22: return "Good evening"
-        default:      return "Hi there"
+        case 5..<12:  return S.homeGreetingMorning
+        case 12..<17: return S.homeGreetingAfternoon
+        case 17..<22: return S.homeGreetingEvening
+        default:      return S.homeGreetingFallback
         }
     }
 
@@ -141,7 +141,7 @@ struct HomeView: View {
 
     private var firstName: String {
         let full = store.currentUser.name
-        guard !full.isEmpty else { return "there" }
+        guard !full.isEmpty else { return S.homeFirstNameFallback }
         return full.split(separator: " ").first.map(String.init) ?? full
     }
 
@@ -309,7 +309,7 @@ struct HomeView: View {
                     nextCommuteCard(nc)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Open route details for next commute")
+                .accessibilityLabel(S.homeA11yNextCommute)
 
                 nextCommuteActions(nc)
             }
@@ -327,7 +327,7 @@ struct HomeView: View {
                     Text(whenLabel(nc))
                         .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.text)
-                    Text("Departs \(nc.route.departureTime)")
+                    Text(S.homeDeparts(nc.route.departureTime))
                         .font(.caption2)
                         .foregroundColor(VPalette.textSec)
                 }
@@ -367,11 +367,11 @@ struct HomeView: View {
             // Driver row — name only; verified tick when the route
             // exists, no fake ratings or photos here.
             HStack(alignment: .center, spacing: 12) {
-                HueAvatar(name: nc.route.driverName.isEmpty ? "Driver" : nc.route.driverName,
+                HueAvatar(name: nc.route.driverName.isEmpty ? S.homeDriverFallback : nc.route.driverName,
                           hue: 200, size: 36)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(nc.route.driverName.isEmpty ? "Driver" : nc.route.driverName)
+                        Text(nc.route.driverName.isEmpty ? S.homeDriverFallback : nc.route.driverName)
                             .font(.footnote.weight(.heavy))
                             .foregroundColor(VPalette.text)
                         VVerifiedTick(size: 10)
@@ -434,8 +434,11 @@ struct HomeView: View {
         // Locale.current picks up the device language so the weekday
         // and month abbreviations honour the user's choice (e.g.
         // "Isn, 12 Mei" in Bahasa) instead of being pinned to en_MY.
+        // Use setLocalizedDateFormatFromTemplate so the symbols render
+        // in the correct order for each locale (some locales put day
+        // before the weekday or vice-versa).
         f.locale = Locale.current
-        f.dateFormat = "EEE, d MMM"
+        f.setLocalizedDateFormatFromTemplate("EEEdMMM")
         return f.string(from: nc.displayDate)
     }
 
@@ -515,7 +518,7 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Action required: subscription paused. Tap to resolve.")
+        .accessibilityLabel(S.homeA11yActionRequired)
     }
 
     // MARK: Hero
@@ -796,7 +799,7 @@ struct HomeView: View {
                     Text(row.route)
                         .font(.caption)
                         .foregroundColor(VPalette.textSec)
-                    Text("Departs \(row.time)")
+                    Text(S.homeDeparts(row.time))
                         .font(.caption2)
                         .foregroundColor(VPalette.textHint)
                 }
@@ -825,7 +828,7 @@ struct HomeView: View {
     private var suggestedRideRows: [SuggestedRide] {
         let live = store.routes.prefix(2).enumerated().map { idx, r in
             SuggestedRide(
-                name:     r.driverName.isEmpty ? "Driver" : r.driverName,
+                name:     r.driverName.isEmpty ? S.homeDriverFallback : r.driverName,
                 hue:      [280, 30, 140, 200][idx % 4],
                 time:     r.departureTime,
                 route:    "\(shortLabel(r.startLocation)) → \(shortLabel(r.endLocation))",
@@ -835,10 +838,17 @@ struct HomeView: View {
             )
         }
         if !live.isEmpty { return Array(live) }
+        // Demo rows for first-launch / empty-feed states. Gated to DEBUG
+        // so release builds never render misleading fake driver names —
+        // the empty state takes over instead.
+        #if DEBUG
         return [
             .init(name: "Maya R.",   hue: 280, time: "8:25 AM", route: "Mont Kiara → KLCC",     priceMyr: 14, rating: 4.9),
             .init(name: "David K.",  hue: 30,  time: "8:40 AM", route: "Subang Jaya → Bangsar", priceMyr: 12, rating: 4.8)
         ]
+        #else
+        return []
+        #endif
     }
 
     private func shortLabel(_ raw: String) -> String {

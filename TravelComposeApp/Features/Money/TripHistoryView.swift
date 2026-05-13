@@ -36,11 +36,11 @@ struct TripHistoryView: View {
             let route = p.routeId.flatMap { id in store.routes.first { $0.id == id } }
             let routeLabel: String = {
                 if let r = route { return "\(shortStop(r.startLocation)) → \(shortStop(r.endLocation)) " }
-                return p.tier?.capitalized ?? "Voygo subscription"
+                return p.tier?.capitalized ?? S.walletSubscriptionTitle
             }()
             let driverLabel = route?.driverName.isEmpty == false
                 ? route!.driverName
-                : "Driver"
+                : S.receiptDriverFallback
             let dow = weekdayShort(p.createdAt).uppercased()
             let day = String(Calendar.current.component(.day, from: p.createdAt))
             let mo  = monthShort(p.createdAt).uppercased()
@@ -52,7 +52,10 @@ struct TripHistoryView: View {
                 day:      day,
                 mo:       mo,
                 route:    routeLabel.trimmingCharacters(in: .whitespaces),
-                driver:   "\(driverLabel) · \(p.tier?.lowercased() ?? "ride")",
+                // Localized tier label ("Bulanan" in BM, "Monthly" in
+                // English). Previously rendered the lowercased raw
+                // enum ("monthly") which is hardcoded English.
+                driver:   "\(driverLabel) · \(S.tierLabel(p.tier))",
                 price:    cancelled ? "—" : amount,
                 dur:      "—",
                 rating:   0, // No rating storage on the payment row yet.
@@ -62,15 +65,28 @@ struct TripHistoryView: View {
         }
     }
 
-    private let filters = ["All", "Completed", "Cancelled"]
-    @State private var filter = "All"
+    /// Filter identity is independent of display copy — the chip
+    /// labels come from `S.tripHistoryFilter*`. We keep a stable
+    /// enum-shape (raw strings) so saved-filter state survives a
+    /// locale change.
+    private enum TripFilter: String, CaseIterable {
+        case all, completed, cancelled
+        var label: String {
+            switch self {
+            case .all:       return S.tripHistoryFilterAll
+            case .completed: return S.tripHistoryFilterCompleted
+            case .cancelled: return S.tripHistoryFilterCancelled
+            }
+        }
+    }
+    @State private var filter: TripFilter = .all
     @State private var isRefreshing = false
 
     var body: some View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Trip History", kicker: tripsKicker, onBack: onBack)
+                VPolishedNavBar(title: S.tripHistoryTitle, kicker: tripsKicker, onBack: onBack)
 
                 summary
                     .padding(.horizontal, 16).padding(.bottom, 12)
@@ -95,7 +111,7 @@ struct TripHistoryView: View {
                             if t.cancelled {
                                 tripRow(t)
                                     .opacity(0.7)
-                                    .accessibilityLabel("Cancelled trip on \(t.dow) \(t.day) \(t.mo)")
+                                    .accessibilityLabel(S.tripHistoryRowA11yCancelled(t.dow, t.day, t.mo))
                             } else if let r = t.receiptId {
                                 tripRow(t)
                                     .contentShape(Rectangle())
@@ -111,7 +127,7 @@ struct TripHistoryView: View {
                                     .font(.footnote.weight(.heavy))
                                     .foregroundColor(VPalette.textSec)
                                 if trips.isEmpty {
-                                    Text("Your completed and cancelled trips will appear here.")
+                                    Text(S.tripHistoryEmptyBody)
                                         .font(.caption)
                                         .foregroundColor(VPalette.textHint)
                                         .multilineTextAlignment(.center)
@@ -146,8 +162,8 @@ struct TripHistoryView: View {
     }
 
     private var emptyStateTitle: String {
-        if trips.isEmpty { return "No trips yet" }
-        return "No trips match this filter"
+        if trips.isEmpty { return S.tripHistoryEmptyTitleNone }
+        return S.tripHistoryEmptyTitleFilter
     }
 
     /// Filter chip → predicate. "Receipts" used to live here but was
@@ -155,17 +171,17 @@ struct TripHistoryView: View {
     /// so the chip was dropped to remove the redundancy.
     private var filteredTrips: [Trip] {
         switch filter {
-        case "Completed": return trips.filter { !$0.cancelled }
-        case "Cancelled": return trips.filter {  $0.cancelled }
-        default:          return trips
+        case .completed: return trips.filter { !$0.cancelled }
+        case .cancelled: return trips.filter {  $0.cancelled }
+        case .all:       return trips
         }
     }
 
     private var summary: some View {
         HStack(spacing: 8) {
-            stat("Total",   value: Formatters.ringgit(totalCharged),  color: VPalette.primary)
-            stat("Trips",   value: "\(completedCount)",     color: VPalette.success)
-            stat("Refunded", value: Formatters.ringgit(totalRefunded), color: VPalette.accent)
+            stat(S.tripHistoryStatTotal,    value: Formatters.ringgit(totalCharged),  color: VPalette.primary)
+            stat(S.tripHistoryStatTrips,    value: "\(completedCount)",               color: VPalette.success)
+            stat(S.tripHistoryStatRefunded, value: Formatters.ringgit(totalRefunded), color: VPalette.accent)
         }
     }
 
@@ -192,12 +208,7 @@ struct TripHistoryView: View {
     /// Honest count for the kicker: actual rows the user is looking at.
     /// Previously hardcoded to "18 trips" regardless of state.
     private var tripsKicker: String {
-        let n = trips.count
-        switch n {
-        case 0: return "No trips yet"
-        case 1: return "1 trip"
-        default: return "\(n) trips"
-        }
+        S.tripHistoryKicker(trips.count)
     }
 
     private func shortStop(_ raw: String) -> String {
@@ -205,16 +216,19 @@ struct TripHistoryView: View {
         return trimmed.trimmingCharacters(in: .whitespaces)
     }
 
+    /// Locale-aware month/weekday short strings. The previous hardcoded
+    /// `en_MY` locale meant a Malay device still rendered "May" / "Mon"
+    /// in the date column — wrong for a BM-first app.
     private func monthShort(_ date: Date) -> String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "en_MY")
+        f.locale = Locale.current
         f.dateFormat = "MMM"
         return f.string(from: date)
     }
 
     private func weekdayShort(_ date: Date) -> String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "en_MY")
+        f.locale = Locale.current
         f.dateFormat = "EEE"
         return f.string(from: date)
     }
@@ -234,10 +248,10 @@ struct TripHistoryView: View {
     private var filterRail: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(filters, id: \.self) { f in
+                ForEach(TripFilter.allCases, id: \.self) { f in
                     let on = f == filter
                     Button { filter = f } label: {
-                        Text(f)
+                        Text(f.label)
                             .font(.caption.weight(.bold))
                             .padding(.horizontal, 13).padding(.vertical, 7)
                             .foregroundColor(on ? .white : VPalette.textSec)
@@ -291,9 +305,9 @@ struct TripHistoryView: View {
                     .font(.system(size: 14, weight: .heavy, design: .monospaced))
                     .foregroundColor(t.cancelled ? VPalette.textHint : VPalette.text)
                 if t.cancelled {
-                    Text("Cancelled").font(.caption2.weight(.heavy)).foregroundColor(VPalette.danger)
+                    Text(S.tripHistoryRowCancelled).font(.caption2.weight(.heavy)).foregroundColor(VPalette.danger)
                 } else {
-                    Text("Receipt ›").font(.caption2.weight(.heavy)).foregroundColor(VPalette.primary)
+                    Text(S.tripHistoryRowReceipt).font(.caption2.weight(.heavy)).foregroundColor(VPalette.primary)
                 }
             }
         }

@@ -105,14 +105,14 @@ struct ProfileView: View {
                 filtersLatest: $filtersLatest,
                 filtersDays: $filtersDays
             )
-            .alert("Log Out", isPresented: $showLogoutAlert) {
-                Button("Log Out", role: .destructive) {
+            .alert(S.profileLogOutTitle, isPresented: $showLogoutAlert) {
+                Button(S.profileLogOutTitle, role: .destructive) {
                     guard !isLoggingOut else { return }
                     isLoggingOut = true
                     store.logout()
                 }
-                Button("Cancel", role: .cancel, action: {})
-            } message: { Text("You'll need to sign in again.") }
+                Button(S.cancel, role: .cancel, action: {})
+            } message: { Text(S.profileLogOutMessage) }
             .sheet(isPresented: $showEditName) {
                 EditDisplayNameSheet(
                     initialName: store.currentUser.name,
@@ -151,7 +151,7 @@ struct ProfileView: View {
             identityRowContent
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Tap to edit your display name")
+        .accessibilityHint(S.profileNameEditHint)
     }
 
     private var identityRowContent: some View {
@@ -159,7 +159,7 @@ struct ProfileView: View {
             VAvatar(initial: store.currentUser.initial.isEmpty ? "?" : store.currentUser.initial, size: 72)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(store.currentUser.name.isEmpty ? "Welcome" : store.currentUser.name)
+                    Text(store.currentUser.name.isEmpty ? S.profileWelcome : store.currentUser.name)
                         .font(.title3.weight(.heavy)).tracking(-0.4)
                         .foregroundColor(VPalette.text)
                         .minimumScaleFactor(0.7)
@@ -181,12 +181,14 @@ struct ProfileView: View {
                     } else {
                         Image(systemName: "sparkles")
                             .font(.caption).foregroundColor(VPalette.primary)
-                        Text("New rider")
+                        Text(S.profileNewRider)
                             .font(.caption.weight(.heavy)).foregroundColor(VPalette.textSec)
                     }
                     Circle().fill(VPalette.textHint).frame(width: 3, height: 3)
-                    // Real ride count from completed payments.
-                    Text("\(tripsCount) rides").font(.caption).foregroundColor(VPalette.textSec)
+                    // Real ride count from completed payments. Uses
+                    // `S.profileRidesCount` so "0 rides" / "1 ride" /
+                    // "N rides" each render with the right plural form.
+                    Text(S.profileRidesCount(tripsCount)).font(.caption).foregroundColor(VPalette.textSec)
                 }
             }
             Spacer()
@@ -199,7 +201,7 @@ struct ProfileView: View {
             HStack(spacing: 12) {
                 VIconBubble(systemName: kycIcon, color: kycColor, size: 44, iconSize: 18)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Identity Verification")
+                    Text(S.profileSettingsIdentityVerification)
                         .font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                     Text(kycMessage).font(.caption2).foregroundColor(VPalette.textSec)
                 }
@@ -219,7 +221,7 @@ struct ProfileView: View {
             HStack(spacing: 12) {
                 VIconBubble(systemName: "creditcard.fill", color: VPalette.primary, size: 44, iconSize: 18)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Wallet & payment methods")
+                    Text(S.profileSettingsWalletAndPayments)
                         .font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                     Text(walletSubtitle)
                         .font(.caption2).foregroundColor(VPalette.textSec)
@@ -244,20 +246,20 @@ struct ProfileView: View {
             commuteTile(
                 icon: "star.fill",
                 tint: VPalette.starGold,
-                title: "Favourites",
+                title: S.profileSettingsFavourites,
                 subtitle: store.favoriteRouteIds.isEmpty
-                    ? "None saved"
-                    : "\(store.favoriteRouteIds.count) saved"
+                    ? S.profileSettingsFavouritesNoneSaved
+                    : S.profileSettingsFavouritesSaved(store.favoriteRouteIds.count)
             ) {
                 path.append(.favorites)
             }
             commuteTile(
                 icon: "hand.raised.fill",
                 tint: VPalette.primary,
-                title: "My requests",
+                title: S.profileSettingsMyRequests,
                 subtitle: {
                     let n = store.routeRequests.filter { $0.status == "OPEN" }.count
-                    return n == 0 ? "None waiting" : "\(n) waiting"
+                    return n == 0 ? S.profileSettingsMyRequestsNone : S.profileSettingsMyRequestsWaiting(n)
                 }()
             ) {
                 path.append(.routeRequestsList)
@@ -301,9 +303,9 @@ struct ProfileView: View {
         // the screen's primary audience).
         Button { path.append(.tripHistory) } label: {
             HStack(spacing: 0) {
-                statCell("\(tripsCount)", "Rides")
+                statCell("\(tripsCount)", S.profileRidesLabel)
                 Rectangle().fill(VPalette.border).frame(width: 1, height: 32)
-                statCell(memberSinceLabel, "Member since")
+                statCell(memberSinceLabel, S.profileMemberSinceLabel)
             }
             .padding(14)
             .background(VPalette.surface)
@@ -318,11 +320,13 @@ struct ProfileView: View {
     }
 
     /// "Mar 2026" — short month-year for the join date stat. Returns
-    /// "Today" until /auth/me hydrates memberSince so we never show
-    /// a misleading blank.
+    /// `profile.memberSinceToday` until /auth/me hydrates memberSince so
+    /// we never show a misleading blank. Honours `Locale.current` so
+    /// BM users see "Mei 2026" instead of "May 2026".
     private var memberSinceLabel: String {
-        guard let date = store.currentUser.memberSince else { return "Today" }
+        guard let date = store.currentUser.memberSince else { return S.profileMemberSinceToday }
         let f = DateFormatter()
+        f.locale = Locale.current
         f.dateFormat = "MMM yyyy"
         return f.string(from: date)
     }
@@ -337,7 +341,7 @@ struct ProfileView: View {
 
     private var settingsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            VKicker(text: "Settings").padding(.leading, 4)
+            VKicker(text: S.settings).padding(.leading, 4)
             VStack(spacing: 0) {
                 // Notifications row now opens iOS Settings instead of
                 // flipping a placebo @AppStorage that did nothing. The
@@ -345,28 +349,28 @@ struct ProfileView: View {
                 // pushes; pushes kept arriving regardless — App Store
                 // 4.5/5.4 territory. Apple's recommended pattern for
                 // notification opt-out is to bounce to iOS Settings.
-                row(icon: "bell.fill", color: VPalette.warning, title: "Notifications", chevron: true) {
+                row(icon: "bell.fill", color: VPalette.warning, title: S.profileSettingsNotifications, chevron: true) {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
                     }
                 }
                 divider()
-                row(icon: "shield.lefthalf.filled", color: VPalette.accent, title: "Privacy & Security", chevron: true) { path.append(.privacy) }
+                row(icon: "shield.lefthalf.filled", color: VPalette.accent, title: S.profileSettingsPrivacy, chevron: true) { path.append(.privacy) }
                 divider()
                 // Payment methods row no longer lies about a default
                 // method when no methods are configured. Subtitle is
                 // sourced from the wallet (real method count) so it
                 // never invents a "DuitNow · TNG" that isn't set.
-                row(icon: "creditcard.fill", color: VPalette.primary, title: "Payment methods", trailingText: paymentMethodsSubtitle) { path.append(.wallet) }
+                row(icon: "creditcard.fill", color: VPalette.primary, title: S.profileSettingsPaymentMethods, trailingText: paymentMethodsSubtitle) { path.append(.wallet) }
                 divider()
                 // Renamed to "Activity" to disambiguate from the
                 // Notifications row above — both used the word
                 // "Notifications" and users couldn't tell them apart.
-                row(icon: "bell.badge.fill", color: VPalette.secondary, title: "Activity", chevron: true) { path.append(.notifications) }
+                row(icon: "bell.badge.fill", color: VPalette.secondary, title: S.profileSettingsActivity, chevron: true) { path.append(.notifications) }
                 divider()
-                row(icon: "doc.text.fill", color: VPalette.accent, title: "Trip history", chevron: true) { path.append(.tripHistory) }
+                row(icon: "doc.text.fill", color: VPalette.accent, title: S.profileSettingsTripHistory, chevron: true) { path.append(.tripHistory) }
                 divider()
-                row(icon: "questionmark.circle.fill", color: VPalette.secondary, title: "Help Center", chevron: true) { path.append(.help) }
+                row(icon: "questionmark.circle.fill", color: VPalette.secondary, title: S.profileSettingsHelpCenter, chevron: true) { path.append(.help) }
             }
             .background(VPalette.surface)
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
@@ -374,15 +378,15 @@ struct ProfileView: View {
         }
     }
 
-    /// Honest payment-methods trailing text. "Add one" when nothing
-    /// is configured (vs the old hardcoded "DuitNow · TNG" lie); the
-    /// real count when methods land. Falls back to neutral text in
-    /// the dev shortcut where wallet isn't synced.
+    /// Honest payment-methods trailing text. Re-uses the "Pay at
+    /// checkout" wallet copy because there's no in-app add-payment
+    /// flow yet — saying "Add one" was misleading. Once the
+    /// `/users/me/payment-methods` endpoint lands this hooks into a
+    /// real count; for now we never claim methods exist when they
+    /// don't.
     private var paymentMethodsSubtitle: String {
-        if !store.useOnline { return "Sign in to manage" }
-        // Once /users/me/payment-methods lands this hooks into a real
-        // count; for now we never claim methods exist when they don't.
-        return "Add one"
+        if !store.useOnline { return S.profileSettingsPayMethodsSignedOut }
+        return S.walletPayAtCheckout
     }
 
     private func divider() -> some View {
@@ -431,10 +435,10 @@ struct ProfileView: View {
                 VIconBubble(systemName: hasRoutes ? "car.fill" : "plus.circle.fill",
                             color: VPalette.primary, size: 44, iconSize: 18)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(hasRoutes ? "Driver mode" : "Publish your first route")
+                    Text(hasRoutes ? S.profileDriverMode : S.profileDriverPublishFirst)
                         .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.text)
-                    Text(hasRoutes ? "Manage your routes & earnings" : "Your KYC is approved — start offering seats")
+                    Text(hasRoutes ? S.profileDriverManageSubtitle : S.profileDriverApprovedSubtitle)
                         .font(.caption2)
                         .foregroundColor(VPalette.textSec)
                 }
@@ -477,7 +481,7 @@ struct ProfileView: View {
                     iconSize: 18
                 )
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Your vehicle")
+                    Text(S.profileVehicleTitle)
                         .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.text)
                     Text(vehicleSubtitle)
@@ -487,7 +491,7 @@ struct ProfileView: View {
                 }
                 Spacer()
                 if !hasVehicleSet {
-                    VBadge(text: "Set up", color: VPalette.warning, container: VPalette.warning.opacity(0.15))
+                    VBadge(text: S.profileVehicleSetUp, color: VPalette.warning, container: VPalette.warning.opacity(0.15))
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.heavy))
@@ -500,7 +504,7 @@ struct ProfileView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Tap to edit your plate, colour and model")
+        .accessibilityHint(S.profileVehicleEditHint)
     }
 
     private var hasVehicleSet: Bool {
@@ -513,7 +517,7 @@ struct ProfileView: View {
         let color = store.currentUser.carColor?.trimmingCharacters(in: .whitespaces) ?? ""
         let model = store.currentUser.carModel?.trimmingCharacters(in: .whitespaces) ?? ""
         if plate.isEmpty {
-            return "Set your plate, colour & model so riders can spot you"
+            return S.profileVehicleSubtitle
         }
         let descriptor = [color, model].filter { !$0.isEmpty }.joined(separator: " ")
         if descriptor.isEmpty { return plate }
@@ -524,7 +528,7 @@ struct ProfileView: View {
         Button { showLogoutAlert = true } label: {
             HStack {
                 Image(systemName: "arrow.up.right.square.fill").foregroundColor(VPalette.danger)
-                Text("Log out").font(.footnote.weight(.heavy)).foregroundColor(VPalette.danger)
+                Text(S.profileLogOut).font(.footnote.weight(.heavy)).foregroundColor(VPalette.danger)
                 Spacer()
             }
             .padding(14)
@@ -553,18 +557,18 @@ struct ProfileView: View {
     }
     private var kycMessage: String {
         switch store.kycStatus {
-        case .approved: return "You are fully verified · MyKad on file"
-        case .pending:  return "Verification under review"
-        case .rejected: return "Verification rejected – resubmit"
-        default:        return "Complete verification to drive"
+        case .approved: return S.profileKycMessageApproved
+        case .pending:  return S.profileKycMessagePending
+        case .rejected: return S.profileKycMessageRejected
+        default:        return S.profileKycMessageNotStarted
         }
     }
     private var kycBadge: String {
         switch store.kycStatus {
-        case .approved: return "Verified"
-        case .pending:  return "Pending"
-        case .rejected: return "Rejected"
-        default:        return "Not Started"
+        case .approved: return S.profileKycBadgeVerified
+        case .pending:  return S.profileKycBadgePending
+        case .rejected: return S.profileKycBadgeRejected
+        default:        return S.profileKycBadgeNotStarted
         }
     }
 
@@ -575,12 +579,12 @@ struct ProfileView: View {
     /// endpoint ships we can re-introduce the prompt.
     private var walletSubtitle: String {
         if store.voygoCreditMyr > 0 {
-            return Formatters.ringgit(store.voygoCreditMyr) + " credit · view payments"
+            return S.profileWalletCreditAndPayments(Formatters.ringgit(store.voygoCreditMyr))
         }
         if !store.useOnline {
-            return "Wallet syncs after sign-in"
+            return S.profileWalletSyncAfterSignIn
         }
-        return store.payments.isEmpty ? "No payments yet" : "View payments & receipts"
+        return store.payments.isEmpty ? S.profileWalletNoPayments : S.profileWalletViewPayments
     }
 }
 
@@ -1363,7 +1367,7 @@ struct EditDisplayNameSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Your name")
+                Text(S.profileNameSheetTitle)
                     .font(.body.weight(.black))
                     .tracking(-0.3)
                     .foregroundColor(VPalette.text)
@@ -1377,14 +1381,14 @@ struct EditDisplayNameSheet: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Cancel")
+                .accessibilityLabel(S.cancel)
             }
 
-            Text("This is how drivers and riders see you on receipts, chat threads and ride confirmations.")
+            Text(S.profileNameSheetSubtitle)
                 .font(.caption)
                 .foregroundColor(VPalette.textSec)
 
-            TextField("e.g. Vishnu Kumar", text: $name)
+            TextField(S.profileNamePlaceholder, text: $name)
                 .font(.callout.weight(.semibold))
                 .foregroundColor(VPalette.text)
                 .tint(VPalette.primary)
@@ -1403,7 +1407,7 @@ struct EditDisplayNameSheet: View {
                     .foregroundColor(VPalette.danger)
             }
 
-            VPrimaryButton("Save", isLoading: isSaving, isEnabled: canSave) {
+            VPrimaryButton(S.save, isLoading: isSaving, isEnabled: canSave) {
                 Task { await save() }
             }
         }
@@ -1477,7 +1481,7 @@ struct EditVehicleSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Your vehicle")
+                Text(S.profileVehicleTitle)
                     .font(.body.weight(.black))
                     .tracking(-0.3)
                     .foregroundColor(VPalette.text)
@@ -1491,27 +1495,27 @@ struct EditVehicleSheet: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Cancel")
+                .accessibilityLabel(S.cancel)
             }
 
-            Text("Riders use your plate, colour and model to spot the right car at the pickup point. This is set once and applies to every route you publish.")
+            Text(S.profileVehicleSheetSubtitle)
                 .font(.caption)
                 .foregroundColor(VPalette.textSec)
 
-            field(label: "Plate number",
-                  placeholder: "PEN 1234",
+            field(label: S.profileVehiclePlate,
+                  placeholder: S.profileVehiclePlatePlaceholder,
                   text: $plate,
                   field: .plate,
                   autocaps: .characters)
 
             HStack(spacing: 10) {
-                field(label: "Colour",
-                      placeholder: "White",
+                field(label: S.profileVehicleColour,
+                      placeholder: S.profileVehicleColourPlaceholder,
                       text: $color,
                       field: .color,
                       autocaps: .words)
-                field(label: "Model",
-                      placeholder: "Myvi",
+                field(label: S.profileVehicleModel,
+                      placeholder: S.profileVehicleModelPlaceholder,
                       text: $model,
                       field: .model,
                       autocaps: .words)
@@ -1523,7 +1527,7 @@ struct EditVehicleSheet: View {
                     .foregroundColor(VPalette.danger)
             }
 
-            VPrimaryButton("Save", isLoading: isSaving, isEnabled: canSave) {
+            VPrimaryButton(S.save, isLoading: isSaving, isEnabled: canSave) {
                 Task { await save() }
             }
         }

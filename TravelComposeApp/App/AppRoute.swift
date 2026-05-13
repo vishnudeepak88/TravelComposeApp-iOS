@@ -245,7 +245,10 @@ struct AppRouteDestinations: ViewModifier {
                 .navigationBarHidden(true)
 
             case .wallet:
-                WalletView(onBack: { if !path.isEmpty { path.removeLast() } })
+                WalletView(
+                    onBack: { if !path.isEmpty { path.removeLast() } },
+                    onOpenTripHistory: { path.append(.tripHistory) }
+                )
                     .navigationBarHidden(true)
 
             case .tripHistory:

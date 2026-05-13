@@ -37,7 +37,7 @@ struct PrivacySecurityView: View {
         ZStack(alignment: .top) {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Privacy & Security", onBack: onBack)
+                VPolishedNavBar(title: S.privacyTitle, onBack: onBack)
                 ScrollView {
                     VStack(spacing: 18) {
                         if isLoading && prefs == nil {
@@ -68,17 +68,17 @@ struct PrivacySecurityView: View {
             }
         }
         .task { await load() }
-        .alert("Delete this account?", isPresented: $showDeleteConfirm) {
-            Button("Continue", role: .destructive) { showDeleteFinal = true }
-            Button("Cancel", role: .cancel) { }
+        .alert(S.privacyDeleteConfirmTitle, isPresented: $showDeleteConfirm) {
+            Button(S.privacyDeleteContinue, role: .destructive) { showDeleteFinal = true }
+            Button(S.cancel, role: .cancel) { }
         } message: {
-            Text("Your account, routes, and subscriptions will be paused immediately. You have 30 days to sign back in to cancel. After that, your data is permanently anonymised.")
+            Text(S.privacyDeleteConfirmBody)
         }
-        .alert("Really delete?", isPresented: $showDeleteFinal) {
-            Button("Yes, delete", role: .destructive) { Task { await deleteAccount() } }
-            Button("Keep my account", role: .cancel) { }
+        .alert(S.privacyDeleteFinalTitle, isPresented: $showDeleteFinal) {
+            Button(S.privacyDeleteYes, role: .destructive) { Task { await deleteAccount() } }
+            Button(S.privacyDeleteKeep, role: .cancel) { }
         } message: {
-            Text("This is your last chance to back out. We'll email a confirmation.")
+            Text(S.privacyDeleteFinalBody)
         }
     }
 
@@ -86,12 +86,12 @@ struct PrivacySecurityView: View {
 
     private var preferencesCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VKicker(text: "Preferences").padding(.leading, 4).padding(.bottom, 8)
+            VKicker(text: S.privacyPreferences).padding(.leading, 4).padding(.bottom, 8)
             VStack(spacing: 0) {
                 preferenceToggle(
                     icon: "bell.fill", color: VPalette.warning,
-                    title: "Push notifications",
-                    subtitle: "Receive ride reminders, chat messages, payment receipts",
+                    title: S.privacyPushNotifications,
+                    subtitle: S.privacyPushSubtitle,
                     isOn: Binding(
                         get: { prefs?.pushEnabled ?? true },
                         set: { update(.pushEnabled, $0) }
@@ -100,8 +100,8 @@ struct PrivacySecurityView: View {
                 divider()
                 preferenceToggle(
                     icon: "phone.fill", color: VPalette.primary,
-                    title: "Share phone with subscribers",
-                    subtitle: "When OFF, riders see a masked number until pickup",
+                    title: S.privacyPhoneShare,
+                    subtitle: S.privacyPhoneShareSubtitle,
                     isOn: Binding(
                         get: { prefs?.phoneVisibleToSubscribers ?? true },
                         set: { update(.phoneVisibleToSubscribers, $0) }
@@ -116,8 +116,8 @@ struct PrivacySecurityView: View {
                 // is worse than no toggle.
                 preferenceToggle(
                     icon: "envelope.fill", color: VPalette.secondary,
-                    title: "Promotional emails",
-                    subtitle: "Optional. Defaults to OFF (PDPA opt-in)",
+                    title: S.privacyMarketing,
+                    subtitle: S.privacyMarketingSubtitle,
                     isOn: Binding(
                         get: { prefs?.marketingEmails ?? false },
                         set: { update(.marketingEmails, $0) }
@@ -126,8 +126,8 @@ struct PrivacySecurityView: View {
                 divider()
                 preferenceToggle(
                     icon: "chart.bar.doc.horizontal.fill", color: VPalette.accentPurple,
-                    title: "Product analytics",
-                    subtitle: "Share usage events that help improve reliability and route matching",
+                    title: S.privacyAnalyticsTitle,
+                    subtitle: S.privacyAnalyticsSubtitle,
                     isOn: Binding(
                         get: { prefs?.analyticsEnabled ?? TelemetryConsent.isEnabled },
                         set: { update(.analyticsEnabled, $0) }
@@ -159,9 +159,9 @@ struct PrivacySecurityView: View {
     private var blocksCard: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                VKicker(text: "Blocked users")
+                VKicker(text: S.privacyBlockedTitle)
                 Spacer()
-                Text("\(blocks.count)/200")
+                Text(S.privacyBlocksCounter(blocks.count))
                     .font(.caption2.weight(.bold))
                     .foregroundColor(VPalette.textHint)
             }
@@ -173,10 +173,10 @@ struct PrivacySecurityView: View {
                         Image(systemName: "person.slash")
                             .font(.title3)
                             .foregroundColor(VPalette.textHint)
-                        Text("No blocked users")
+                        Text(S.privacyBlockedEmpty)
                             .font(.caption.weight(.heavy))
                             .foregroundColor(VPalette.textSec)
-                        Text("Block a driver from any route detail to stop being matched with them.")
+                        Text(S.privacyBlockedEmptyBody)
                             .font(.caption2)
                             .foregroundColor(VPalette.textHint)
                             .multilineTextAlignment(.center)
@@ -199,7 +199,7 @@ struct PrivacySecurityView: View {
                             Button {
                                 Task { await unblock(b.userId) }
                             } label: {
-                                Text("Unblock")
+                                Text(S.privacyUnblock)
                                     .font(.caption.weight(.heavy))
                                     .foregroundColor(VPalette.primary)
                             }
@@ -219,16 +219,16 @@ struct PrivacySecurityView: View {
 
     private var dataCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VKicker(text: "Your data").padding(.leading, 4).padding(.bottom, 8)
+            VKicker(text: S.privacyDataTitle).padding(.leading, 4).padding(.bottom, 8)
             Button {
                 Task { await requestDataExport() }
             } label: {
                 HStack(spacing: 12) {
                     VIconBubble(systemName: "square.and.arrow.down.fill", color: VPalette.primary, size: 32, iconSize: 14)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Download my data")
+                        Text(S.privacyDataDownload)
                             .font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
-                        Text("We'll email a copy of your rides, payments and profile within 7 days (PDPA s.7)")
+                        Text(S.privacyDataDownloadSubtitle)
                             .font(.caption2).foregroundColor(VPalette.textSec)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -255,16 +255,16 @@ struct PrivacySecurityView: View {
 
     private var deleteCard: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VKicker(text: "Danger zone").padding(.leading, 4).padding(.bottom, 8)
+            VKicker(text: S.privacyDangerTitle).padding(.leading, 4).padding(.bottom, 8)
             Button {
                 showDeleteConfirm = true
             } label: {
                 HStack(spacing: 12) {
                     VIconBubble(systemName: "trash.fill", color: VPalette.danger, size: 32, iconSize: 14)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Delete account")
+                        Text(S.privacyDelete)
                             .font(.footnote.weight(.heavy)).foregroundColor(VPalette.danger)
-                        Text("Permanently removes your account after 30 days. Required by App Store + PDPA.")
+                        Text(S.privacyDeleteSubtitle)
                             .font(.caption2).foregroundColor(VPalette.textSec)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -307,7 +307,7 @@ struct PrivacySecurityView: View {
             TelemetryConsent.isEnabled = prefs.analyticsEnabled
         }
         isLoading = false
-        if prefs == nil { errorMessage = "Couldn't load preferences." }
+        if prefs == nil { errorMessage = S.privacyLoadFailed }
     }
 
     private func update(_ field: PrefField, _ newValue: Bool) {
@@ -342,7 +342,7 @@ struct PrivacySecurityView: View {
                     if field == .analyticsEnabled {
                         TelemetryConsent.isEnabled = previous.analyticsEnabled
                     }
-                    errorMessage = "Couldn't save preference. Try again."
+                    errorMessage = S.privacySaveFailed
                 }
             }
         }
@@ -352,9 +352,9 @@ struct PrivacySecurityView: View {
         do {
             try await VoygoAPIClient.removeBlock(userId: userId)
             blocks.removeAll { $0.userId == userId }
-            infoMessage = "Unblocked."
+            infoMessage = S.privacyUnblockedToast
         } catch {
-            errorMessage = "Couldn't unblock. Try again."
+            errorMessage = S.privacyUnblockFailed
         }
     }
 
@@ -364,9 +364,14 @@ struct PrivacySecurityView: View {
         defer { isRequestingExport = false }
         do {
             let r = try await VoygoAPIClient.requestDataExport()
-            infoMessage = r.message
+            // Surface the server's confirmation message when present —
+            // it carries the actual SLA + email channel the queue
+            // dispatched to. Falls back to the localised subtitle if
+            // the server response is empty so the user always sees
+            // something readable.
+            infoMessage = r.message.isEmpty ? S.privacyDataDownloadSubtitle : r.message
         } catch {
-            errorMessage = "Couldn't queue the export. Try again."
+            errorMessage = S.privacyExportFailed
         }
     }
 
@@ -383,7 +388,7 @@ struct PrivacySecurityView: View {
             // that window, which AppStore clears via APIError flow.
             store.logout()
         } catch {
-            errorMessage = "Couldn't delete the account. Try again or email support."
+            errorMessage = S.privacyDeleteFailed
         }
     }
 }

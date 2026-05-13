@@ -42,7 +42,7 @@ struct DriverDashboardView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Driver Dashboard", onBack: onBack) {
+                VPolishedNavBar(title: S.driverDashboardTitle, onBack: onBack) {
                     HStack(spacing: 8) {
                         if let onOpenDemand {
                             Button(action: onOpenDemand) {
@@ -54,7 +54,7 @@ struct DriverDashboardView: View {
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Rider demand")
+                            .accessibilityLabel(S.driverNavRiderDemand)
                         }
                         if let onOpenPayouts {
                             Button(action: onOpenPayouts) {
@@ -66,7 +66,7 @@ struct DriverDashboardView: View {
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Payouts")
+                            .accessibilityLabel(S.driverNavPayouts)
                         }
                     }
                 }
@@ -123,10 +123,10 @@ struct DriverDashboardView: View {
                                         }
                                     },
                                     onSetWeekdays: { routeId, time in
-                                        scheduleUpdate(routeId: routeId, time: time, days: .weekdays, label: "weekdays")
+                                        scheduleUpdate(routeId: routeId, time: time, days: .weekdays, label: .weekdays)
                                     },
                                     onSetAllDays: { routeId, time in
-                                        scheduleUpdate(routeId: routeId, time: time, days: .allDays, label: "all days")
+                                        scheduleUpdate(routeId: routeId, time: time, days: .allDays, label: .allDays)
                                     },
                                     onCalendar: { onOpenCalendar($0) },
                                     onEdit: { routeId in editingRouteId = routeId }
@@ -150,20 +150,20 @@ struct DriverDashboardView: View {
             hasLoaded = true
         }
         .alert(
-            "Pause this route?",
+            S.driverPauseAlertTitle,
             isPresented: Binding(
                 get: { pendingToggle != nil },
                 set: { if !$0 { pendingToggle = nil } }
             ),
             presenting: pendingToggle
         ) { p in
-            Button("Pause", role: .destructive) {
+            Button(S.driverPauseAlertConfirm, role: .destructive) {
                 performToggle(routeId: p.routeId, currentlyActive: p.currentlyActive)
                 pendingToggle = nil
             }
-            Button("Cancel", role: .cancel) { pendingToggle = nil }
+            Button(S.cancel, role: .cancel) { pendingToggle = nil }
         } message: { _ in
-            Text("Pausing cancels every scheduled pickup on this route. Riders will be notified.")
+            Text(S.driverPauseAlertBody)
         }
         .sheet(item: Binding(
             get: { editingRouteId.map { EditRouteSheetID(routeId: $0) } },
@@ -182,12 +182,25 @@ struct DriverDashboardView: View {
         }
     }
 
+    /// Localized labels for the schedule-updated toast. Using an enum
+    /// keeps the call site readable while the toast copy itself stays
+    /// in Strings.swift.
+    private enum ScheduleLabel {
+        case weekdays, allDays
+        var updatedToast: String {
+            switch self {
+            case .weekdays: return S.driverScheduleUpdatedWeekdays
+            case .allDays:  return S.driverScheduleUpdatedAllDays
+            }
+        }
+    }
+
     /// Throttled schedule update — gates on `inFlightScheduleRouteId` so
     /// rapid taps on Mon–Fri or All-Days don't fire parallel requests
     /// against the same route.
-    private func scheduleUpdate(routeId: String, time: String, days: DaysOfWeekFlags, label: String) {
+    private func scheduleUpdate(routeId: String, time: String, days: DaysOfWeekFlags, label: ScheduleLabel) {
         guard isValidHHmm(time) else {
-            actionError = "Departure time must be HH:mm (e.g. 07:42)."
+            actionError = S.driverDepartureValidationHint
             return
         }
         guard inFlightScheduleRouteId != routeId else { return }
@@ -198,7 +211,7 @@ struct DriverDashboardView: View {
             if case .failure(let e) = r {
                 actionError = e.localizedDescription
             } else {
-                actionResult = "Schedule updated to \(label)."
+                actionResult = label.updatedToast
             }
         }
     }
@@ -212,7 +225,7 @@ struct DriverDashboardView: View {
             if case .failure(let error) = result {
                 actionError = error.localizedDescription
             } else {
-                actionResult = currentlyActive ? "Route paused." : "Route resumed."
+                actionResult = currentlyActive ? S.driverRoutePausedToast : S.driverRouteResumedToast
             }
         }
     }
@@ -271,19 +284,19 @@ struct DriverRouteCard: View {
                             .font(.caption).foregroundColor(VoygoTheme.textSecondary)
                     }
                     Spacer()
-                    StatusBadge(text: route.activeStatus == .active ? "Active" : "Paused",
+                    StatusBadge(text: route.activeStatus == .active ? S.driverCardActive : S.driverCardPaused,
                                 color: route.activeStatus == .active ? VoygoTheme.success : VoygoTheme.warning)
                 }
 
                 // Stats row
                 HStack(spacing: 0) {
-                    DashStatCell(icon: "person.3.fill", value: "\(dashboard.subscribedRiders.count)", label: "Riders")
+                    DashStatCell(icon: "person.3.fill", value: "\(dashboard.subscribedRiders.count)", label: S.driverCardRiders)
                     Spacer()
-                    DashStatCell(icon: "calendar", value: "\(dashboard.upcomingRides.count)", label: "Upcoming")
+                    DashStatCell(icon: "calendar", value: "\(dashboard.upcomingRides.count)", label: S.driverCardUpcoming)
                     Spacer()
-                    DashStatCell(icon: "seat.fill", value: "\(route.seatCount)", label: "Seats")
+                    DashStatCell(icon: "seat.fill", value: "\(route.seatCount)", label: S.driverCardSeats)
                     Spacer()
-                    DashStatCell(icon: "calendar.day.timeline.leading", value: route.daysOfWeek.shortLabel, label: "Days")
+                    DashStatCell(icon: "calendar.day.timeline.leading", value: route.daysOfWeek.shortLabel, label: S.driverCardDays)
                 }
 
                 // Solo bookings banner — surfaces upcoming exclusive
@@ -297,7 +310,7 @@ struct DriverRouteCard: View {
                             .font(.subheadline.weight(.heavy))
                             .foregroundColor(VoygoTheme.accent)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(upcomingSolos.count) solo \(upcomingSolos.count == 1 ? "booking" : "bookings") ahead")
+                            Text(S.driverSoloBookingsAhead(upcomingSolos.count))
                                 .font(.footnote.weight(.heavy))
                                 .foregroundColor(VoygoTheme.textPrimary)
                             Text(soloDatesSummary(upcomingSolos))
@@ -317,20 +330,20 @@ struct DriverRouteCard: View {
                 Divider().background(VoygoTheme.cardBorder)
 
                 // Schedule editor
-                VoygoTextField(label: "Departure Time (HH:mm)", text: $departureInput,
+                VoygoTextField(label: S.driverDepartureField, text: $departureInput,
                                placeholder: route.departureTime, keyboardType: .numbersAndPunctuation)
                     .onAppear { departureInput = route.departureTime }
 
                 // Day preset buttons
                 HStack(spacing: 8) {
                     Button(action: { onSetWeekdays(route.id, departureInput.isEmpty ? route.departureTime : departureInput) }) {
-                        Text("Mon–Fri").font(.caption.bold())
+                        Text(S.driverDayPresetMonFri).font(.caption.bold())
                             .padding(.horizontal, 12).padding(.vertical, 8)
                             .background(VoygoTheme.primary.opacity(0.15))
                             .foregroundColor(VoygoTheme.primary).cornerRadius(8)
                     }
                     Button(action: { onSetAllDays(route.id, departureInput.isEmpty ? route.departureTime : departureInput) }) {
-                        Text("All Days").font(.caption.bold())
+                        Text(S.driverDayPresetAllDays).font(.caption.bold())
                             .padding(.horizontal, 12).padding(.vertical, 8)
                             .background(VoygoTheme.accent.opacity(0.15))
                             .foregroundColor(VoygoTheme.accent).cornerRadius(8)
@@ -357,7 +370,7 @@ struct DriverRouteCard: View {
                                     .tint(route.activeStatus == .active ? VoygoTheme.warning : VoygoTheme.success)
                             } else {
                                 Image(systemName: route.activeStatus == .active ? "pause.circle.fill" : "play.circle.fill")
-                                Text(route.activeStatus == .active ? "Pause Route" : "Resume Route")
+                                Text(route.activeStatus == .active ? S.driverPauseRoute : S.driverResumeRoute)
                             }
                         }
                         .font(.subheadline.weight(.semibold))
@@ -370,7 +383,7 @@ struct DriverRouteCard: View {
                     Button(action: { onCalendar(route.id) }) {
                         HStack(spacing: 6) {
                             Image(systemName: "calendar")
-                            Text("Calendar")
+                            Text(S.driverCalendarButton)
                         }
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity).padding(.vertical, 12)
@@ -568,10 +581,13 @@ struct DriverRouteCard: View {
     /// Truncates at 3 entries to keep the line readable.
     private func soloDatesSummary(_ rides: [CommuteRideInstance]) -> String {
         let formatter = DateFormatter()
+        // Locale-aware so the month abbreviation renders in BM
+        // ("Mei 14") on a Malay device.
+        formatter.locale = Locale.current
         formatter.dateFormat = "MMM d"
         let labels = rides.prefix(3).map { formatter.string(from: $0.date) }
         let head = labels.joined(separator: ", ")
-        return rides.count > 3 ? "\(head), +\(rides.count - 3) more" : head
+        return rides.count > 3 ? S.driverSoloDatesMore(head, rides.count - 3) : head
     }
 }
 
@@ -953,7 +969,7 @@ struct CreateRouteView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Create Route", onBack: onBack)
+                VPolishedNavBar(title: S.createRouteTitle, onBack: onBack)
                     .background(VoygoTheme.background)
 
                 ScrollView {
@@ -961,18 +977,18 @@ struct CreateRouteView: View {
                         // Basic info
                         VoygoCard {
                             VStack(spacing: 14) {
-                                SectionHeader(title: "Route Info")
+                                SectionHeader(title: S.createRouteSectionRouteInfo)
                                 LocationPickerRow(
-                                    label: "Start Location",
-                                    placeholder: "Pick on map · e.g. Komtar",
+                                    label: S.createRouteStartLabel,
+                                    placeholder: S.createRouteStartPlaceholder,
                                     icon: "mappin.circle.fill",
                                     iconColor: VoygoTheme.success,
                                     value: vm.startLocation,
                                     onTap: { picker = .start }
                                 )
                                 LocationPickerRow(
-                                    label: "Destination",
-                                    placeholder: "Pick on map · e.g. Bayan Lepas",
+                                    label: S.createRouteEndLabel,
+                                    placeholder: S.createRouteEndPlaceholder,
                                     icon: "flag.checkered.circle.fill",
                                     iconColor: VoygoTheme.primary,
                                     value: vm.endLocation,
@@ -986,12 +1002,12 @@ struct CreateRouteView: View {
                                 // so AppStore.createRoute keeps its existing
                                 // signature.
                                 VStack(alignment: .leading, spacing: 6) {
-                                    Text("DEPARTURE TIME")
+                                    Text(S.createRouteDepartureLabel)
                                         .font(.caption2.weight(.heavy))
                                         .tracking(1.2)
                                         .foregroundColor(VPalette.textHint)
                                     DatePicker(
-                                        "Departure",
+                                        S.createRouteDeparture,
                                         selection: vm.departureTimeAsDateBinding,
                                         displayedComponents: [.hourAndMinute]
                                     )
@@ -1014,24 +1030,24 @@ struct CreateRouteView: View {
                                         // physically can't seat 8 in a Myvi,
                                         // so the form shouldn't let them list
                                         // that many.
-                                        label: "SEATS",
+                                        label: S.createRouteSeats,
                                         value: $vm.seatCount,
                                         range: 1...vm.carType.maxPassengerSeats,
                                         step: 1,
                                         suffix: nil
                                     )
                                     NumericStepperRow(
-                                        label: "PRICE/SEAT",
+                                        label: S.createRoutePricePerSeat,
                                         value: $vm.pricePerSeat,
                                         range: 1...500,
                                         step: 1,
-                                        suffix: "RM"
+                                        suffix: S.createRoutePriceSuffix
                                     )
                                 }
                                 // Small hint that the cap depends on the car
                                 // they picked — surfaces the rule without a
                                 // disabled-state mystery.
-                                Text("Up to \(vm.carType.maxPassengerSeats) passengers in a \(vm.carType.label)")
+                                Text(S.createRouteSeatCapHint(vm.carType.maxPassengerSeats, vm.carType.label))
                                     .font(.caption2)
                                     .foregroundColor(VPalette.textHint)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1042,7 +1058,7 @@ struct CreateRouteView: View {
                         // Car type
                         VoygoCard {
                             VStack(alignment: .leading, spacing: 12) {
-                                SectionHeader(title: "Car Type")
+                                SectionHeader(title: S.createRouteSectionCarType)
                                 HStack(spacing: 8) {
                                     ForEach(CarType.allCases) { type in
                                         Button(action: {
@@ -1083,10 +1099,10 @@ struct CreateRouteView: View {
                                             .foregroundColor(VPalette.warning)
                                             .font(.subheadline.weight(.heavy))
                                         VStack(alignment: .leading, spacing: 2) {
-                                            Text("Add your vehicle to Profile")
+                                            Text(S.createRouteVehicleMissingTitle)
                                                 .font(.caption.weight(.heavy))
                                                 .foregroundColor(VPalette.text)
-                                            Text("Plate + colour go on your profile so riders can spot the right car. Set once, applies to every route.")
+                                            Text(S.createRouteVehicleMissingBody)
                                                 .font(.caption2)
                                                 .foregroundColor(VPalette.textHint)
                                         }
@@ -1113,7 +1129,7 @@ struct CreateRouteView: View {
                         // Days of week
                         VoygoCard {
                             VStack(alignment: .leading, spacing: 12) {
-                                SectionHeader(title: "Days of Week")
+                                SectionHeader(title: S.createRouteSectionDaysOfWeek)
                                 HStack(spacing: 6) {
                                     DayChip(label: "M", selected: vm.monday,    action: { vm.monday    = !vm.monday })
                                     DayChip(label: "T", selected: vm.tuesday,   action: { vm.tuesday   = !vm.tuesday })
@@ -1129,7 +1145,7 @@ struct CreateRouteView: View {
 
                         // Pickup points
                         StopsCard(
-                            title: "Pickup Points",
+                            title: S.createRouteSectionPickupPoints,
                             stops: $vm.pickupPoints,
                             newStop: $vm.newPickup,
                             icon: "mappin.circle.fill",
@@ -1144,7 +1160,7 @@ struct CreateRouteView: View {
 
                         // Drop points
                         StopsCard(
-                            title: "Drop Points",
+                            title: S.createRouteSectionDropPoints,
                             stops: $vm.dropPoints,
                             newStop: $vm.newDrop,
                             icon: "flag.checkered.circle.fill",
@@ -1160,7 +1176,7 @@ struct CreateRouteView: View {
                         // Submit
                         VStack(spacing: 10) {
                             PrimaryButton(
-                                "Save Recurring Route",
+                                S.createRouteSaveCTA,
                                 isLoading: { if case .loading = vm.createState { return true }; return false }(),
                                 isEnabled: canSaveRoute,
                                 action: vm.createRoute
@@ -1238,7 +1254,7 @@ struct CreateRouteView: View {
 
     @ViewBuilder
     private func mapPicker(for target: PickerTarget) -> some View {
-        let title = target == .start ? "Where from?" : "Where to?"
+        let title = target == .start ? S.createRoutePickerFrom : S.createRoutePickerTo
         PlacePickerSheet(
             title: title,
             onPick: { suggestion in
@@ -1279,8 +1295,8 @@ struct CreateRouteView: View {
         let color = (store.currentUser.carColor ?? "").trimmingCharacters(in: .whitespaces)
         let model = (store.currentUser.carModel ?? "").trimmingCharacters(in: .whitespaces)
         let descriptor = [color, model].filter { !$0.isEmpty }.joined(separator: " ")
-        if descriptor.isEmpty { return "Riders will see: \(plate)" }
-        return "Riders will see: \(plate) · \(descriptor)"
+        if descriptor.isEmpty { return S.createRouteVehicleHint(plate) }
+        return S.createRouteVehicleHintWithDescriptor(plate, descriptor)
     }
 }
 
@@ -1362,7 +1378,7 @@ struct NumericStepperRow: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(label) \(value). Tap to type.")
+                .accessibilityLabel(S.createRouteStepperA11y(label, value))
             }
         }
         .frame(maxWidth: .infinity)
@@ -1493,7 +1509,7 @@ private struct StopsCard: View {
                 }
 
                 HStack(spacing: 8) {
-                    VoygoTextField(label: "Add stop", text: $newStop, placeholder: "e.g. Komtar")
+                    VoygoTextField(label: S.createRouteAddStopLabel, text: $newStop, placeholder: S.createRouteAddStopPlaceholder)
                     Button(action: onAdd) {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2).foregroundColor(color)
@@ -1525,12 +1541,12 @@ private struct StopsCard: View {
                     .font(.caption.weight(.bold))
                     .foregroundColor(color)
                 if let anchor = suggestionsAnchor, !anchor.isEmpty {
-                    Text("Suggested near \(shortAnchor(anchor))")
+                    Text(S.createRouteSuggestedNear(shortAnchor(anchor)))
                         .font(.caption.weight(.bold))
                         .foregroundColor(VoygoTheme.textSecondary)
                         .lineLimit(1)
                 } else {
-                    Text("Suggested nearby")
+                    Text(S.createRouteSuggestedNearby)
                         .font(.caption.weight(.bold))
                         .foregroundColor(VoygoTheme.textSecondary)
                 }
@@ -1541,7 +1557,7 @@ private struct StopsCard: View {
             }
 
             if isLoadingSuggestions && suggestions.isEmpty {
-                Text("Looking up transit hubs…")
+                Text(S.createRouteLookingUpHubs)
                     .font(.caption)
                     .foregroundColor(VoygoTheme.textHint)
             } else {
@@ -1562,7 +1578,7 @@ private struct StopsCard: View {
                                         .font(.caption.weight(.semibold))
                                         .lineLimit(1)
                                     if isPopular {
-                                        Text("Popular")
+                                        Text(S.createRouteSuggestionPopularBadge)
                                             .font(.caption2.weight(.black))
                                             .tracking(0.3)
                                             .padding(.horizontal, 5)

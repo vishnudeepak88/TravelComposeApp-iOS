@@ -6,12 +6,27 @@ import CoreLocation
 /// How the search results list is ordered. Stored alongside the
 /// filter state in the VM so toggling between modes doesn't trigger
 /// a server round-trip.
+///
+/// IMPORTANT: rawValue is persisted in UserDefaults — do NOT change
+/// rawValue strings. For UI rendering use `displayName` which routes
+/// through `Strings.swift` for localization.
 enum CommuteSortOption: String, CaseIterable, Identifiable {
     case bestMatch  = "Best match"
     case cheapest   = "Cheapest"
     case closest    = "Closest pickup"
     case reliable   = "Most reliable"
     var id: String { rawValue }
+
+    /// Localized label for display. Uses the centralized S.* strings so
+    /// EN/MS translations apply automatically.
+    var displayName: String {
+        switch self {
+        case .bestMatch: return S.sortBestMatch
+        case .cheapest:  return S.sortCheapest
+        case .closest:   return S.sortClosestPickup
+        case .reliable:  return S.sortMostReliable
+        }
+    }
 }
 
 @MainActor
@@ -170,7 +185,7 @@ enum CommuteSortOption: String, CaseIterable, Identifiable {
                 selectedHomeLng = coordinate.longitude
                 homeSuggestions = []
             } catch {
-                errorMessage = "Unable to get your current location. Please allow precise location access in Settings and try again."
+                errorMessage = S.searchLocationDenied
             }
             isLocatingHome = false
         }
@@ -182,7 +197,7 @@ enum CommuteSortOption: String, CaseIterable, Identifiable {
             results = []
             isSearching = false
             if showValidation {
-                errorMessage = "Enter both From and To before searching routes."
+                errorMessage = S.searchMissingFromTo
             }
             return
         }
@@ -429,7 +444,7 @@ struct FindCommuteRoutesView: View {
                         if !vm.results.isEmpty || vm.isSearching {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("Best route matches")
+                                    Text(S.searchResultsTitle)
                                         .font(.callout.weight(.black))
                                         .tracking(-0.3)
                                         .foregroundColor(VPalette.text)
@@ -551,11 +566,16 @@ struct FindCommuteRoutesView: View {
     /// `voygo://` URL scheme (already registered for Billplz returns).
     private func shareRoute(_ route: RecurringRoute) {
         let deepLink = "voygo://routes/\(route.id)"
-        let text = """
-        \(route.startLocation) → \(route.endLocation) on Voygo
-        \(route.departureTime) · RM \(route.pricePerSeat)/seat · driver \(route.driverName)
-        \(deepLink)
-        """
+        // Price uses the locale-aware ringgit formatter so the RM piece
+        // matches everywhere else in the app.
+        let text = S.shareRouteTemplate(
+            start: route.startLocation,
+            end: route.endLocation,
+            time: route.departureTime,
+            price: Formatters.ringgit(route.pricePerSeat),
+            driver: route.driverName,
+            link: deepLink
+        )
         let activity = UIActivityViewController(activityItems: [text], applicationActivities: nil)
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
@@ -592,7 +612,7 @@ struct FindCommuteRoutesView: View {
                             .font(.caption2.weight(.heavy))
                             .tracking(0.3)
                             .foregroundColor(.white.opacity(0.85))
-                        Text("Find or offer recurring commute seats across Malaysia")
+                        Text(S.commuteHeroSubtitle)
                             .font(.subheadline.weight(.semibold))
                             .foregroundColor(.white.opacity(0.95))
                             .frame(maxWidth: 240, alignment: .leading)
@@ -600,9 +620,9 @@ struct FindCommuteRoutesView: View {
                     }
                     Spacer()
                     Menu {
-                        Button("My Subscriptions", action: onMySubscriptions)
-                        Button("Create Route", action: onCreateRoute)
-                        Button("Driver Dashboard", action: onDriverDashboard)
+                        Button(S.subscriptionsTitle, action: onMySubscriptions)
+                        Button(S.commuteMenuCreate, action: onCreateRoute)
+                        Button(S.commuteMenuDriverDash, action: onDriverDashboard)
                     } label: {
                         VStack(spacing: 3) {
                             ForEach(0..<3) { _ in
@@ -621,9 +641,9 @@ struct FindCommuteRoutesView: View {
                 // pill. Average price comes from active routes; "—"
                 // when we have nothing to average.
                 HStack(spacing: 8) {
-                    heroStat("\(store.routes.count)",                  label: "routes")
-                    heroStat("\(activeSubscriptionsCount)",            label: "active rides")
-                    heroStat(averageFareLabel,                          label: "avg fare")
+                    heroStat("\(store.routes.count)",                  label: S.commuteStatRoutes)
+                    heroStat("\(activeSubscriptionsCount)",            label: S.commuteStatActiveRides)
+                    heroStat(averageFareLabel,                          label: S.commuteStatAvgFare)
                 }
             }
             .padding(20)
@@ -667,9 +687,9 @@ struct FindCommuteRoutesView: View {
 
     private var modeRail: some View {
         HStack(spacing: 8) {
-            modeCard(icon: "mappin.circle.fill", title: "Find Ride", sub: "Match seats", color: VPalette.primary, action: {})
-            modeCard(icon: "plus.circle.fill",   title: "Offer Ride", sub: "Share seats", color: VPalette.secondary, action: onCreateRoute)
-            modeCard(icon: "car.fill",           title: "Driver",     sub: "Manage",     color: VPalette.accent,    action: onDriverDashboard)
+            modeCard(icon: "mappin.circle.fill", title: S.commuteActionFindRide,  sub: S.commuteActionMatchSeats,  color: VPalette.primary,   action: {})
+            modeCard(icon: "plus.circle.fill",   title: S.commuteActionOfferRide, sub: S.commuteActionShareSeats,  color: VPalette.secondary, action: onCreateRoute)
+            modeCard(icon: "car.fill",           title: S.commuteActionDriver,    sub: S.commuteActionManage,      color: VPalette.accent,    action: onDriverDashboard)
         }
     }
 
@@ -849,10 +869,17 @@ struct PolishedRouteCard: View {
                 HStack {
                     HStack(spacing: 6) {
                         Image(systemName: "person.fill").font(.caption).foregroundColor(VPalette.textSec).accessibilityHidden(true)
+                        // Seats-left line — single localized template
+                        // (was concatenated `Text("\(x)") + Text(" of \(y) seats left")`,
+                        // which doesn't translate cleanly because the
+                        // ordering and grammar differ across locales).
+                        // We trade the partial-colour highlight for
+                        // proper i18n; the success/warning colour stays
+                        // on the whole line via the seat count.
                         let warning = match.availableSeats <= 1
-                        (Text("\(match.availableSeats)").fontWeight(.heavy).foregroundColor(warning ? VPalette.warning : VPalette.success)
-                         + Text(" of \(match.route.seatCount) seats left").foregroundColor(VPalette.textSec))
+                        Text(S.searchSeatsLeft(match.availableSeats, match.route.seatCount))
                             .font(.caption2.weight(.semibold))
+                            .foregroundColor(warning ? VPalette.warning : VPalette.textSec)
                     }
                     Spacer()
                     HStack(spacing: 4) {
@@ -927,8 +954,8 @@ private struct MapsStyleCommuteSearchPanel: View {
                 VStack(spacing: 10) {
                     mapsSearchRow(
                         field: .home,
-                        title: "From",
-                        placeholder: "Home, current location, or pickup",
+                        title: S.searchFrom,
+                        placeholder: S.searchFromPlaceholder,
                         text: $homeQuery,
                         icon: "location.fill",
                         canClear: !homeQuery.isEmpty,
@@ -938,8 +965,8 @@ private struct MapsStyleCommuteSearchPanel: View {
 
                     mapsSearchRow(
                         field: .office,
-                        title: "To",
-                        placeholder: "Office or destination",
+                        title: S.searchTo,
+                        placeholder: S.searchToPlaceholder,
                         text: $officeQuery,
                         icon: "magnifyingglass",
                         canClear: !officeQuery.isEmpty,
@@ -960,10 +987,10 @@ private struct MapsStyleCommuteSearchPanel: View {
                                 .foregroundColor(VoygoTheme.primary)
                         }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Use Current Location")
+                            Text(S.searchUseCurrentLocation)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundColor(VoygoTheme.textPrimary)
-                            Text("Set your starting point from GPS")
+                            Text(S.searchUseCurrentLocationHint)
                                 .font(.caption)
                                 .foregroundColor(VoygoTheme.textHint)
                         }
@@ -981,11 +1008,11 @@ private struct MapsStyleCommuteSearchPanel: View {
             suggestionContent
 
             HStack(spacing: 10) {
-                CompactTimeField(title: "Earliest", text: $earliestTime, placeholder: "07:00")
-                CompactTimeField(title: "Latest", text: $latestTime, placeholder: "09:30")
+                CompactTimeField(title: S.searchEarliest, text: $earliestTime, placeholder: "07:00")
+                CompactTimeField(title: S.searchLatest, text: $latestTime, placeholder: "09:30")
             }
 
-            PrimaryButton("Search Routes", isLoading: isSearching, action: onSearch)
+            PrimaryButton(S.searchCTA, isLoading: isSearching, action: onSearch)
 
             if let errorMessage {
                 Text(errorMessage)
@@ -1023,7 +1050,7 @@ private struct MapsStyleCommuteSearchPanel: View {
         if isActiveLoading {
             HStack(spacing: 10) {
                 ProgressView().tint(VoygoTheme.primary)
-                Text("Searching nearby places")
+                Text(S.searchLookingNearby)
                     .font(.subheadline)
                     .foregroundColor(VoygoTheme.textSecondary)
                 Spacer()
@@ -1273,22 +1300,37 @@ struct CommuteFiltersBar: View {
     @State private var priceCapEnabled: Bool = false
     @State private var priceCap: Double = 15
 
+    /// Locale-aware weekday letters, ordered Mon-first (Mon → Sun) to
+    /// match the existing chip layout. `Calendar.veryShortWeekdaySymbols`
+    /// starts on Sunday (index 0) regardless of `firstWeekday`, so we
+    /// reslice to put Monday at index 0. This avoids the ambiguous
+    /// "T" / "S" pairs in English by deferring to the localized symbol
+    /// set (e.g. BM gives "I S R K J S A" — riders can tell the days
+    /// apart at a glance).
+    private var weekdayLetters: [String] {
+        let symbols = Calendar.current.veryShortWeekdaySymbols
+        // Sun, Mon, Tue, Wed, Thu, Fri, Sat → Mon, Tue, Wed, Thu, Fri, Sat, Sun
+        guard symbols.count == 7 else { return symbols }
+        return Array(symbols[1...6]) + [symbols[0]]
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionLabel("RUN ON")
+            sectionLabel(S.filterRunOn)
             HStack(spacing: 6) {
-                dayChip("M", binding: $days.monday)
-                dayChip("T", binding: $days.tuesday)
-                dayChip("W", binding: $days.wednesday)
-                dayChip("T", binding: $days.thursday)
-                dayChip("F", binding: $days.friday)
-                dayChip("S", binding: $days.saturday)
-                dayChip("S", binding: $days.sunday)
+                let letters = weekdayLetters
+                dayChip(letters[0], binding: $days.monday)
+                dayChip(letters[1], binding: $days.tuesday)
+                dayChip(letters[2], binding: $days.wednesday)
+                dayChip(letters[3], binding: $days.thursday)
+                dayChip(letters[4], binding: $days.friday)
+                dayChip(letters[5], binding: $days.saturday)
+                dayChip(letters[6], binding: $days.sunday)
             }
 
-            sectionLabel("BUDGET")
+            sectionLabel(S.filterBudget)
             HStack(spacing: 8) {
-                Toggle(isOn: $priceCapEnabled) { Text("Cap").font(.caption.weight(.semibold)) }
+                Toggle(isOn: $priceCapEnabled) { Text(S.filterCap).font(.caption.weight(.semibold)) }
                     .toggleStyle(.switch).tint(VPalette.primary)
                     .fixedSize()
                 if priceCapEnabled {
@@ -1298,7 +1340,7 @@ struct CommuteFiltersBar: View {
                         .font(.caption.weight(.heavy)).foregroundColor(VPalette.primary)
                         .frame(width: 50, alignment: .trailing)
                 } else {
-                    Text("Any price")
+                    Text(S.filterAnyPrice)
                         .font(.caption).foregroundColor(VPalette.textHint)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1314,12 +1356,12 @@ struct CommuteFiltersBar: View {
                 }
             }
 
-            sectionLabel("SORT BY")
+            sectionLabel(S.filterSortBy)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(CommuteSortOption.allCases) { option in
                         Button { sortBy = option; onChange(true) } label: {
-                            Text(option.rawValue)
+                            Text(option.displayName)
                                 .font(.caption.weight(.heavy))
                                 .foregroundColor(sortBy == option ? .white : VPalette.text)
                                 .padding(.horizontal, 12).padding(.vertical, 7)
@@ -1372,20 +1414,20 @@ struct CommuteEmptyState: View {
             Image(systemName: "map")
                 .font(.largeTitle.weight(.semibold))
                 .foregroundColor(VPalette.textHint)
-            Text("No routes for that exact corridor — yet")
+            Text(S.searchEmptyTitle)
                 .font(.subheadline.weight(.heavy))
                 .foregroundColor(VPalette.text)
                 .multilineTextAlignment(.center)
-            Text("Penang's pilot still has gaps. Try one of these:")
+            Text(S.searchEmptyBody)
                 .font(.caption)
                 .foregroundColor(VPalette.textSec)
                 .multilineTextAlignment(.center)
             VStack(spacing: 8) {
-                VPrimaryButton("Tell drivers I want this corridor",
+                VPrimaryButton(S.searchEmptyRequest,
                                icon: "hand.raised.fill",
                                action: onRequest)
                 Button(action: onWiden) {
-                    Text("Try a wider time window (06:00–10:00)")
+                    Text(S.searchEmptyWiden)
                         .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.primary)
                         .padding(.vertical, 10)
@@ -1394,7 +1436,7 @@ struct CommuteEmptyState: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }.buttonStyle(.plain)
                 Button(action: onReset) {
-                    Text("Reset filters")
+                    Text(S.searchEmptyReset)
                         .font(.caption.weight(.semibold))
                         .foregroundColor(VPalette.textSec)
                 }.buttonStyle(.plain)

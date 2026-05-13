@@ -103,9 +103,9 @@ import SwiftUI
                             // so we pause and tell the rider to retry.
                             let pauseResult = await store.updateSubscription(id: subscriptionId, status: .paused)
                             if case .failure(let pauseErr) = pauseResult {
-                                subscribeState = .error("Payment couldn't start and we couldn't pause: \(pauseErr.localizedDescription). Cancel from My Subscriptions before retrying.")
+                                subscribeState = .error(S.subscribePauseFailed(pauseErr.localizedDescription))
                             } else {
-                                subscribeState = .error("Payment couldn't start. Subscription paused — retry from My Subscriptions.")
+                                subscribeState = .error(S.subscribePauseRetry)
                             }
                             load(routeId: route.id)
                         }
@@ -120,9 +120,9 @@ import SwiftUI
                         // we even rendered. Pause + surface error.
                         let pauseResult = await store.updateSubscription(id: subscriptionId, status: .paused)
                         if case .failure(let pauseErr) = pauseResult {
-                            subscribeState = .error("Payment declined and pause also failed: \(pauseErr.localizedDescription). Cancel from My Subscriptions before retrying.")
+                            subscribeState = .error(S.subscribeDeclinedPauseFailed(pauseErr.localizedDescription))
                         } else {
-                            subscribeState = .error("Payment declined. Subscription paused — retry from My Subscriptions.")
+                            subscribeState = .error(S.subscribeDeclinedPaused)
                         }
                         load(routeId: route.id)
                     }
@@ -136,10 +136,10 @@ import SwiftUI
                     let pauseResult = await store.updateSubscription(id: subscriptionId, status: .paused)
                     if case .failure(let pauseErr) = pauseResult {
                         subscribeState = .error(
-                            "Payment failed (\(err.localizedDescription)) and we couldn't pause the subscription either: \(pauseErr.localizedDescription). Please cancel from My Subscriptions before retrying."
+                            S.subscribeFailedPauseFailed(err.localizedDescription, pauseErr.localizedDescription)
                         )
                     } else {
-                        subscribeState = .error("Subscription paused — payment failed: \(err.localizedDescription). Retry from My Subscriptions.")
+                        subscribeState = .error(S.subscribePaymentFailed(err.localizedDescription))
                     }
                     load(routeId: route.id)
                 }
@@ -174,9 +174,9 @@ import SwiftUI
             let result = await store.updateSubscription(id: id, status: .paused)
             await MainActor.run {
                 if case .failure(let err) = result {
-                    self.subscribeState = .error("Payment cancelled — pause also failed: \(err.localizedDescription).")
+                    self.subscribeState = .error(S.subscribeCancelledPauseFailed(err.localizedDescription))
                 } else {
-                    self.subscribeState = .error("Payment not completed. Subscription paused — retry from My Subscriptions.")
+                    self.subscribeState = .error(S.subscribeNotCompleted)
                 }
                 if let routeId = self.route?.id { self.load(routeId: routeId) }
             }
@@ -217,7 +217,7 @@ struct RouteDetailsView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Route Details", onBack: onBack)
+                VPolishedNavBar(title: S.routeDetailsTitle, onBack: onBack)
 
                 if vm.isLoading {
                     // Page-shaped skeleton while the route loads.
@@ -253,31 +253,31 @@ struct RouteDetailsView: View {
                                         Spacer()
                                         VStack(alignment: .trailing) {
                                             Text(Formatters.ringgit(route.pricePerSeat)).font(.title2.bold()).foregroundColor(VoygoTheme.primary)
-                                            Text("per seat").font(.caption2).foregroundColor(VoygoTheme.textHint)
+                                            Text(S.homePerSeat).font(.caption2).foregroundColor(VoygoTheme.textHint)
                                         }
                                     }
 
                                     Divider().background(VoygoTheme.cardBorder)
 
-                                    RouteInfoRow(icon: "arrow.right.circle.fill", label: "Route",
+                                    RouteInfoRow(icon: "arrow.right.circle.fill", label: S.routeInfoRoute,
                                                  value: "\(route.startLocation) → \(route.endLocation)")
-                                    RouteInfoRow(icon: "clock.fill", label: "Departure", value: route.departureTime)
-                                    RouteInfoRow(icon: "calendar", label: "Schedule", value: route.daysOfWeek.shortLabel)
-                                    RouteInfoRow(icon: route.carType.icon, label: "Car type", value: route.carType.label)
-                                    RouteInfoRow(icon: "person.3.fill", label: "Available seats", value: "\(vm.availableSeats) of \(route.seatCount)")
-                                    RouteInfoRow(icon: "person.badge.plus.fill", label: "Active riders", value: "\(vm.subscriptions.count)")
+                                    RouteInfoRow(icon: "clock.fill", label: S.routeInfoDeparture, value: route.departureTime)
+                                    RouteInfoRow(icon: "calendar", label: S.routeInfoSchedule, value: route.daysOfWeek.shortLabel)
+                                    RouteInfoRow(icon: route.carType.icon, label: S.routeInfoCarType, value: route.carType.label)
+                                    RouteInfoRow(icon: "person.3.fill", label: S.routeInfoAvailableSeats, value: S.routeInfoSeatsOf(vm.availableSeats, route.seatCount))
+                                    RouteInfoRow(icon: "person.badge.plus.fill", label: S.routeInfoActiveRiders, value: "\(vm.subscriptions.count)")
 
                                     Divider().background(VoygoTheme.cardBorder)
 
                                     // Reliability
                                     VStack(alignment: .leading, spacing: 8) {
-                                        Text("Driver Reliability").font(.subheadline.bold()).foregroundColor(VoygoTheme.textPrimary)
+                                        Text(S.routeInfoDriverReliability).font(.subheadline.bold()).foregroundColor(VoygoTheme.textPrimary)
                                         HStack(spacing: 0) {
-                                            ReliabilityMetric(label: "On-time", value: "\(Int(route.reliability.onTimeRate * 100))%")
+                                            ReliabilityMetric(label: S.routeInfoOnTime, value: "\(Int(route.reliability.onTimeRate * 100))%")
                                             Spacer()
-                                            ReliabilityMetric(label: "Cancel rate", value: "\(Int(route.reliability.cancellationRate * 100))%")
+                                            ReliabilityMetric(label: S.routeInfoCancelRate, value: "\(Int(route.reliability.cancellationRate * 100))%")
                                             Spacer()
-                                            ReliabilityMetric(label: "Repeat riders", value: "\(route.reliability.repeatRiders)")
+                                            ReliabilityMetric(label: S.routeInfoRepeatRiders, value: "\(route.reliability.repeatRiders)")
                                         }
                                     }
                                 }
@@ -287,7 +287,7 @@ struct RouteDetailsView: View {
                             // Pickup selection
                             VoygoCard {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    SectionHeader(title: "Pickup Point")
+                                    SectionHeader(title: S.routePickupPoint)
                                     ForEach(route.pickupPoints) { point in
                                         Button(action: { vm.selectedPickupId = point.id }) {
                                             HStack(spacing: 12) {
@@ -312,7 +312,7 @@ struct RouteDetailsView: View {
                             // Drop selection
                             VoygoCard {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    SectionHeader(title: "Drop Point")
+                                    SectionHeader(title: S.routeDropPoint)
                                     ForEach(route.dropPoints) { point in
                                         Button(action: { vm.selectedDropId = point.id }) {
                                             HStack(spacing: 12) {
@@ -337,11 +337,11 @@ struct RouteDetailsView: View {
                             // Subscription config
                             VoygoCard {
                                 VStack(alignment: .leading, spacing: 12) {
-                                    SectionHeader(title: "Subscription")
-                                    VoygoTextField(label: "Number of days", text: $vm.numberOfDays, placeholder: "30", keyboardType: .numberPad)
+                                    SectionHeader(title: S.subscribeSection)
+                                    VoygoTextField(label: S.subscribeNumberOfDays, text: $vm.numberOfDays, placeholder: "30", keyboardType: .numberPad)
                                     HStack {
                                         Image(systemName: "calendar.badge.clock").foregroundColor(VoygoTheme.textHint).font(.caption)
-                                        Text("Starts today · \(vm.numberOfDays.isEmpty ? "30" : vm.numberOfDays) days")
+                                        Text(S.subscribeStartsTodayDays(Int(vm.numberOfDays) ?? 30))
                                             .font(.caption).foregroundColor(VoygoTheme.textHint)
                                     }
                                 }
@@ -350,10 +350,16 @@ struct RouteDetailsView: View {
 
                             // Subscription tier picker — daily / monthly / quarterly.
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Tier").font(.caption.weight(.bold)).foregroundColor(VoygoTheme.textSecondary)
+                                Text(S.subscribeTier).font(.caption.weight(.bold)).foregroundColor(VoygoTheme.textSecondary)
                                 HStack(spacing: 6) {
                                     ForEach(SubscriptionTier.allCases) { tier in
                                         let on = tier == vm.selectedTier
+                                        // Derive discount % from the single source of
+                                        // truth in `Trust.swift` so a future re-pricing
+                                        // (e.g. monthly drops to 12% off) updates the
+                                        // chip copy automatically. Daily is full price,
+                                        // so it gets the "Try it" callout instead.
+                                        let discountPercent = Int((1.0 - tier.discountFactor) * 100.0)
                                         Button {
                                             withAnimation(.easeInOut(duration: 0.15)) {
                                                 vm.selectedTier = tier
@@ -362,7 +368,7 @@ struct RouteDetailsView: View {
                                             VStack(spacing: 1) {
                                                 Text(tier.label)
                                                     .font(.footnote.weight(.heavy))
-                                                Text(tier == .daily ? "Try it" : tier == .monthly ? "10% off" : "15% off")
+                                                Text(discountPercent <= 0 ? S.subscribeTierTry : S.subscribeTierDiscount(percent: discountPercent))
                                                     .font(.caption2.weight(.semibold))
                                                     .opacity(0.85)
                                             }
@@ -376,7 +382,7 @@ struct RouteDetailsView: View {
                                     }
                                 }
                                 HStack {
-                                    Text("Total")
+                                    Text(S.subscribeTotal)
                                         .font(.caption.weight(.bold))
                                         .foregroundColor(VoygoTheme.textSecondary)
                                     Spacer()
@@ -410,12 +416,12 @@ struct RouteDetailsView: View {
                                     case .success:
                                         HStack {
                                             Image(systemName: "checkmark.circle.fill").foregroundColor(VoygoTheme.success)
-                                            Text("Subscription active!").font(.subheadline).foregroundColor(VoygoTheme.success)
+                                            Text(S.subscriptionActive).font(.subheadline).foregroundColor(VoygoTheme.success)
                                         }
                                     case .charging:
                                         HStack {
                                             ProgressView().tint(VoygoTheme.primary)
-                                            Text("Charging payment…").font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
+                                            Text(S.subscribeCharging).font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
                                         }
                                     case .error(let msg):
                                         VErrorBanner(message: msg, onRetry: vm.subscribe)
@@ -437,10 +443,10 @@ struct RouteDetailsView: View {
                                                 .font(.footnote.weight(.heavy))
                                                 .foregroundColor(VoygoTheme.accent)
                                             VStack(alignment: .leading, spacing: 1) {
-                                                Text("Book solo for a day")
+                                                Text(S.subscribeBookSolo)
                                                     .font(.footnote.weight(.heavy))
                                                     .foregroundColor(VoygoTheme.textPrimary)
-                                                Text("\(Formatters.ringgit(route.pricePerSeat * 2)) — whole car, no other passengers")
+                                                Text(S.subscribeSoloPrice(route.pricePerSeat * 2))
                                                     .font(.caption2)
                                                     .foregroundColor(VoygoTheme.textSecondary)
                                             }
@@ -470,7 +476,7 @@ struct RouteDetailsView: View {
                         vm.load(routeId: routeId)
                     }
                 } else {
-                    EmptyStateView(icon: "questionmark.circle", title: "Route not found", subtitle: "This route may no longer be available")
+                    EmptyStateView(icon: "questionmark.circle", title: S.routeNotFound, subtitle: S.routeNotFoundBody)
                 }
             }
         }
@@ -503,8 +509,8 @@ struct RouteDetailsView: View {
 
     private var subscribeButtonTitle: String {
         switch vm.subscribeState {
-        case .loading:   return "Creating subscription…"
-        case .charging:  return "Charging payment…"
+        case .loading:   return S.subscribeCreating
+        case .charging:  return S.subscribeCharging
         default:         return S.subscribeAndPay(amountMyr: vm.subscriptionTotalMyr)
         }
     }

@@ -38,7 +38,7 @@ struct KycVerificationView: View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Identity Verification", kicker: "Trust & safety", onBack: onBack)
+                VPolishedNavBar(title: S.kycTitle, kicker: S.kycKicker, onBack: onBack)
 
                 ScrollView {
                     VStack(spacing: 16) {
@@ -118,10 +118,18 @@ struct KycVerificationView: View {
 
     private var roleSwitcher: some View {
         VStack(alignment: .leading, spacing: 8) {
-            VKicker(text: "Who's verifying").padding(.leading, 4)
+            VKicker(text: S.kycWhoVerifying).padding(.leading, 4)
             HStack(spacing: 6) {
-                roleChip(label: "Rider", value: .rider, subtitle: "3 documents")
-                roleChip(label: "Driver", value: .driver, subtitle: "7 documents")
+                // Counts derive from the checklist so they never drift
+                // out of sync with what the document list actually
+                // renders. The trailing "documents" word is pluralised
+                // via `S.kycDocsCount(_:)`.
+                roleChip(label: S.kycRider,
+                         value: .rider,
+                         subtitle: S.kycDocsCount(KycDocumentKind.riderRequired.count))
+                roleChip(label: S.kycDriver,
+                         value: .driver,
+                         subtitle: S.kycDocsCount(KycDocumentKind.driverRequired.count))
             }
         }
     }
@@ -154,7 +162,7 @@ struct KycVerificationView: View {
         }()
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                VKicker(text: "Documents uploaded")
+                VKicker(text: S.kycDocsUploaded)
                 Spacer()
                 Text("\(pair.uploaded) / \(pair.required)")
                     .font(.caption.weight(.heavy)).foregroundColor(VPalette.text)
@@ -239,7 +247,7 @@ struct KycVerificationView: View {
             // production we don't claim "encrypted at rest". The
             // backend gates uploads behind `KYC_S3_BUCKET` in
             // production so we can't lie by accident.
-            Text("We use your documents to verify identity, run a quick safety check, and meet Bank Negara KYC rules. Only trust & safety reviewers see your photos.")
+            Text(S.kycFooterBlurb)
                 .font(.caption2)
                 .foregroundColor(VPalette.textHint)
                 .multilineTextAlignment(.center)
@@ -248,7 +256,7 @@ struct KycVerificationView: View {
                 Button {
                     Task { await store.submitKycForReview() }
                 } label: {
-                    Text("Mark verification submitted")
+                    Text(S.kycSubmitForReview)
                         .font(.footnote.weight(.heavy))
                         .foregroundColor(VPalette.primary)
                 }
@@ -308,7 +316,7 @@ struct KycVerificationView: View {
             return
         } catch {
             info = nil
-            self.error = "Upload failed. \(error.localizedDescription)"
+            self.error = S.kycUploadFailed(error.localizedDescription)
             return
         }
 
@@ -316,10 +324,10 @@ struct KycVerificationView: View {
         switch result {
         case .success:
             error = nil
-            info = "\(kind.label) uploaded — review pending"
+            info = S.kycUploadedToast(kind.label)
         case .failure(let err):
             info = nil
-            self.error = err.errorDescription ?? "Couldn't link upload"
+            self.error = err.errorDescription ?? S.kycUploadLinkFailed
         }
     }
 
@@ -345,19 +353,19 @@ struct KycVerificationView: View {
 
     private var statusTitle: String {
         switch store.kycStatus {
-        case .approved: return "You're fully verified"
-        case .pending:  return "Verification under review"
-        case .rejected: return "Verification rejected"
-        default:        return "Verify to start riding"
+        case .approved: return S.kycStatusApprovedTitle
+        case .pending:  return S.kycStatusPendingTitle
+        case .rejected: return S.kycStatusRejectedTitle
+        default:        return S.kycStatusNotStartedTitle
         }
     }
 
     private var statusSubtitle: String {
         switch store.kycStatus {
-        case .approved: return "MyKad on file · trusted account"
-        case .pending:  return "Most reviews finish in 24–48 hours"
-        case .rejected: return "Resubmit the rejected docs below to retry"
-        default:        return "MyKad + selfie covers riders. Drivers add license + vehicle."
+        case .approved: return S.kycStatusApprovedSubtitle
+        case .pending:  return S.kycStatusPendingSubtitle
+        case .rejected: return S.kycStatusRejectedSubtitle
+        default:        return S.kycStatusNotStartedSubtitle
         }
     }
 
@@ -371,10 +379,10 @@ struct KycVerificationView: View {
                 .font(.subheadline.weight(.heavy))
                 .foregroundColor(VPalette.warning)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Stuck for over 48 hours?")
+                Text(S.kycStuckTitle)
                     .font(.footnote.weight(.heavy))
                     .foregroundColor(VPalette.text)
-                Text("Email support@voygo.app with your name and we'll prioritise your review.")
+                Text(S.kycStuckBody)
                     .font(.caption2)
                     .foregroundColor(VPalette.textSec)
                 Button {
@@ -385,7 +393,7 @@ struct KycVerificationView: View {
                     // the user can paste into Gmail / Outlook / etc.
                     SafeOpen.mailto("support@voygo.app", subject: "KYC review stuck")
                 } label: {
-                    Text("Email support →")
+                    Text(S.kycEmailSupport)
                         .font(.caption.weight(.heavy))
                         .foregroundColor(VPalette.warning)
                 }
@@ -402,12 +410,15 @@ struct KycVerificationView: View {
 }
 
 private extension KycStatus {
+    /// Visible badge label on the status card. Wired through the
+    /// localized `profile.kyc.badge.*` keys so EN and MS stay in sync
+    /// with the badge text shown on the Profile screen.
     var label: String {
         switch self {
-        case .approved: return "Verified"
-        case .pending:  return "Pending"
-        case .rejected: return "Rejected"
-        case .notStarted: return "Not Started"
+        case .approved: return S.profileKycBadgeVerified
+        case .pending:  return S.profileKycBadgePending
+        case .rejected: return S.profileKycBadgeRejected
+        case .notStarted: return S.profileKycBadgeNotStarted
         }
     }
 }

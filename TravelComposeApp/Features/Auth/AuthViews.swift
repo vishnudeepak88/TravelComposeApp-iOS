@@ -54,9 +54,9 @@ struct AuthPhoneView: View {
                     }
 
                     HStack(spacing: 8) {
-                        featureChip(icon: "clock.fill",  label: "Daily routes")
-                        featureChip(icon: "shield.fill", label: "Trusted drivers")
-                        featureChip(icon: "person.fill", label: "Reserve seats")
+                        featureChip(icon: "clock.fill",  label: S.authFeatureDailyRoutes)
+                        featureChip(icon: "shield.fill", label: S.authFeatureTrustedDrivers)
+                        featureChip(icon: "person.fill", label: S.authFeatureReserveSeats)
                     }
 
                     VStack(alignment: .center, spacing: 6) {
@@ -71,7 +71,7 @@ struct AuthPhoneView: View {
                     .frame(maxWidth: .infinity)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        VKicker(text: "Phone number")
+                        VKicker(text: S.authPhoneFieldLabel)
                         HStack(spacing: 0) {
                             HStack(spacing: 6) {
                                 Text("🇲🇾").font(.callout)
@@ -134,7 +134,7 @@ struct AuthPhoneView: View {
                     if AppCapabilities.signInWithAppleAvailable {
                         HStack(spacing: 12) {
                             Rectangle().fill(VPalette.border).frame(height: 1)
-                            Text("or")
+                            Text(S.authOr)
                                 .font(.caption.weight(.bold))
                                 .foregroundColor(VPalette.textHint)
                             Rectangle().fill(VPalette.border).frame(height: 1)
@@ -153,7 +153,7 @@ struct AuthPhoneView: View {
                         .signInWithAppleButtonStyle(siwaStyle)
                         .frame(height: 50)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .accessibilityHint(Text("Sign in using your Apple ID"))
+                        .accessibilityHint(Text(S.authAppleSignInHint))
 
                         if let appleStatus {
                             Text(appleStatus)
@@ -255,7 +255,7 @@ struct AuthPhoneView: View {
         switch result {
         case .success(let auth):
             guard let credential = auth.credential as? ASAuthorizationAppleIDCredential else {
-                appleStatus = "Apple ID credential missing."
+                appleStatus = S.authAppleCredentialMissing
                 return
             }
             // Apple gives us:
@@ -266,7 +266,7 @@ struct AuthPhoneView: View {
             // For pilot we surface to the user that we received it;
             // backend exchange lands when `/auth/apple` ships.
             let suffix = String(credential.user.suffix(8))
-            appleStatus = "Apple credential received (•••\(suffix)). Backend exchange coming soon — please use phone OTP for now."
+            appleStatus = S.authAppleCredentialReceived(suffix)
             // Telemetry breadcrumb so we can measure how many users
             // attempt SIWA before backend exchange exists.
             Telemetry.track("auth.apple.credential_received")
@@ -275,7 +275,7 @@ struct AuthPhoneView: View {
                 // User cancelled — don't show an error banner, just clear.
                 appleStatus = nil
             } else {
-                appleStatus = "Sign in with Apple failed: \(error.localizedDescription)"
+                appleStatus = S.authAppleSignInFailed(error.localizedDescription)
             }
         }
     }
@@ -354,7 +354,7 @@ struct AuthOtpView: View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Verify Number", onBack: onBack)
+                VPolishedNavBar(title: S.authVerifyNumberNav, onBack: onBack)
 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -366,20 +366,17 @@ struct AuthOtpView: View {
                                     .foregroundColor(VPalette.primary)
                             }
                             VStack(spacing: 6) {
-                                Text("Verify Phone Number")
+                                Text(S.authOtpTitle)
                                     .font(.title3.weight(.black))
                                     .tracking(-0.4)
                                     .foregroundColor(VPalette.text)
-                                Group {
-                                    Text("Enter the 6-digit code sent to ")
-                                    + Text(phoneNumber).fontWeight(.heavy).foregroundColor(VPalette.text)
-                                }
-                                .font(.subheadline)
-                                .foregroundColor(VPalette.textSec)
-                                .multilineTextAlignment(.center)
+                                Text(S.authOtpBody(phoneNumber))
+                                    .font(.subheadline)
+                                    .foregroundColor(VPalette.textSec)
+                                    .multilineTextAlignment(.center)
 
                                 if let dev = store.devOtpCode {
-                                    Text("Dev code: \(dev)")
+                                    Text(S.authOtpDevCode(dev))
                                         .font(.caption2.weight(.heavy))
                                         .foregroundColor(VPalette.textHint)
                                 }
@@ -394,7 +391,7 @@ struct AuthOtpView: View {
                                 .padding(.horizontal, 24)
                         }
 
-                        VPrimaryButton("Verify", isLoading: isLoading, isEnabled: otp.count == 6) {
+                        VPrimaryButton(S.authVerify, isLoading: isLoading, isEnabled: otp.count == 6) {
                             verify()
                         }
                         .padding(.horizontal, 24)
@@ -420,11 +417,11 @@ struct AuthOtpView: View {
                             }
                         } label: {
                             if timeLeft > 0 {
-                                (Text("Resend code in ").foregroundColor(VPalette.textHint)
-                                 + Text("0:\(String(format: "%02d", timeLeft))").fontWeight(.heavy).foregroundColor(VPalette.text))
+                                Text(S.authResendIn(timeLeft))
                                     .font(.footnote)
+                                    .foregroundColor(VPalette.textHint)
                             } else {
-                                Text(isResending ? "Resending…" : "Resend Code")
+                                Text(isResending ? S.authResending : S.authResendCode)
                                     .font(.footnote.weight(.heavy))
                                     .foregroundColor(VPalette.primary)
                             }
@@ -511,7 +508,7 @@ struct AuthOtpView: View {
                             )
                         if filled {
                             Text(ch)
-                                .font(.system(size: 22, weight: .black, design: .monospaced))
+                                .font(.system(.title3, design: .monospaced).weight(.black))
                                 .foregroundColor(VPalette.primary)
                         } else if active {
                             Rectangle().fill(VPalette.primary).frame(width: 1.5, height: 22)
@@ -543,17 +540,17 @@ struct AuthOtpView: View {
         .onTapGesture { otpFocused = true }
         .onAppear { otpFocused = true }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("One-time code"))
+        .accessibilityLabel(Text(S.authOtpA11yLabel))
         // Read back "3 of 6 entered" rather than the raw digits —
         // protects user privacy when VoiceOver is paired with a
         // speaker, and reduces verbal noise for sighted-with-VO
         // users.
         .accessibilityValue(Text(
             otp.isEmpty
-                ? "Empty"
-                : "\(otp.count) of 6 digits entered"
+                ? S.authOtpA11yEmpty
+                : S.authOtpA11yEntered(otp.count)
         ))
-        .accessibilityHint(Text("Tap to enter the six-digit code sent to your phone"))
+        .accessibilityHint(Text(S.authOtpA11yHint))
     }
 
     @FocusState private var otpFocused: Bool

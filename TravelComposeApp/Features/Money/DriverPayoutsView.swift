@@ -22,7 +22,7 @@ struct DriverPayoutsView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "This week", kicker: "Driver payouts", onBack: onBack)
+                VPolishedNavBar(title: S.driverPayoutsNavTitle, kicker: S.driverPayoutsKicker, onBack: onBack)
 
                 if isLoading && store.payout == nil {
                     LoadingView()
@@ -30,16 +30,28 @@ struct DriverPayoutsView: View {
                     ScrollView {
                         VStack(spacing: 16) {
                             stripeBanner
-                            if let payout = store.payout {
+                            if let payout = store.payout, payout.ridesCount > 0 {
                                 HeaderCard(payout: payout)
                                 BreakdownCard(payout: payout)
                                 ReliabilityCard(payout: payout)
                                 FootnoteCard()
+                            } else if store.payout != nil {
+                                // Zero-rides week: the full breakdown
+                                // is a row of zeros and a 0% on-time
+                                // signal. Drop down to the same
+                                // empty-state pattern as never-driven
+                                // so the page doesn't trip the driver
+                                // into thinking something is broken.
+                                EmptyStateView(
+                                    icon: "banknote",
+                                    title: S.driverPayoutsZeroRidesTitle,
+                                    subtitle: S.driverPayoutsZeroRidesBody
+                                )
                             } else {
                                 EmptyStateView(
                                     icon: "banknote",
-                                    title: "No earnings yet",
-                                    subtitle: "Drive a route this week and your payout will show up here on Tuesday."
+                                    title: S.driverPayoutsEmptyTitle,
+                                    subtitle: S.driverPayoutsEmptyBody
                                 )
                             }
                         }
@@ -82,9 +94,9 @@ struct DriverPayoutsView: View {
             case "PENDING":
                 payoutsBanner(
                     icon: "creditcard.fill",
-                    title: "Set up bank payouts",
-                    subtitle: "Stripe holds it briefly while your bank verifies. Takes ~3 minutes.",
-                    cta: "Continue setup",
+                    title: S.driverPayoutsConnectPendingTitle,
+                    subtitle: S.driverPayoutsConnectPendingBody,
+                    cta: S.driverPayoutsConnectPendingCTA,
                     color: VPalette.primary,
                     container: VPalette.primaryContainer
                 ) {
@@ -95,8 +107,8 @@ struct DriverPayoutsView: View {
             case "UNCONFIGURED":
                 payoutsBanner(
                     icon: "clock.arrow.circlepath",
-                    title: "Bank payouts launching soon",
-                    subtitle: "We'll notify drivers when Stripe Connect is enabled. Earnings keep accruing in the meantime.",
+                    title: S.driverPayoutsConnectComingTitle,
+                    subtitle: S.driverPayoutsConnectComingBody,
                     cta: nil,
                     color: VPalette.warning,
                     container: VPalette.warningContainer,
@@ -178,12 +190,12 @@ private struct HeaderCard: View {
     var body: some View {
         VoygoCard {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Week of \(payout.weekStart) → \(payout.weekEnd)")
+                Text(S.driverPayoutsWeekOf(payout.weekStart, payout.weekEnd))
                     .font(.caption.weight(.semibold))
                     .foregroundColor(VoygoTheme.textHint)
 
                 HStack(alignment: .firstTextBaseline) {
-                    Text("Net payout")
+                    Text(S.driverPayoutsNetPayout)
                         .font(.subheadline.weight(.semibold))
                         .foregroundColor(VoygoTheme.textSecondary)
                     Spacer()
@@ -207,9 +219,9 @@ private struct HeaderCard: View {
 
     private var footerText: String {
         if payout.status == "PAID" {
-            return "Paid out · landing in your bank within 24h"
+            return S.driverPayoutsPaidOut
         }
-        return "Pays out by Tuesday 5pm"
+        return S.driverPayoutsPaysOutBy
     }
 }
 
@@ -219,19 +231,19 @@ private struct BreakdownCard: View {
     var body: some View {
         VoygoCard {
             VStack(spacing: 10) {
-                row("Rides completed", "\(payout.ridesCount)")
-                row("Seats filled", "\(payout.seatsFilled)")
+                row(S.driverPayoutsRidesCompleted, "\(payout.ridesCount)")
+                row(S.driverPayoutsSeatsFilled, "\(payout.seatsFilled)")
                 Divider().background(VoygoTheme.cardBorder)
-                row("Gross earnings", Formatters.ringgit(payout.grossMyr))
-                row("Voygo fee", Formatters.ringgitSigned(payout.voygoFeeMyr, debit: true), isNegative: true)
+                row(S.driverPayoutsGrossEarnings, Formatters.ringgit(payout.grossMyr))
+                row(S.driverPayoutsVoygoFee, Formatters.ringgitSigned(payout.voygoFeeMyr, debit: true), isNegative: true)
                 if payout.penaltyMyr > 0 {
-                    row("Penalties held", Formatters.ringgitSigned(payout.penaltyMyr, debit: true), isNegative: true)
+                    row(S.driverPayoutsPenaltiesHeld, Formatters.ringgitSigned(payout.penaltyMyr, debit: true), isNegative: true)
                 }
                 if payout.streakBonusMyr > 0 {
-                    row("Streak bonus", Formatters.ringgitSigned(payout.streakBonusMyr, debit: false), isPositive: true)
+                    row(S.driverPayoutsStreakBonus, Formatters.ringgitSigned(payout.streakBonusMyr, debit: false), isPositive: true)
                 }
                 Divider().background(VoygoTheme.cardBorder)
-                row("Net payout", Formatters.ringgit(payout.netMyr), isBold: true)
+                row(S.driverPayoutsNetPayout, Formatters.ringgit(payout.netMyr), isBold: true)
             }
             .padding(16)
         }
@@ -263,11 +275,11 @@ private struct ReliabilityCard: View {
                 HStack {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundColor(VoygoTheme.success)
-                    Text("Reliability")
+                    Text(S.driverPayoutsReliability)
                         .font(.subheadline.weight(.bold))
                         .foregroundColor(VoygoTheme.textPrimary)
                     Spacer()
-                    Text("\(Int((max(0, min(1, payout.onTimeRate)) * 100).rounded()))% on-time")
+                    Text(S.driverPayoutsOnTimePct(Int((max(0, min(1, payout.onTimeRate)) * 100).rounded())))
                         .font(.subheadline.weight(.bold))
                         .foregroundColor(VoygoTheme.success)
                 }
@@ -284,18 +296,23 @@ private struct ReliabilityCard: View {
         // otherwise render as "150% on-time" or "9500% on-time".
         let pct = Int((max(0, min(1, payout.onTimeRate)) * 100).rounded())
         if pct >= 95 {
-            return "Top tier. This is what gets riders to renew without thinking about it."
+            return S.driverPayoutsReliabilityTop
         } else if pct >= 85 {
-            return "Solid. A late once in a while is fine — riders see the trend, not the outlier."
+            return S.driverPayoutsReliabilitySolid
         } else {
-            return "Below the corridor average. Quick wins: leave 5 minutes earlier and avoid one-message dropouts."
+            return S.driverPayoutsReliabilityLow
         }
     }
 }
 
 private struct FootnoteCard: View {
     var body: some View {
-        Text("Voygo's take is 15%, capped at RM 2/seat. Streak bonus of RM 50 kicks in at 20+ on-time rides per week. Penalties from late cancels or no-shows are held from the next payout.")
+        // Aligned with the LPKP defense brief: Voygo charges a flat
+        // per-seat platform fee, not a percentage commission. The
+        // previous copy ("15%, capped at RM 2/seat") leaked an old
+        // pricing model that contradicts the regulator-facing
+        // narrative.
+        Text(S.driverPayoutsFootnote)
             .font(.caption2)
             .foregroundColor(VoygoTheme.textHint)
             .frame(maxWidth: .infinity, alignment: .leading)

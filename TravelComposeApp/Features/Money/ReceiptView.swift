@@ -7,7 +7,6 @@ struct ReceiptView: View {
     var onBack: () -> Void
     @Environment(AppStore.self) private var store
     @State private var showShareSheet = false
-    @State private var actionMessage: String? = nil
 
     /// Look up the payment record by id (the bookingId we're handed is the
     /// payment id when navigating from Trip History or Wallet). Falls
@@ -21,7 +20,7 @@ struct ReceiptView: View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Receipt", onBack: onBack) {
+                VPolishedNavBar(title: S.receiptTitle, onBack: onBack) {
                     Button { showShareSheet = true } label: {
                         Image(systemName: "square.and.arrow.up")
                             .font(.callout.weight(.bold))
@@ -34,8 +33,14 @@ struct ReceiptView: View {
                 }
                 ScrollView {
                     VStack(spacing: 14) {
+                        // Action buttons removed — "Email PDF" /
+                        // "Add to expenses" both popped fake
+                        // coming-soon alerts. The toolbar share button
+                        // (above) already opens the system share sheet
+                        // which exports the receipt text to any app
+                        // (Mail, Files, etc.) so the user has a real
+                        // export path.
                         receiptCard
-                        actions
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 40)
@@ -47,18 +52,6 @@ struct ReceiptView: View {
             ActivityShareSheet(items: [receiptShareText])
                 .presentationDetents([.medium])
         }
-        .alert(
-            "Coming soon",
-            isPresented: Binding(
-                get: { actionMessage != nil },
-                set: { if !$0 { actionMessage = nil } }
-            ),
-            presenting: actionMessage
-        ) { _ in
-            Button("OK", role: .cancel) { actionMessage = nil }
-        } message: { message in
-            Text(message)
-        }
     }
 
     private var receiptCard: some View {
@@ -68,7 +61,7 @@ struct ReceiptView: View {
                     .font(.title3.weight(.black))
                     .tracking(-0.4)
                     .foregroundColor(VPalette.primary)
-                Text("Booking #\(displayBookingId) · \(receiptStatusText)")
+                Text(S.receiptHeader(displayBookingId, receiptStatusText))
                     .font(.caption2.weight(.bold)).tracking(0.4)
                     .foregroundColor(VPalette.primary)
             }
@@ -84,19 +77,19 @@ struct ReceiptView: View {
                     height: 140,
                     accent: VPalette.success
                 )
-                .accessibilityLabel(Text("Trip route — \(mapLabel)"))
+                .accessibilityLabel(Text(S.receiptRouteA11y(mapLabel)))
             } else {
                 // Some historical payment rows are not tied to a route.
                 // Keep a graceful fallback for those receipts only.
                 VRouteDiagram(
                     stops: [
-                        .init(label: "Pickup",  kind: .origin),
-                        .init(label: "Dropoff", kind: .dest)
+                        .init(label: S.routePickupPoint, kind: .origin),
+                        .init(label: S.routeDropPoint,   kind: .dest)
                     ],
                     height: 140,
                     accent: VPalette.success
                 )
-                .accessibilityLabel(Text("Trip route unavailable — \(mapLabel)"))
+                .accessibilityLabel(Text(S.receiptRouteUnavailableA11y(mapLabel)))
             }
 
             VStack(alignment: .leading, spacing: 0) {
@@ -104,7 +97,7 @@ struct ReceiptView: View {
                     VRouteGlyph().frame(height: 64)
                     VStack(alignment: .leading, spacing: 14) {
                         VStack(alignment: .leading, spacing: 1) {
-                            VKicker(text: "Pickup · \(pickupTimeString)", color: VPalette.success, size: 10)
+                            VKicker(text: S.receiptPickupAt(pickupTimeString), color: VPalette.success, size: 10)
                             // Real pickup label from the resolved route;
                             // honest "—" placeholder when the backend
                             // hasn't threaded the address into the
@@ -112,7 +105,12 @@ struct ReceiptView: View {
                             Text(pickupLabel).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                         }
                         VStack(alignment: .leading, spacing: 1) {
-                            VKicker(text: "Drop · \(dropTimeString)", color: VPalette.primary, size: 10)
+                            // "Approx. drop" — backend doesn't ship an
+                            // exact drop timestamp on the payment, we
+                            // estimate by adding a typical commute
+                            // window. Labeled clearly so riders aren't
+                            // misled by a precise-looking number.
+                            VKicker(text: S.receiptApproxDrop(dropTimeString), color: VPalette.primary, size: 10)
                             Text(dropoffLabel).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                         }
                     }
@@ -140,19 +138,22 @@ struct ReceiptView: View {
 
                 DashedLine().padding(.vertical, 16)
 
-                VKicker(text: "Fare breakdown")
+                VKicker(text: S.receiptFareBreakdown)
                     .padding(.bottom, 4)
 
-                lineItem("Base fare (\(payment?.tier?.lowercased() ?? "subscription"))", value: baseFareString)
+                lineItem(S.receiptBaseFare(S.tierLabel(payment?.tier)), value: baseFareString)
                 if creditApplied > 0 {
-                    lineItem("Voygo credit", value: "−RM \(creditApplied).00", color: VPalette.success)
+                    lineItem(S.receiptVoygoCredit, value: "−RM \(creditApplied).00", color: VPalette.success)
                 }
-                lineItem("Tolls covered", value: "Included")
+                // "Tolls covered · Included" row removed — backend
+                // doesn't ship per-route toll metadata so we were
+                // always rendering "Included" regardless of corridor.
+                // Re-add when toll info threads through.
 
                 Rectangle().fill(VPalette.border).frame(height: 1).padding(.vertical, 10)
 
                 HStack {
-                    Text("Total charged").font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
+                    Text(S.receiptTotalCharged).font(.footnote.weight(.heavy)).foregroundColor(VPalette.text)
                     Spacer()
                     Text(totalChargedString)
                         .font(.system(size: 22, weight: .black, design: .monospaced))
@@ -172,11 +173,11 @@ struct ReceiptView: View {
                         // would otherwise announce a meaningless "Image".
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
-                        VKicker(text: "Verification", size: 10)
+                        VKicker(text: S.receiptVerification, size: 10)
                         Text(bookingId)
                             .font(.system(size: 13, weight: .heavy, design: .monospaced))
                             .foregroundColor(VPalette.text)
-                        Text("For expense reimbursement")
+                        Text(S.receiptForExpense)
                             .font(.caption2)
                             .foregroundColor(VPalette.textSec)
                     }
@@ -214,19 +215,21 @@ struct ReceiptView: View {
     }
 
     private var receiptStatusText: String {
-        guard let p = payment else { return "Receipt" }
+        guard let p = payment else { return S.receiptStatusFallback }
         switch p.status {
-        case .paid:     return "Completed"
-        case .pending:  return "Pending payment"
-        case .failed:   return "Failed"
-        case .refunded: return "Refunded"
+        case .paid:     return S.receiptStatusCompleted
+        case .pending:  return S.receiptStatusPending
+        case .failed:   return S.receiptStatusFailed
+        case .refunded: return S.receiptStatusRefunded
         }
     }
 
     private var mapLabel: String {
-        guard let p = payment else { return "Receipt" }
-        let f = DateFormatter(); f.dateFormat = "d MMM"
-        return "\(f.string(from: p.createdAt)) · Booking \(displayBookingId)"
+        guard let p = payment else { return S.receiptStatusFallback }
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.dateFormat = "d MMM"
+        return "\(f.string(from: p.createdAt)) · \(S.receiptStatusFallback) \(displayBookingId)"
     }
 
     private var baseFareString: String {
@@ -266,7 +269,7 @@ struct ReceiptView: View {
 
     private var driverDisplayName: String {
         let n = resolvedRoute?.driverName.trimmingCharacters(in: .whitespaces) ?? ""
-        return n.isEmpty ? "Driver" : n
+        return n.isEmpty ? S.receiptDriverFallback : n
     }
 
     private var driverInitial: String {
@@ -277,7 +280,7 @@ struct ReceiptView: View {
     /// plate info. Honest "—" when no route was found.
     private var vehicleLabel: String {
         guard let r = resolvedRoute else { return "—" }
-        return "\(r.carType.label) · plate on file"
+        return "\(r.carType.label) · \(S.receiptPlateOnFile)"
     }
 
     /// Driver's average rating from the route's reliability bundle.
@@ -288,9 +291,13 @@ struct ReceiptView: View {
     }
 
     private var paymentMethodString: String {
-        // Backend doesn't yet thread the payment-method label through to the
-        // payment row. Show "Voygo Pay" as a generic until it does.
-        return payment == nil ? "Method on file" : "Voygo Pay · DuitNow / TNG / card"
+        // TODO: Backend doesn't yet thread the payment-method label
+        // through to the payment row. Show "Method on file" until the
+        // server starts returning the actual method on PaymentRecord;
+        // the previous "Voygo Pay · DuitNow / TNG / card" line was
+        // fabricated and would mislead riders who actually paid via FPX
+        // or a card.
+        return S.receiptMethodOnFile
     }
 
     /// Best-effort pickup time string. We bind to `payment.createdAt` if
@@ -312,34 +319,12 @@ struct ReceiptView: View {
 
     private var receiptShareText: String {
         guard let p = payment else {
-            return "Voygo receipt \(bookingId)"
+            return S.receiptShareTextFallback(bookingId)
         }
         // `mapLabel` is the human-readable "Pickup → Drop" string
         // already computed for the receipt card — reuse it here so
         // the shared text matches what the rider saw on screen.
-        return "Voygo receipt \(p.id): \(mapLabel), RM \(p.amountMyr), \(p.status.rawValue)"
-    }
-
-    private var actions: some View {
-        HStack(spacing: 8) {
-            Button { actionMessage = "PDF email delivery is not enabled yet. Use the share button for this pilot." } label: {
-                Text("Email PDF")
-                    .font(.footnote.weight(.heavy))
-                    .frame(maxWidth: .infinity, minHeight: 46)
-                    .foregroundColor(VPalette.text)
-                    .background(VPalette.surface)
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(VPalette.border, lineWidth: 1))
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }.buttonStyle(.plain)
-            Button { actionMessage = "Expense export is not enabled yet." } label: {
-                Text("Add to expenses")
-                    .font(.footnote.weight(.heavy))
-                    .frame(maxWidth: .infinity, minHeight: 46)
-                    .foregroundColor(VPalette.primary)
-                    .background(VPalette.primaryContainer)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }.buttonStyle(.plain)
-        }
+        return S.receiptShareText(p.id, mapLabel, p.amountMyr, p.status.rawValue)
     }
 }
 

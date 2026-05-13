@@ -92,6 +92,34 @@
 "auth.devOnly" = "DEV ONLY";
 "auth.skipLogin" = "Skip login → home screen";
 
+/* Auth — welcome feature chips on phone-entry screen */
+"auth.feature.dailyRoutes" = "Daily routes";
+"auth.feature.trustedDrivers" = "Trusted drivers";
+"auth.feature.reserveSeats" = "Reserve seats";
+
+/* Auth — phone field label */
+"auth.phone.fieldLabel" = "Phone number";
+
+/* Auth — OTP verification screen */
+"auth.otp.title" = "Verify Phone Number";
+"auth.otp.body" = "Enter the 6-digit code sent to %@";
+"auth.otp.devCode" = "Dev code: %@";
+"auth.otp.resendIn" = "Resend code in 0:%02d";
+"auth.otp.resendCode" = "Resend Code";
+"auth.otp.resending" = "Resending…";
+"auth.otp.verify" = "Verify";
+"auth.otp.navTitle" = "Verify Number";
+"auth.otp.a11y.label" = "One-time code";
+"auth.otp.a11y.empty" = "Empty";
+"auth.otp.a11y.entered" = "%d of 6 digits entered";
+"auth.otp.a11y.hint" = "Tap to enter the six-digit code sent to your phone";
+
+/* Auth — Sign in with Apple status surfaces (pilot — backend exchange not wired yet) */
+"auth.apple.credentialReceived" = "Apple credential received (•••%@). Backend exchange coming soon — please use phone OTP for now.";
+"auth.apple.failed" = "Sign in with Apple failed: %@";
+"auth.apple.credentialMissing" = "Apple ID credential missing.";
+"auth.apple.signInHint" = "Sign in using your Apple ID";
+
 /* Profile — identity + member-since + logout */
 "profile.welcome" = "Welcome";
 "profile.newRider" = "New rider";
@@ -101,6 +129,66 @@
 "profile.logOut" = "Log out";
 "profile.logOutTitle" = "Log Out";
 "profile.logOutMessage" = "You'll need to sign in again.";
+"profile.ridesCount.one" = "1 ride";
+"profile.ridesCount.many" = "%d rides";
+
+/* Profile — settings row titles + subtitles */
+"profile.settings.identityVerification" = "Identity Verification";
+"profile.settings.walletAndPayments" = "Wallet & payment methods";
+"profile.settings.favourites" = "Favourites";
+"profile.settings.favourites.noneSaved" = "None saved";
+"profile.settings.favourites.saved" = "%d saved";
+"profile.settings.myRequests" = "My requests";
+"profile.settings.myRequests.none" = "None waiting";
+"profile.settings.myRequests.waiting" = "%d waiting";
+"profile.settings.notifications" = "Notifications";
+"profile.settings.privacy" = "Privacy & Security";
+"profile.settings.paymentMethods" = "Payment methods";
+"profile.settings.activity" = "Activity";
+"profile.settings.tripHistory" = "Trip history";
+"profile.settings.helpCenter" = "Help Center";
+"profile.settings.payMethods.signedOut" = "Sign in to manage";
+
+/* Profile — driver mode card */
+"profile.driver.mode" = "Driver mode";
+"profile.driver.publishFirst" = "Publish your first route";
+"profile.driver.manageSubtitle" = "Manage your routes & earnings";
+"profile.driver.approvedSubtitle" = "Your KYC is approved — start offering seats";
+
+/* Profile — vehicle card + edit sheet */
+"profile.vehicle.title" = "Your vehicle";
+"profile.vehicle.setUp" = "Set up";
+"profile.vehicle.subtitle" = "Set your plate, colour & model so riders can spot you";
+"profile.vehicle.editHint" = "Tap to edit your plate, colour and model";
+"profile.vehicle.plate" = "Plate number";
+"profile.vehicle.platePlaceholder" = "PEN 1234";
+"profile.vehicle.colour" = "Colour";
+"profile.vehicle.colourPlaceholder" = "White";
+"profile.vehicle.model" = "Model";
+"profile.vehicle.modelPlaceholder" = "Myvi";
+"profile.vehicle.sheetSubtitle" = "Riders use your plate, colour and model to spot the right car at the pickup point. This is set once and applies to every route you publish.";
+
+/* Profile — edit display name sheet */
+"profile.name.sheetTitle" = "Your name";
+"profile.name.sheetSubtitle" = "This is how drivers and riders see you on receipts, chat threads and ride confirmations.";
+"profile.name.placeholder" = "e.g. Vishnu Kumar";
+"profile.name.editHint" = "Tap to edit your display name";
+
+/* Profile — KYC card on Profile screen */
+"profile.kyc.message.approved" = "You are fully verified · MyKad on file";
+"profile.kyc.message.pending" = "Verification under review";
+"profile.kyc.message.rejected" = "Verification rejected – resubmit";
+"profile.kyc.message.notStarted" = "Complete verification to drive";
+"profile.kyc.badge.verified" = "Verified";
+"profile.kyc.badge.pending" = "Pending";
+"profile.kyc.badge.rejected" = "Rejected";
+"profile.kyc.badge.notStarted" = "Not Started";
+
+/* Profile — wallet card subtitle */
+"profile.wallet.syncAfterSignIn" = "Wallet syncs after sign-in";
+"profile.wallet.noPayments" = "No payments yet";
+"profile.wallet.viewPayments" = "View payments & receipts";
+"profile.wallet.creditAndPayments" = "%@ credit · view payments";
 
 /* Privacy & Security */
 "privacy.title" = "Privacy & Security";
@@ -123,6 +211,25 @@
 "privacy.section.danger" = "Danger zone";
 "privacy.delete" = "Delete account";
 "privacy.deleteSubtitle" = "Permanently removes your account after 30 days. Required by App Store + PDPA.";
+
+/* Privacy & Security — analytics toggle, blocks counter, delete dialogs, errors */
+"privacy.toggle.analytics" = "Product analytics";
+"privacy.toggle.analyticsSubtitle" = "Share usage events that help improve reliability and route matching";
+"privacy.blocks.max" = "200";
+"privacy.blocks.counter" = "%d/200";
+"privacy.delete.confirmTitle" = "Delete this account?";
+"privacy.delete.confirmBody" = "Your account, routes, and subscriptions will be paused immediately. You have 30 days to sign back in to cancel. After that, your data is permanently anonymised.";
+"privacy.delete.continue" = "Continue";
+"privacy.delete.finalTitle" = "Really delete?";
+"privacy.delete.finalBody" = "This is your last chance to back out. We'll email a confirmation.";
+"privacy.delete.yes" = "Yes, delete";
+"privacy.delete.keep" = "Keep my account";
+"privacy.error.loadFailed" = "Couldn't load preferences.";
+"privacy.error.saveFailed" = "Couldn't save preference. Try again.";
+"privacy.error.unblockFailed" = "Couldn't unblock. Try again.";
+"privacy.unblockedToast" = "Unblocked.";
+"privacy.error.exportFailed" = "Couldn't queue the export. Try again.";
+"privacy.error.deleteFailed" = "Couldn't delete the account. Try again or email support.";
 
 /* Solo seat */
 "solo.title" = "Ride solo";
@@ -147,6 +254,16 @@
 "home.whereTo.afternoon" = "Where to,\nthis afternoon?";
 "home.whereTo.evening" = "Where to,\nthis evening?";
 "home.whereTo.late" = "Where to next?";
+
+/* Home — time-of-day greeting + identity fallbacks */
+"home.greeting.morning" = "Good morning";
+"home.greeting.afternoon" = "Good afternoon";
+"home.greeting.evening" = "Good evening";
+"home.greeting.fallback" = "Hi there";
+"home.firstName.fallback" = "there";
+"home.driver.fallback" = "Driver";
+"home.a11y.nextCommute" = "Open route details for next commute";
+"home.a11y.actionRequired" = "Action required: subscription paused. Tap to resolve.";
 "home.when.today" = "Today";
 "home.when.tomorrow" = "Tomorrow";
 "home.action.calendar" = "Calendar";
@@ -223,6 +340,21 @@
 "kyc.stuckTitle" = "Stuck for over 48 hours?";
 "kyc.stuckBody" = "Email support@voygo.app with your name and we'll prioritise your review.";
 "kyc.emailSupport" = "Email support →";
+"kyc.docsCount.one" = "1 document";
+"kyc.docsCount.many" = "%d documents";
+"kyc.status.approved.title" = "You're fully verified";
+"kyc.status.approved.subtitle" = "MyKad on file · trusted account";
+"kyc.status.pending.title" = "Verification under review";
+"kyc.status.pending.subtitle" = "Most reviews finish in 24–48 hours";
+"kyc.status.rejected.title" = "Verification rejected";
+"kyc.status.rejected.subtitle" = "Resubmit the rejected docs below to retry";
+"kyc.status.notStarted.title" = "Verify to start riding";
+"kyc.status.notStarted.subtitle" = "MyKad + selfie covers riders. Drivers add license + vehicle.";
+"kyc.footer.blurb" = "We use your documents to verify identity, run a quick safety check, and meet Bank Negara KYC rules. Only trust & safety reviewers see your photos.";
+"kyc.submitForReview" = "Mark verification submitted";
+"kyc.uploadedToast" = "%@ uploaded — review pending";
+"kyc.uploadFailed" = "Upload failed. %@";
+"kyc.uploadLinkFailed" = "Couldn't link upload";
 
 /* Route details */
 "route.details.title" = "Route Details";
@@ -231,6 +363,40 @@
 "subscribe.active" = "Subscription active!";
 "subscribe.bookSolo" = "Book solo for a day";
 "subscribe.soloPrice" = "RM %d — whole car, no other passengers";
+
+/* Route info rows */
+"route.info.route" = "Route";
+"route.info.departure" = "Departure";
+"route.info.schedule" = "Schedule";
+"route.info.carType" = "Car type";
+"route.info.availableSeats" = "Available seats";
+"route.info.seatsOf" = "%d of %d";
+"route.info.activeRiders" = "Active riders";
+"route.info.driverReliability" = "Driver Reliability";
+"route.info.onTime" = "On-time";
+"route.info.cancelRate" = "Cancel rate";
+"route.info.repeatRiders" = "Repeat riders";
+"route.pickupPoint" = "Pickup Point";
+"route.dropPoint" = "Drop Point";
+
+/* Subscribe — config + tier picker */
+"subscribe.section" = "Subscription";
+"subscribe.numberOfDays" = "Number of days";
+"subscribe.startsTodayDays" = "Starts today · %d days";
+"subscribe.tier" = "Tier";
+"subscribe.tier.try" = "Try it";
+"subscribe.tier.discount" = "%d%% off";
+"subscribe.total" = "Total";
+
+/* Subscribe — payment failure surfaces */
+"subscribe.error.pauseFailed" = "Payment couldn't start and we couldn't pause: %@. Cancel from My Subscriptions before retrying.";
+"subscribe.error.pauseRetry" = "Payment couldn't start. Subscription paused — retry from My Subscriptions.";
+"subscribe.error.declinedPauseFailed" = "Payment declined and pause also failed: %@. Cancel from My Subscriptions before retrying.";
+"subscribe.error.declinedPaused" = "Payment declined. Subscription paused — retry from My Subscriptions.";
+"subscribe.error.failedPauseFailed" = "Payment failed (%@) and we couldn't pause the subscription either: %@. Please cancel from My Subscriptions before retrying.";
+"subscribe.error.paymentFailed" = "Subscription paused — payment failed: %@. Retry from My Subscriptions.";
+"subscribe.error.cancelledPauseFailed" = "Payment cancelled — pause also failed: %@.";
+"subscribe.error.notCompleted" = "Payment not completed. Subscription paused — retry from My Subscriptions.";
 
 /* Inbox + chat */
 "inbox.title" = "Inbox";
@@ -258,3 +424,218 @@
 
 /* Subscriptions list */
 "subs.title" = "My commutes";
+
+/* Commute / Search — Find Commute Routes view */
+"commute.hero.subtitle" = "Find or offer recurring commute seats across Malaysia";
+"commute.menu.create" = "Create Route";
+"commute.menu.driverDash" = "Driver Dashboard";
+"commute.stat.routes" = "routes";
+"commute.stat.activeRides" = "active rides";
+"commute.stat.avgFare" = "avg fare";
+"commute.action.findRide" = "Find Ride";
+"commute.action.matchSeats" = "Match seats";
+"commute.action.offerRide" = "Offer Ride";
+"commute.action.shareSeats" = "Share seats";
+"commute.action.driver" = "Driver";
+"commute.action.manage" = "Manage";
+
+/* Search panel */
+"search.from" = "From";
+"search.to" = "To";
+"search.from.placeholder" = "Home, current location, or pickup";
+"search.to.placeholder" = "Office or destination";
+"search.useCurrentLocation" = "Use Current Location";
+"search.useCurrentLocation.hint" = "Set your starting point from GPS";
+"search.earliest" = "Earliest";
+"search.latest" = "Latest";
+"search.cta" = "Search Routes";
+"search.lookingNearby" = "Searching nearby places";
+"search.missingFromTo" = "Enter both From and To before searching routes.";
+"search.locationDenied" = "Unable to get your current location. Please allow precise location access in Settings and try again.";
+
+/* Filters bar */
+"filter.runOn" = "RUN ON";
+"filter.budget" = "BUDGET";
+"filter.sortBy" = "SORT BY";
+"filter.cap" = "Cap";
+"filter.anyPrice" = "Any price";
+
+/* Sort options */
+"sort.bestMatch" = "Best match";
+"sort.cheapest" = "Cheapest";
+"sort.closestPickup" = "Closest pickup";
+"sort.mostReliable" = "Most reliable";
+
+/* Results */
+"search.results.title" = "Best route matches";
+"search.seatsLeft" = "%1$d of %2$d seats left";
+
+/* Empty state */
+"search.empty.title" = "No routes for that exact corridor — yet";
+"search.empty.body" = "Penang's pilot still has gaps. Try one of these:";
+"search.empty.request" = "Tell drivers I want this corridor";
+"search.empty.widen" = "Try a wider time window (06:00–10:00)";
+"search.empty.reset" = "Reset filters";
+
+/* Share template */
+"share.route.template" = "%1$@ → %2$@ on Voygo\n%3$@ · %4$@/seat · driver %5$@\n%6$@";
+
+/* Trip History */
+"tripHistory.title" = "Trip History";
+"tripHistory.filter.all" = "All";
+"tripHistory.filter.completed" = "Completed";
+"tripHistory.filter.cancelled" = "Cancelled";
+"tripHistory.empty.titleNone" = "No trips yet";
+"tripHistory.empty.titleFilter" = "No trips match this filter";
+"tripHistory.empty.body" = "Your completed and cancelled trips will appear here.";
+"tripHistory.stat.total" = "Total";
+"tripHistory.stat.trips" = "Trips";
+"tripHistory.stat.refunded" = "Refunded";
+"tripHistory.row.cancelled" = "Cancelled";
+"tripHistory.row.receipt" = "Receipt ›";
+"tripHistory.kicker.zero" = "No trips yet";
+"tripHistory.kicker.one" = "1 trip";
+"tripHistory.kicker.many" = "%d trips";
+"tripHistory.row.a11yCancelled" = "Cancelled trip on %1$@ %2$@ %3$@";
+
+/* Subscription tier display labels */
+"tier.fallback" = "ride";
+"tier.monthly" = "Monthly";
+"tier.weekly" = "Weekly";
+"tier.tryIt" = "Try it";
+
+/* Receipt */
+"receipt.title" = "Receipt";
+"receipt.status.completed" = "Completed";
+"receipt.status.pending" = "Pending payment";
+"receipt.status.failed" = "Failed";
+"receipt.status.refunded" = "Refunded";
+"receipt.status.fallback" = "Receipt";
+"receipt.header" = "Booking #%1$@ · %2$@";
+"receipt.baseFare" = "Base fare (%@)";
+"receipt.voygoCredit" = "Voygo credit";
+"receipt.included" = "Included";
+"receipt.totalCharged" = "Total charged";
+"receipt.forExpense" = "For expense reimbursement";
+"receipt.fareBreakdown" = "Fare breakdown";
+"receipt.verification" = "Verification";
+"receipt.methodOnFile" = "Method on file";
+"receipt.pickupAt" = "Pickup · %@";
+"receipt.approxDrop" = "Approx. drop · %@";
+"receipt.driverFallback" = "Driver";
+"receipt.plateOnFile" = "plate on file";
+"receipt.shareText" = "Voygo receipt %1$@: %2$@, RM %3$d, %4$@";
+"receipt.shareTextFallback" = "Voygo receipt %@";
+"receipt.routeA11y" = "Trip route — %@";
+"receipt.routeUnavailableA11y" = "Trip route unavailable — %@";
+
+/* Wallet — hero + extras */
+"wallet.heroLabel" = "Voygo Credit";
+"wallet.heroPrefix" = "RM";
+"wallet.heroBadge" = "VOYGO";
+"wallet.recent" = "Recent";
+"wallet.seeAll" = "See all";
+"wallet.noPaymentsBody" = "Subscribe to a route and your charges appear here";
+"wallet.default" = "Default";
+"wallet.subscriptionTitle" = "Voygo subscription";
+"wallet.routeTitle" = "Route %@";
+"wallet.txSubtitle" = "%1$@ · %2$@";
+"wallet.loadingBalance.a11y" = "Loading wallet balance";
+
+/* Payment status badges */
+"payment.status.charged" = "Charged";
+"payment.status.pending" = "Pending";
+"payment.status.failed" = "Failed";
+"payment.status.refunded" = "Refunded";
+
+/* Driver Payouts */
+"driverPayouts.navTitle" = "This week";
+"driverPayouts.kicker" = "Driver payouts";
+"driverPayouts.title" = "Driver Payouts";
+"driverPayouts.weekOf" = "Week of %1$@ → %2$@";
+"driverPayouts.netPayout" = "Net payout";
+"driverPayouts.ridesCompleted" = "Rides completed";
+"driverPayouts.seatsFilled" = "Seats filled";
+"driverPayouts.grossEarnings" = "Gross earnings";
+"driverPayouts.voygoFee" = "Voygo fee";
+"driverPayouts.penaltiesHeld" = "Penalties held";
+"driverPayouts.streakBonus" = "Streak bonus";
+"driverPayouts.paysOutBy" = "Pays out by Tuesday 5pm";
+"driverPayouts.paidOut" = "Paid out · landing in your bank within 24h";
+"driverPayouts.reliability" = "Reliability";
+"driverPayouts.onTimePct" = "%d%% on-time";
+"driverPayouts.reliabilityTop" = "Top tier. This is what gets riders to renew without thinking about it.";
+"driverPayouts.reliabilitySolid" = "Solid. A late once in a while is fine — riders see the trend, not the outlier.";
+"driverPayouts.reliabilityLow" = "Below the corridor average. Quick wins: leave 5 minutes earlier and avoid one-message dropouts.";
+"driverPayouts.footnote" = "Voygo charges a flat per-seat platform fee. This is independent of your fare — your earnings scale only when you fill seats.";
+"driverPayouts.empty.title" = "No earnings yet";
+"driverPayouts.empty.body" = "Drive a route this week and your payout will show up here on Tuesday.";
+"driverPayouts.zeroRides.title" = "No rides this week";
+"driverPayouts.zeroRides.body" = "Once you complete rides on your routes, your earnings show up here on Tuesday.";
+
+/* Stripe Connect banner */
+"driverPayouts.connect.pendingTitle" = "Set up bank payouts";
+"driverPayouts.connect.pendingBody" = "Stripe holds it briefly while your bank verifies. Takes ~3 minutes.";
+"driverPayouts.connect.pendingCTA" = "Continue setup";
+"driverPayouts.connect.comingTitle" = "Bank payouts launching soon";
+"driverPayouts.connect.comingBody" = "We'll notify drivers when Stripe Connect is enabled. Earnings keep accruing in the meantime.";
+
+/* Driver Dashboard (extras) */
+"driver.dashboard.title" = "Driver Dashboard";
+"driver.nav.riderDemand" = "Rider demand";
+"driver.nav.payouts" = "Payouts";
+"driver.pause.alertTitle" = "Pause this route?";
+"driver.pause.alertBody" = "Pausing cancels every scheduled pickup on this route. Riders will be notified.";
+"driver.pause.alertConfirm" = "Pause";
+"driver.departureValidationHint" = "Departure time must be HH:mm (e.g. 07:42).";
+"driver.scheduleUpdated.weekdays" = "Schedule updated to weekdays.";
+"driver.scheduleUpdated.allDays" = "Schedule updated to all days.";
+"driver.route.pausedToast" = "Route paused.";
+"driver.route.resumedToast" = "Route resumed.";
+"driver.card.active" = "Active";
+"driver.card.paused" = "Paused";
+"driver.card.riders" = "Riders";
+"driver.card.upcoming" = "Upcoming";
+"driver.card.seats" = "Seats";
+"driver.card.days" = "Days";
+"driver.solo.bookingAhead.one" = "1 solo booking ahead";
+"driver.solo.bookingAhead.many" = "%d solo bookings ahead";
+"driver.solo.datesMore" = "%1$@, +%2$d more";
+"driver.departureField" = "Departure Time (HH:mm)";
+"driver.dayPreset.monFri" = "Mon–Fri";
+"driver.dayPreset.allDays" = "All Days";
+"driver.pauseRoute" = "Pause Route";
+"driver.resumeRoute" = "Resume Route";
+"driver.calendarButton" = "Calendar";
+
+/* CreateRoute view */
+"createRoute.title" = "Create Route";
+"createRoute.section.routeInfo" = "Route Info";
+"createRoute.start.label" = "Start Location";
+"createRoute.start.placeholder" = "Pick on map · e.g. Komtar";
+"createRoute.end.label" = "Destination";
+"createRoute.end.placeholder" = "Pick on map · e.g. Bayan Lepas";
+"createRoute.departure.label" = "DEPARTURE TIME";
+"createRoute.departure" = "Departure";
+"createRoute.seats" = "SEATS";
+"createRoute.pricePerSeat" = "PRICE/SEAT";
+"createRoute.priceSuffix" = "RM";
+"createRoute.seatCapHint" = "Up to %1$d passengers in a %2$@";
+"createRoute.section.carType" = "Car Type";
+"createRoute.vehicleMissing.title" = "Add your vehicle to Profile";
+"createRoute.vehicleMissing.body" = "Plate + colour go on your profile so riders can spot the right car. Set once, applies to every route.";
+"createRoute.vehicleHint" = "Riders will see: %@";
+"createRoute.vehicleHintWithDescriptor" = "Riders will see: %1$@ · %2$@";
+"createRoute.section.daysOfWeek" = "Days of Week";
+"createRoute.section.pickupPoints" = "Pickup Points";
+"createRoute.section.dropPoints" = "Drop Points";
+"createRoute.addStop.label" = "Add stop";
+"createRoute.addStop.placeholder" = "e.g. Komtar";
+"createRoute.saveCTA" = "Save Recurring Route";
+"createRoute.picker.from" = "Where from?";
+"createRoute.picker.to" = "Where to?";
+"createRoute.suggestedNear" = "Suggested near %@";
+"createRoute.suggestedNearby" = "Suggested nearby";
+"createRoute.lookingUpHubs" = "Looking up transit hubs…";
+"createRoute.suggestion.popularBadge" = "Popular";
+"createRoute.stepper.a11y" = "%1$@ %2$d. Tap to type.";

@@ -93,15 +93,103 @@
 "auth.devOnly" = "PEMBANGUNAN SAHAJA";
 "auth.skipLogin" = "Langkau log masuk → skrin utama";
 
+/* Auth — welcome feature chips on phone-entry screen */
+"auth.feature.dailyRoutes" = "Laluan harian";
+"auth.feature.trustedDrivers" = "Pemandu dipercayai";
+"auth.feature.reserveSeats" = "Tempah tempat duduk";
+
+/* Auth — phone field label */
+"auth.phone.fieldLabel" = "Nombor telefon";
+
+/* Auth — OTP verification screen */
+"auth.otp.title" = "Sahkan Nombor Telefon";
+"auth.otp.body" = "Masukkan kod 6 digit yang dihantar ke %@";
+"auth.otp.devCode" = "Kod pembangun: %@";
+"auth.otp.resendIn" = "Hantar semula kod dalam 0:%02d";
+"auth.otp.resendCode" = "Hantar Semula Kod";
+"auth.otp.resending" = "Menghantar semula…";
+"auth.otp.verify" = "Sahkan";
+"auth.otp.navTitle" = "Sahkan Nombor";
+"auth.otp.a11y.label" = "Kod sekali guna";
+"auth.otp.a11y.empty" = "Kosong";
+"auth.otp.a11y.entered" = "%d daripada 6 digit dimasukkan";
+"auth.otp.a11y.hint" = "Ketik untuk masukkan kod enam digit yang dihantar ke telefon anda";
+
+/* Auth — Sign in with Apple status surfaces (pilot — backend exchange not wired yet) */
+"auth.apple.credentialReceived" = "Kelayakan Apple diterima (•••%@). Pertukaran backend akan datang — sila gunakan OTP telefon buat masa ini.";
+"auth.apple.failed" = "Log masuk dengan Apple gagal: %@";
+"auth.apple.credentialMissing" = "Kelayakan ID Apple tiada.";
+"auth.apple.signInHint" = "Log masuk menggunakan ID Apple anda";
+
 /* Profile — identity + member-since + logout */
 "profile.welcome" = "Selamat datang";
-"profile.newRider" = "Penumpang baru";
+"profile.newRider" = "Penumpang baharu";
 "profile.memberSince" = "Ahli sejak";
 "profile.memberSinceToday" = "Hari ini";
 "profile.rides" = "Perjalanan";
 "profile.logOut" = "Log keluar";
 "profile.logOutTitle" = "Log Keluar";
 "profile.logOutMessage" = "Anda perlu log masuk semula.";
+"profile.ridesCount.one" = "1 perjalanan";
+"profile.ridesCount.many" = "%d perjalanan";
+
+/* Profile — settings row titles + subtitles */
+"profile.settings.identityVerification" = "Pengesahan Identiti";
+"profile.settings.walletAndPayments" = "Dompet & kaedah pembayaran";
+"profile.settings.favourites" = "Kegemaran";
+"profile.settings.favourites.noneSaved" = "Tiada disimpan";
+"profile.settings.favourites.saved" = "%d disimpan";
+"profile.settings.myRequests" = "Permintaan saya";
+"profile.settings.myRequests.none" = "Tiada menunggu";
+"profile.settings.myRequests.waiting" = "%d menunggu";
+"profile.settings.notifications" = "Pemberitahuan";
+"profile.settings.privacy" = "Privasi & Keselamatan";
+"profile.settings.paymentMethods" = "Kaedah pembayaran";
+"profile.settings.activity" = "Aktiviti";
+"profile.settings.tripHistory" = "Sejarah perjalanan";
+"profile.settings.helpCenter" = "Pusat Bantuan";
+"profile.settings.payMethods.signedOut" = "Log masuk untuk urus";
+
+/* Profile — driver mode card */
+"profile.driver.mode" = "Mod pemandu";
+"profile.driver.publishFirst" = "Terbitkan laluan pertama anda";
+"profile.driver.manageSubtitle" = "Urus laluan & pendapatan anda";
+"profile.driver.approvedSubtitle" = "KYC anda diluluskan — mula tawarkan tempat duduk";
+
+/* Profile — vehicle card + edit sheet */
+"profile.vehicle.title" = "Kenderaan anda";
+"profile.vehicle.setUp" = "Sediakan";
+"profile.vehicle.subtitle" = "Tetapkan plat, warna & model anda supaya penumpang dapat mengenal pasti anda";
+"profile.vehicle.editHint" = "Ketik untuk sunting plat, warna dan model";
+"profile.vehicle.plate" = "Nombor plat";
+"profile.vehicle.platePlaceholder" = "PEN 1234";
+"profile.vehicle.colour" = "Warna";
+"profile.vehicle.colourPlaceholder" = "Putih";
+"profile.vehicle.model" = "Model";
+"profile.vehicle.modelPlaceholder" = "Myvi";
+"profile.vehicle.sheetSubtitle" = "Penumpang menggunakan plat, warna dan model untuk mengenal pasti kereta yang betul di lokasi penjemputan. Ditetapkan sekali sahaja dan dikenakan kepada setiap laluan yang anda terbitkan.";
+
+/* Profile — edit display name sheet */
+"profile.name.sheetTitle" = "Nama anda";
+"profile.name.sheetSubtitle" = "Ini adalah bagaimana pemandu dan penumpang melihat anda pada resit, perbualan sembang dan pengesahan perjalanan.";
+"profile.name.placeholder" = "cth. Vishnu Kumar";
+"profile.name.editHint" = "Ketik untuk sunting nama paparan anda";
+
+/* Profile — KYC card on Profile screen */
+"profile.kyc.message.approved" = "Anda telah disahkan sepenuhnya · MyKad dalam fail";
+"profile.kyc.message.pending" = "Pengesahan sedang disemak";
+"profile.kyc.message.rejected" = "Pengesahan ditolak – hantar semula";
+"profile.kyc.message.notStarted" = "Lengkapkan pengesahan untuk memandu";
+"profile.kyc.badge.verified" = "Disahkan";
+"profile.kyc.badge.pending" = "Menunggu";
+"profile.kyc.badge.rejected" = "Ditolak";
+"profile.kyc.badge.notStarted" = "Belum bermula";
+
+/* Profile — wallet card subtitle */
+"profile.wallet.syncAfterSignIn" = "Dompet disegerakkan selepas log masuk";
+"profile.wallet.noPayments" = "Tiada pembayaran lagi";
+"profile.wallet.viewPayments" = "Lihat pembayaran & resit";
+"profile.wallet.creditAndPayments" = "%@ kredit · lihat pembayaran";
 
 /* Privacy & Security */
 "privacy.title" = "Privasi & Keselamatan";
@@ -124,6 +212,25 @@
 "privacy.section.danger" = "Zon bahaya";
 "privacy.delete" = "Padam akaun";
 "privacy.deleteSubtitle" = "Memadamkan akaun anda secara kekal selepas 30 hari. Diperlukan oleh App Store + PDPA.";
+
+/* Privacy & Security — analytics toggle, blocks counter, delete dialogs, errors */
+"privacy.toggle.analytics" = "Analitik produk";
+"privacy.toggle.analyticsSubtitle" = "Kongsi peristiwa penggunaan yang membantu meningkatkan kebolehpercayaan dan padanan laluan";
+"privacy.blocks.max" = "200";
+"privacy.blocks.counter" = "%d/200";
+"privacy.delete.confirmTitle" = "Padam akaun ini?";
+"privacy.delete.confirmBody" = "Akaun, laluan dan langganan anda akan dijeda serta-merta. Anda mempunyai 30 hari untuk log masuk semula bagi membatalkannya. Selepas itu, data anda dinyahnamakan secara kekal.";
+"privacy.delete.continue" = "Teruskan";
+"privacy.delete.finalTitle" = "Pasti mahu padam?";
+"privacy.delete.finalBody" = "Ini peluang terakhir anda untuk berundur. Kami akan e-mel pengesahan.";
+"privacy.delete.yes" = "Ya, padamkan";
+"privacy.delete.keep" = "Kekalkan akaun saya";
+"privacy.error.loadFailed" = "Tidak dapat memuatkan keutamaan.";
+"privacy.error.saveFailed" = "Tidak dapat menyimpan keutamaan. Cuba lagi.";
+"privacy.error.unblockFailed" = "Tidak dapat membuka sekatan. Cuba lagi.";
+"privacy.unblockedToast" = "Sekatan dibuka.";
+"privacy.error.exportFailed" = "Tidak dapat menjadualkan eksport. Cuba lagi.";
+"privacy.error.deleteFailed" = "Tidak dapat memadam akaun. Cuba lagi atau e-mel sokongan.";
 
 /* Solo seat */
 "solo.title" = "Berkenderaan solo";
@@ -148,6 +255,16 @@
 "home.whereTo.afternoon" = "Ke mana hari ini,\ntengah hari?";
 "home.whereTo.evening" = "Ke mana hari ini,\npetang ini?";
 "home.whereTo.late" = "Hendak ke mana?";
+
+/* Home — time-of-day greeting + identity fallbacks */
+"home.greeting.morning" = "Selamat pagi";
+"home.greeting.afternoon" = "Selamat tengah hari";
+"home.greeting.evening" = "Selamat petang";
+"home.greeting.fallback" = "Hai";
+"home.firstName.fallback" = "anda";
+"home.driver.fallback" = "Pemandu";
+"home.a11y.nextCommute" = "Buka butiran laluan untuk perjalanan seterusnya";
+"home.a11y.actionRequired" = "Tindakan diperlukan: langganan dijeda. Ketik untuk selesaikan.";
 "home.when.today" = "Hari ini";
 "home.when.tomorrow" = "Esok";
 "home.action.calendar" = "Jadual";
@@ -224,6 +341,21 @@
 "kyc.stuckTitle" = "Tersangkut lebih 48 jam?";
 "kyc.stuckBody" = "E-mel support@voygo.app dengan nama anda dan kami akan utamakan semakan anda.";
 "kyc.emailSupport" = "E-mel sokongan →";
+"kyc.docsCount.one" = "1 dokumen";
+"kyc.docsCount.many" = "%d dokumen";
+"kyc.status.approved.title" = "Anda telah disahkan sepenuhnya";
+"kyc.status.approved.subtitle" = "MyKad dalam fail · akaun dipercayai";
+"kyc.status.pending.title" = "Pengesahan sedang disemak";
+"kyc.status.pending.subtitle" = "Kebanyakan semakan selesai dalam 24–48 jam";
+"kyc.status.rejected.title" = "Pengesahan ditolak";
+"kyc.status.rejected.subtitle" = "Hantar semula dokumen yang ditolak di bawah untuk mencuba lagi";
+"kyc.status.notStarted.title" = "Sahkan untuk mula menaiki";
+"kyc.status.notStarted.subtitle" = "MyKad + swafoto untuk penumpang. Pemandu menambah lesen + kenderaan.";
+"kyc.footer.blurb" = "Kami menggunakan dokumen anda untuk mengesahkan identiti, menjalankan semakan keselamatan ringkas, dan memenuhi peraturan KYC Bank Negara. Hanya penyemak amanah & keselamatan boleh melihat foto anda.";
+"kyc.submitForReview" = "Tanda pengesahan dihantar";
+"kyc.uploadedToast" = "%@ dimuat naik — menunggu semakan";
+"kyc.uploadFailed" = "Muat naik gagal. %@";
+"kyc.uploadLinkFailed" = "Tidak dapat memautkan muat naik";
 
 /* Route details */
 "route.details.title" = "Butiran Laluan";
@@ -232,6 +364,40 @@
 "subscribe.active" = "Langganan aktif!";
 "subscribe.bookSolo" = "Tempah solo untuk satu hari";
 "subscribe.soloPrice" = "RM %d — seluruh kereta, tiada penumpang lain";
+
+/* Route info rows */
+"route.info.route" = "Laluan";
+"route.info.departure" = "Bertolak";
+"route.info.schedule" = "Jadual";
+"route.info.carType" = "Jenis kereta";
+"route.info.availableSeats" = "Tempat duduk tersedia";
+"route.info.seatsOf" = "%d daripada %d";
+"route.info.activeRiders" = "Penumpang aktif";
+"route.info.driverReliability" = "Kebolehpercayaan pemandu";
+"route.info.onTime" = "Tepat masa";
+"route.info.cancelRate" = "Kadar pembatalan";
+"route.info.repeatRiders" = "Penumpang berulang";
+"route.pickupPoint" = "Lokasi penjemputan";
+"route.dropPoint" = "Lokasi turun";
+
+/* Subscribe — config + tier picker */
+"subscribe.section" = "Langganan";
+"subscribe.numberOfDays" = "Bilangan hari";
+"subscribe.startsTodayDays" = "Bermula hari ini · %d hari";
+"subscribe.tier" = "Pakej";
+"subscribe.tier.try" = "Cuba dulu";
+"subscribe.tier.discount" = "Diskaun %d%%";
+"subscribe.total" = "Jumlah";
+
+/* Subscribe — payment failure surfaces */
+"subscribe.error.pauseFailed" = "Pembayaran tidak dapat dimulakan dan kami tidak dapat menjedanya: %@. Batal dari Langganan Saya sebelum mencuba semula.";
+"subscribe.error.pauseRetry" = "Pembayaran tidak dapat dimulakan. Langganan dijeda — cuba semula dari Langganan Saya.";
+"subscribe.error.declinedPauseFailed" = "Pembayaran ditolak dan jeda juga gagal: %@. Batal dari Langganan Saya sebelum mencuba semula.";
+"subscribe.error.declinedPaused" = "Pembayaran ditolak. Langganan dijeda — cuba semula dari Langganan Saya.";
+"subscribe.error.failedPauseFailed" = "Pembayaran gagal (%@) dan kami juga tidak dapat menjeda langganan: %@. Sila batalkan dari Langganan Saya sebelum mencuba semula.";
+"subscribe.error.paymentFailed" = "Langganan dijeda — pembayaran gagal: %@. Cuba semula dari Langganan Saya.";
+"subscribe.error.cancelledPauseFailed" = "Pembayaran dibatalkan — jeda juga gagal: %@.";
+"subscribe.error.notCompleted" = "Pembayaran tidak selesai. Langganan dijeda — cuba semula dari Langganan Saya.";
 
 /* Inbox + chat */
 "inbox.title" = "Peti masuk";
@@ -259,3 +425,218 @@
 
 /* Subscriptions list */
 "subs.title" = "Perjalanan harian saya";
+
+/* Commute / Search — Find Commute Routes view */
+"commute.hero.subtitle" = "Cari atau tawarkan tempat duduk ulang-alik harian di seluruh Malaysia";
+"commute.menu.create" = "Cipta Laluan";
+"commute.menu.driverDash" = "Papan Pemuka Pemandu";
+"commute.stat.routes" = "laluan";
+"commute.stat.activeRides" = "perjalanan aktif";
+"commute.stat.avgFare" = "purata tambang";
+"commute.action.findRide" = "Cari perjalanan";
+"commute.action.matchSeats" = "Padan tempat duduk";
+"commute.action.offerRide" = "Tawar perjalanan";
+"commute.action.shareSeats" = "Kongsi tempat duduk";
+"commute.action.driver" = "Pemandu";
+"commute.action.manage" = "Urus";
+
+/* Search panel */
+"search.from" = "Dari";
+"search.to" = "Ke";
+"search.from.placeholder" = "Rumah, lokasi semasa, atau lokasi penjemputan";
+"search.to.placeholder" = "Pejabat atau destinasi";
+"search.useCurrentLocation" = "Guna Lokasi Semasa";
+"search.useCurrentLocation.hint" = "Tetapkan lokasi mula dari GPS";
+"search.earliest" = "Paling awal";
+"search.latest" = "Paling lewat";
+"search.cta" = "Cari laluan";
+"search.lookingNearby" = "Mencari tempat berdekatan";
+"search.missingFromTo" = "Masukkan kedua-dua Dari dan Ke sebelum mencari laluan.";
+"search.locationDenied" = "Tidak dapat mendapatkan lokasi semasa anda. Sila izinkan akses lokasi tepat dalam Tetapan dan cuba lagi.";
+
+/* Filters bar */
+"filter.runOn" = "BERJALAN PADA";
+"filter.budget" = "BAJET";
+"filter.sortBy" = "SUSUN MENGIKUT";
+"filter.cap" = "Had";
+"filter.anyPrice" = "Apa-apa harga";
+
+/* Sort options */
+"sort.bestMatch" = "Padanan terbaik";
+"sort.cheapest" = "Termurah";
+"sort.closestPickup" = "Penjemputan terdekat";
+"sort.mostReliable" = "Paling boleh dipercayai";
+
+/* Results */
+"search.results.title" = "Padanan laluan terbaik";
+"search.seatsLeft" = "%1$d daripada %2$d tempat duduk berbaki";
+
+/* Empty state */
+"search.empty.title" = "Tiada laluan untuk koridor itu — buat masa ini";
+"search.empty.body" = "Pilot Pulau Pinang masih ada jurang. Cuba salah satu daripada ini:";
+"search.empty.request" = "Beritahu pemandu saya mahukan koridor ini";
+"search.empty.widen" = "Cuba tingkap masa lebih luas (06:00–10:00)";
+"search.empty.reset" = "Set semula penapis";
+
+/* Share template */
+"share.route.template" = "%1$@ → %2$@ di Voygo\n%3$@ · %4$@/tempat duduk · pemandu %5$@\n%6$@";
+
+/* Trip History */
+"tripHistory.title" = "Sejarah Perjalanan";
+"tripHistory.filter.all" = "Semua";
+"tripHistory.filter.completed" = "Selesai";
+"tripHistory.filter.cancelled" = "Dibatalkan";
+"tripHistory.empty.titleNone" = "Tiada perjalanan lagi";
+"tripHistory.empty.titleFilter" = "Tiada perjalanan padan dengan penapis ini";
+"tripHistory.empty.body" = "Perjalanan selesai dan dibatalkan anda akan muncul di sini.";
+"tripHistory.stat.total" = "Jumlah";
+"tripHistory.stat.trips" = "Perjalanan";
+"tripHistory.stat.refunded" = "Dipulangkan";
+"tripHistory.row.cancelled" = "Dibatalkan";
+"tripHistory.row.receipt" = "Resit ›";
+"tripHistory.kicker.zero" = "Tiada perjalanan lagi";
+"tripHistory.kicker.one" = "1 perjalanan";
+"tripHistory.kicker.many" = "%d perjalanan";
+"tripHistory.row.a11yCancelled" = "Perjalanan dibatalkan pada %1$@ %2$@ %3$@";
+
+/* Subscription tier display labels */
+"tier.fallback" = "perjalanan";
+"tier.monthly" = "Bulanan";
+"tier.weekly" = "Mingguan";
+"tier.tryIt" = "Cuba dulu";
+
+/* Receipt */
+"receipt.title" = "Resit";
+"receipt.status.completed" = "Selesai";
+"receipt.status.pending" = "Menunggu pembayaran";
+"receipt.status.failed" = "Gagal";
+"receipt.status.refunded" = "Dipulangkan";
+"receipt.status.fallback" = "Resit";
+"receipt.header" = "Tempahan #%1$@ · %2$@";
+"receipt.baseFare" = "Tambang asas (%@)";
+"receipt.voygoCredit" = "Kredit Voygo";
+"receipt.included" = "Termasuk";
+"receipt.totalCharged" = "Jumlah dicas";
+"receipt.forExpense" = "Untuk tuntutan perbelanjaan";
+"receipt.fareBreakdown" = "Pecahan tambang";
+"receipt.verification" = "Pengesahan";
+"receipt.methodOnFile" = "Kaedah dalam fail";
+"receipt.pickupAt" = "Penjemputan · %@";
+"receipt.approxDrop" = "Anggaran turun · %@";
+"receipt.driverFallback" = "Pemandu";
+"receipt.plateOnFile" = "plat dalam fail";
+"receipt.shareText" = "Resit Voygo %1$@: %2$@, RM %3$d, %4$@";
+"receipt.shareTextFallback" = "Resit Voygo %@";
+"receipt.routeA11y" = "Laluan perjalanan — %@";
+"receipt.routeUnavailableA11y" = "Laluan perjalanan tiada — %@";
+
+/* Wallet — hero + extras */
+"wallet.heroLabel" = "Kredit Voygo";
+"wallet.heroPrefix" = "RM";
+"wallet.heroBadge" = "VOYGO";
+"wallet.recent" = "Terkini";
+"wallet.seeAll" = "Lihat semua";
+"wallet.noPaymentsBody" = "Langgan laluan dan caj anda akan muncul di sini";
+"wallet.default" = "Lalai";
+"wallet.subscriptionTitle" = "Langganan Voygo";
+"wallet.routeTitle" = "Laluan %@";
+"wallet.txSubtitle" = "%1$@ · %2$@";
+"wallet.loadingBalance.a11y" = "Memuatkan baki dompet";
+
+/* Payment status badges */
+"payment.status.charged" = "Dicas";
+"payment.status.pending" = "Menunggu";
+"payment.status.failed" = "Gagal";
+"payment.status.refunded" = "Dipulangkan";
+
+/* Driver Payouts */
+"driverPayouts.navTitle" = "Minggu ini";
+"driverPayouts.kicker" = "Bayaran pemandu";
+"driverPayouts.title" = "Bayaran Pemandu";
+"driverPayouts.weekOf" = "Minggu %1$@ → %2$@";
+"driverPayouts.netPayout" = "Bayaran bersih";
+"driverPayouts.ridesCompleted" = "Perjalanan selesai";
+"driverPayouts.seatsFilled" = "Tempat duduk terisi";
+"driverPayouts.grossEarnings" = "Pendapatan kasar";
+"driverPayouts.voygoFee" = "Yuran Voygo";
+"driverPayouts.penaltiesHeld" = "Penalti ditahan";
+"driverPayouts.streakBonus" = "Bonus streak";
+"driverPayouts.paysOutBy" = "Dibayar menjelang Selasa 5pm";
+"driverPayouts.paidOut" = "Telah dibayar · masuk akaun bank anda dalam 24 jam";
+"driverPayouts.reliability" = "Kebolehpercayaan";
+"driverPayouts.onTimePct" = "%d%% tepat masa";
+"driverPayouts.reliabilityTop" = "Peringkat tertinggi. Inilah yang membuatkan penumpang langgan semula tanpa fikir panjang.";
+"driverPayouts.reliabilitySolid" = "Stabil. Lewat sesekali tidak menjadi masalah — penumpang lihat trend, bukan satu kes terpencil.";
+"driverPayouts.reliabilityLow" = "Di bawah purata koridor. Cara cepat: bertolak 5 minit lebih awal dan elak miss mesej.";
+"driverPayouts.footnote" = "Voygo mengenakan yuran platform tetap setiap tempat duduk. Ini bebas daripada tambang anda — pendapatan anda meningkat hanya apabila tempat duduk diisi.";
+"driverPayouts.empty.title" = "Belum ada pendapatan";
+"driverPayouts.empty.body" = "Pandu laluan minggu ini dan bayaran anda akan muncul di sini pada hari Selasa.";
+"driverPayouts.zeroRides.title" = "Tiada perjalanan minggu ini";
+"driverPayouts.zeroRides.body" = "Setelah anda menyelesaikan perjalanan pada laluan anda, pendapatan akan muncul di sini pada hari Selasa.";
+
+/* Stripe Connect banner */
+"driverPayouts.connect.pendingTitle" = "Sediakan bayaran bank";
+"driverPayouts.connect.pendingBody" = "Stripe menahan sementara semasa bank anda mengesahkan. Mengambil masa ~3 minit.";
+"driverPayouts.connect.pendingCTA" = "Teruskan tetapan";
+"driverPayouts.connect.comingTitle" = "Bayaran bank akan dilancarkan tidak lama lagi";
+"driverPayouts.connect.comingBody" = "Kami akan maklumkan pemandu apabila Stripe Connect didayakan. Pendapatan masih terkumpul sementara itu.";
+
+/* Driver Dashboard (extras) */
+"driver.dashboard.title" = "Papan pemuka pemandu";
+"driver.nav.riderDemand" = "Permintaan penumpang";
+"driver.nav.payouts" = "Bayaran";
+"driver.pause.alertTitle" = "Jeda laluan ini?";
+"driver.pause.alertBody" = "Menjeda akan membatalkan setiap penjemputan yang dijadualkan untuk laluan ini. Penumpang akan diberitahu.";
+"driver.pause.alertConfirm" = "Jeda";
+"driver.departureValidationHint" = "Masa bertolak mestilah HH:mm (contoh 07:42).";
+"driver.scheduleUpdated.weekdays" = "Jadual dikemas kini ke hari bekerja.";
+"driver.scheduleUpdated.allDays" = "Jadual dikemas kini ke semua hari.";
+"driver.route.pausedToast" = "Laluan dijeda.";
+"driver.route.resumedToast" = "Laluan disambung semula.";
+"driver.card.active" = "Aktif";
+"driver.card.paused" = "Dijeda";
+"driver.card.riders" = "Penumpang";
+"driver.card.upcoming" = "Akan datang";
+"driver.card.seats" = "Tempat duduk";
+"driver.card.days" = "Hari";
+"driver.solo.bookingAhead.one" = "1 tempahan solo akan datang";
+"driver.solo.bookingAhead.many" = "%d tempahan solo akan datang";
+"driver.solo.datesMore" = "%1$@, +%2$d lagi";
+"driver.departureField" = "Masa Bertolak (HH:mm)";
+"driver.dayPreset.monFri" = "Isn–Jum";
+"driver.dayPreset.allDays" = "Semua hari";
+"driver.pauseRoute" = "Jeda laluan";
+"driver.resumeRoute" = "Sambung laluan";
+"driver.calendarButton" = "Jadual";
+
+/* CreateRoute view */
+"createRoute.title" = "Cipta Laluan";
+"createRoute.section.routeInfo" = "Maklumat Laluan";
+"createRoute.start.label" = "Lokasi Mula";
+"createRoute.start.placeholder" = "Pilih pada peta · contoh Komtar";
+"createRoute.end.label" = "Destinasi";
+"createRoute.end.placeholder" = "Pilih pada peta · contoh Bayan Lepas";
+"createRoute.departure.label" = "MASA BERTOLAK";
+"createRoute.departure" = "Bertolak";
+"createRoute.seats" = "TEMPAT DUDUK";
+"createRoute.pricePerSeat" = "HARGA/TEMPAT DUDUK";
+"createRoute.priceSuffix" = "RM";
+"createRoute.seatCapHint" = "Sehingga %1$d penumpang dalam %2$@";
+"createRoute.section.carType" = "Jenis Kereta";
+"createRoute.vehicleMissing.title" = "Tambah kenderaan anda ke Profil";
+"createRoute.vehicleMissing.body" = "Plat + warna disimpan dalam profil anda supaya penumpang dapat mengenal pasti kereta. Tetapkan sekali, terpakai untuk setiap laluan.";
+"createRoute.vehicleHint" = "Penumpang akan lihat: %@";
+"createRoute.vehicleHintWithDescriptor" = "Penumpang akan lihat: %1$@ · %2$@";
+"createRoute.section.daysOfWeek" = "Hari Minggu";
+"createRoute.section.pickupPoints" = "Lokasi Penjemputan";
+"createRoute.section.dropPoints" = "Lokasi Turun";
+"createRoute.addStop.label" = "Tambah lokasi";
+"createRoute.addStop.placeholder" = "contoh Komtar";
+"createRoute.saveCTA" = "Simpan Laluan Berulang";
+"createRoute.picker.from" = "Dari mana?";
+"createRoute.picker.to" = "Ke mana?";
+"createRoute.suggestedNear" = "Dicadangkan berdekatan %@";
+"createRoute.suggestedNearby" = "Dicadangkan berdekatan";
+"createRoute.lookingUpHubs" = "Mencari hub pengangkutan…";
+"createRoute.suggestion.popularBadge" = "Popular";
+"createRoute.stepper.a11y" = "%1$@ %2$d. Ketik untuk menaip.";
