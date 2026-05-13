@@ -285,6 +285,30 @@
 "home.service.schedule" = "Jadual";
 "home.service.longHaul" = "Antarabandar";
 "home.service.newBadge" = "BARU";
+"home.service.bookDay" = "Tempah sehari";
+
+/* Book a day */
+"bookDay.pickTitle" = "Tempah sehari";
+"bookDay.confirmTitle" = "Sahkan tempahan";
+"bookDay.explainer.title" = "Sehari sahaja, tiada ikatan";
+"bookDay.explainer.body" = "Bayar 1× harga tempat duduk untuk satu hari. Pemandu yang sama dipercayai — tempah hari yang anda perlukan sahaja, tiada langganan bulanan.";
+"bookDay.empty.title" = "Cari laluan dahulu";
+"bookDay.empty.body" = "Tempahan sehari menggunakan laluan carpool sedia ada — cari laluan yang sesuai, kemudian pilih hari untuk menaiki.";
+"bookDay.browseRoutes" = "Lihat laluan";
+"bookDay.noDates" = "Tiada tarikh akan datang dalam 2 minggu.";
+"bookDay.seatSuffix" = "tempat";
+"bookDay.departsAt" = "Bertolak %@";
+"bookDay.departs" = "Bertolak";
+"bookDay.seatPrice" = "Jumlah";
+"bookDay.noSeatsLeft" = "Tiada tempat duduk berbaki untuk hari ini — cuba hari lain.";
+"bookDay.loadFailed" = "Tidak dapat memuatkan perjalanan ini";
+"bookDay.payment.couldntStart" = "Pembayaran tidak dapat dimulakan. Cuba lagi sebentar.";
+"bookDay.payment.declined" = "Pembayaran ditolak. Cuba hari lain atau gunakan kaedah pembayaran lain.";
+"bookDay.confirmCTA" = "Sahkan — RM %d";
+"bookDay.whatYouGet.title" = "Apa yang anda dapat";
+"bookDay.whatYouGet.seat" = "Satu tempat duduk dikhaskan untuk perjalanan ini";
+"bookDay.whatYouGet.driver" = "Pemandu yang sama yang menjalankan laluan ini setiap hari";
+"bookDay.whatYouGet.noCommit" = "Tiada langganan bulanan — bayar untuk hari itu sahaja";
 "home.whereTo.morning" = "Ke mana hari ini,\npagi ini?";
 "home.whereTo.afternoon" = "Ke mana hari ini,\ntengah hari?";
 "home.whereTo.evening" = "Ke mana hari ini,\npetang ini?";

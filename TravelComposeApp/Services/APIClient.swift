@@ -242,6 +242,18 @@ struct VoygoAPIClient {
         )
     }
 
+    /// "Book a day" — single-ride paid booking on a recurring route at
+    /// 1× seat price. Sibling of `soloBook` but doesn't lock the car;
+    /// other riders can still book the remaining seats on the same
+    /// instance. Backend: `POST /trips/:id/book-day`.
+    static func bookDay(rideInstanceId: String) async throws -> BookDayResponse {
+        try await post(
+            EmptyRequest(),
+            to: baseURL.appendingPathComponent("trips/\(rideInstanceId)/book-day"),
+            as: BookDayResponse.self
+        )
+    }
+
     /// Cancels the caller's own solo booking. Refund tier is computed
     /// server-side based on hours-to-departure (>=12h full, >=2h half,
     /// otherwise none) — UI surfaces the value from the response, not
@@ -1104,6 +1116,16 @@ struct SoloCancelPolicy: Decodable {
 }
 
 struct SoloBookResponse: Decodable {
+    var rideInstanceId: String
+    var routeId: String
+    var amountMyr: Int
+    var payment: PaymentChargeResult
+}
+
+/// Wire shape for `POST /trips/:id/book-day` — same envelope as
+/// `SoloBookResponse` but priced at 1× and without the
+/// solo-multiplier metadata.
+struct BookDayResponse: Decodable {
     var rideInstanceId: String
     var routeId: String
     var amountMyr: Int

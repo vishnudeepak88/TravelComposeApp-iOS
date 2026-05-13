@@ -3441,6 +3441,190 @@ app.post(
   })
 );
 
+// ─── Book-a-day (single ride, 1× seat price, paid one-off) ──────────
+//
+// "Schedule" tile on Home → BookDay flow. Rider picks a route +
+// specific upcoming ride instance, pays 1× the seat price for that
+// SINGLE day. Doesn't lock the car (other riders can still book
+// remaining seats), doesn't require a recurring subscription.
+//
+// Fills the product gap between:
+//   - Subscribe (monthly commit, recurring schedule)
+//   - Solo book (2× price, locks the whole car for one day)
+//
+// Backend shape mirrors solo-book by intent (atomic claim + Billplz
+// charge + notification fan-out) but with:
+//   - 1× pricing (not 2×)
+//   - seat_availability decremented by 1, not zeroed
+//   - is_solo NOT flipped — other riders can still book the remaining seats
+//   - tier='DAYPASS' so payments / payouts can distinguish from
+//     SUBSCRIPTION + SOLO + LONGHAUL revenue without a schema change.
+app.post(
+  "/trips/:id/book-day",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const client = await pool.connect();
+    let committed = false;
+    let booking = null;
+    try {
+      await client.query("BEGIN");
+      const rideRes = await client.query(
+        `SELECT i.id, i.route_id, i.date, i.ride_status,
+                i.is_solo, i.solo_rider_id, i.seat_availability,
+                r.driver_id, r.driver_name, r.departure_time,
+                r.start_location, r.end_location, r.price_per_seat
+           FROM commute_ride_instances i
+           JOIN recurring_routes r ON r.id = i.route_id
+          WHERE i.id = $1
+          FOR UPDATE`,
+        [req.params.id]
+      );
+      const ride = rideRes.rows[0];
+      if (!ride) {
+        res.status(404).json({ detail: "Ride not found" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (String(ride.driver_id) === req.user.id) {
+        res.status(403).json({ detail: "Drivers cannot book their own ride" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (ride.ride_status !== "SCHEDULED") {
+        res.status(409).json({ detail: "ride_not_scheduled" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      const departAt = rideDepartAt(ride);
+      if (!departAt || departAt.getTime() < Date.now()) {
+        res.status(409).json({ detail: "ride_in_past" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (ride.is_solo) {
+        res.status(409).json({ detail: "already_solo_booked" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      if (Number(ride.seat_availability) <= 0) {
+        res.status(409).json({ detail: "no_seats_available" });
+        await client.query("ROLLBACK");
+        return;
+      }
+      // Idempotency: a rider who's already on this ride (subscribed
+      // OR previously booked via day-pass) shouldn't pay twice.
+      const existing = await client.query(
+        `SELECT id FROM commute_ride_passengers
+          WHERE instance_id = $1 AND rider_id = $2 LIMIT 1`,
+        [req.params.id, req.user.id]
+      );
+      if (existing.rowCount > 0) {
+        res.status(409).json({ detail: "already_booked" });
+        await client.query("ROLLBACK");
+        return;
+      }
+
+      const pricePerSeat = Number(ride.price_per_seat || 0);
+      if (!Number.isFinite(pricePerSeat) || pricePerSeat < 1) {
+        res.status(409).json({ detail: "price_unavailable" });
+        await client.query("ROLLBACK");
+        return;
+      }
+
+      // Decrement seat availability + record the passenger row.
+      // Other riders can still book the remaining seats.
+      await client.query(
+        `UPDATE commute_ride_instances
+            SET seat_availability = GREATEST(0, seat_availability - 1)
+          WHERE id = $1`,
+        [req.params.id]
+      );
+
+      const passengerId = crypto.randomUUID();
+      await client.query(
+        `INSERT INTO commute_ride_passengers (id, instance_id, rider_id, status)
+           VALUES ($1, $2, $3, 'CONFIRMED')`,
+        [passengerId, req.params.id, req.user.id]
+      );
+
+      await client.query("COMMIT");
+      committed = true;
+      booking = {
+        rideInstanceId: String(ride.id),
+        routeId: String(ride.route_id),
+        passengerId,
+        amountMyr: pricePerSeat,
+        driverId: ride.driver_id,
+        startLocation: ride.start_location,
+        endLocation: ride.end_location
+      };
+    } catch (error) {
+      if (!committed) await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    // Charge via the existing Billplz pipeline. subscriptionId is
+    // null — day-pass bookings are one-off payments.
+    let charge = null;
+    try {
+      charge = await chargeSubscription(pool, {
+        userId: req.user.id,
+        subscriptionId: null,
+        routeId: booking.routeId,
+        amountMyr: booking.amountMyr,
+        tier: "DAYPASS",
+        contact: bodyValue(req.body || {}, "contact") || {}
+      });
+    } catch (chargeErr) {
+      // Charge failed AFTER we claimed the seat. Release it so the
+      // next rider can book + we don't bill for a phantom hold.
+      console.warn(`[book-day] charge failed, releasing seat on ${booking.rideInstanceId}: ${chargeErr.message}`);
+      await pool.query(
+        `UPDATE commute_ride_instances
+            SET seat_availability = seat_availability + 1
+          WHERE id = $1`,
+        [booking.rideInstanceId]
+      );
+      await pool.query(
+        "DELETE FROM commute_ride_passengers WHERE instance_id = $1 AND rider_id = $2",
+        [booking.rideInstanceId, req.user.id]
+      );
+      res.status(502).json({ detail: "charge_failed", reason: chargeErr.message });
+      return;
+    }
+
+    // Notify both sides. Parallel fan-out — never block the response.
+    Promise.all([
+      createNotification({
+        userId: req.user.id,
+        type: "RIDE_BOOKED",
+        title: "Ride booked",
+        body: `${booking.startLocation} → ${booking.endLocation}`,
+        routeId: booking.routeId,
+        rideInstanceId: booking.rideInstanceId
+      }),
+      createNotification({
+        userId: booking.driverId,
+        type: "RIDE_SEAT_BOOKED",
+        title: "Seat booked",
+        body: "A rider booked a seat on your ride.",
+        routeId: booking.routeId,
+        rideInstanceId: booking.rideInstanceId
+      })
+    ]).catch((e) => console.warn(`[book-day] notify failed: ${e.message}`));
+
+    res.status(201).json({
+      rideInstanceId: booking.rideInstanceId,
+      routeId: booking.routeId,
+      amountMyr: booking.amountMyr,
+      payment: charge
+    });
+  })
+);
+
 // ─── Solo seat (book the whole car) ──────────────────────────────────
 //
 // Rider pays SOLO_PRICE_MULTIPLIER × normal seat price to claim the

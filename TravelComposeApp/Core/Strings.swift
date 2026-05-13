@@ -334,6 +334,39 @@ enum S {
     static var homeServiceSchedule: String { Self.t("home.service.schedule", "Schedule") }
     static var homeServiceLongHaul: String { Self.t("home.service.longHaul", "Long-haul") }
     static var homeServiceNewBadge: String { Self.t("home.service.newBadge", "NEW") }
+    static var homeServiceBookDay: String  { Self.t("home.service.bookDay",  "Book a day") }
+
+    // MARK: Book a day
+
+    static var bookDayPickTitle: String         { Self.t("bookDay.pickTitle",        "Book a day") }
+    static var bookDayConfirmTitle: String      { Self.t("bookDay.confirmTitle",     "Confirm booking") }
+    static var bookDayExplainerTitle: String    { Self.t("bookDay.explainer.title",  "One day, no commitment") }
+    static var bookDayExplainerBody: String     { Self.t("bookDay.explainer.body",   "Pay 1× the seat price for a single day. Same trusted driver — book just the day you need, no monthly subscription.") }
+    static var bookDayEmptyTitle: String        { Self.t("bookDay.empty.title",      "Find a route first") }
+    static var bookDayEmptyBody: String         { Self.t("bookDay.empty.body",       "Book-a-day rides run on existing carpool routes — find one you like, then pick a day to ride.") }
+    static var bookDayBrowseRoutes: String      { Self.t("bookDay.browseRoutes",     "Browse routes") }
+    static var bookDayNoDatesAvailable: String  { Self.t("bookDay.noDates",          "No upcoming dates in the next 2 weeks.") }
+    static var bookDaySeatSuffix: String        { Self.t("bookDay.seatSuffix",       "seat") }
+    static func bookDayDepartsAt(_ time: String) -> String {
+        let template = Self.t("bookDay.departsAt", "Departs %@")
+        return String(format: template, time)
+    }
+    static var bookDayDeparts: String           { Self.t("bookDay.departs",          "Departs") }
+    static var bookDaySeatPrice: String         { Self.t("bookDay.seatPrice",        "Total") }
+    static var bookDayNoSeatsLeft: String       { Self.t("bookDay.noSeatsLeft",      "No seats left on this date — try another day.") }
+    static var bookDayLoadFailed: String        { Self.t("bookDay.loadFailed",       "Couldn't load this ride") }
+    static var bookDayPaymentCouldntStart: String {
+        Self.t("bookDay.payment.couldntStart", "Payment couldn't start. Try again in a moment.")
+    }
+    static var bookDayPaymentDeclined: String   { Self.t("bookDay.payment.declined", "Payment declined. Try another day or use a different payment method.") }
+    static func bookDayConfirmCTA(_ amountMyr: Int) -> String {
+        let template = Self.t("bookDay.confirmCTA", "Confirm \u{2014} RM %d")
+        return String(format: template, amountMyr)
+    }
+    static var bookDayWhatYouGetTitle: String   { Self.t("bookDay.whatYouGet.title", "What you get") }
+    static var bookDayWhatYouGetSeat: String    { Self.t("bookDay.whatYouGet.seat",  "One reserved seat on this ride") }
+    static var bookDayWhatYouGetDriver: String  { Self.t("bookDay.whatYouGet.driver", "Same vetted driver who runs the route daily") }
+    static var bookDayWhatYouGetNoCommit: String { Self.t("bookDay.whatYouGet.noCommit", "No monthly commitment — pay only for the day") }
     static var homeWhenToday: String      { Self.t("home.when.today", "Today") }
     static var homeWhenTomorrow: String   { Self.t("home.when.tomorrow", "Tomorrow") }
     static var homeActionCalendar: String { Self.t("home.action.calendar", "Calendar") }

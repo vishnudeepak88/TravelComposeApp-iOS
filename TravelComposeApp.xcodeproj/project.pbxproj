@@ -67,6 +67,7 @@
 		B2C3D4E5F60718BBBB000B /* RouteRequestsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718AAAA000B /* RouteRequestsListView.swift */; };
 		B2C3D4E5F60718BBBB000C /* DriverDemandView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718AAAA000C /* DriverDemandView.swift */; };
 		B2C3D4E5F60718BBBB000D /* SoloViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718AAAA000D /* SoloViews.swift */; };
+		B2C3D4E5F60718BBBB000E /* BookDayViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718AAAA000E /* BookDayViews.swift */; };
 		A1A1A1A1B1B1B1B100000021 /* CancellationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A1A1A1B1B1B1B100000011 /* CancellationPolicyTests.swift */; };
 		A1A1A1A1B1B1B1B100000022 /* DaysOfWeekFlagsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A1A1A1B1B1B1B100000012 /* DaysOfWeekFlagsTests.swift */; };
 		A1A1A1A1B1B1B1B100000023 /* PhoneNormalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A1A1A1B1B1B1B100000013 /* PhoneNormalizationTests.swift */; };
@@ -152,6 +153,7 @@
 		B2C3D4E5F60718AAAA000B /* RouteRequestsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteRequestsListView.swift; sourceTree = "<group>"; };
 		B2C3D4E5F60718AAAA000C /* DriverDemandView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverDemandView.swift; sourceTree = "<group>"; };
 		B2C3D4E5F60718AAAA000D /* SoloViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoloViews.swift; sourceTree = "<group>"; };
+		B2C3D4E5F60718AAAA000E /* BookDayViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDayViews.swift; sourceTree = "<group>"; };
 		A1A1A1A1B1B1B1B100000011 /* CancellationPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CancellationPolicyTests.swift; sourceTree = "<group>"; };
 		A1A1A1A1B1B1B1B100000012 /* DaysOfWeekFlagsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DaysOfWeekFlagsTests.swift; sourceTree = "<group>"; };
 		A1A1A1A1B1B1B1B100000013 /* PhoneNormalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneNormalizationTests.swift; sourceTree = "<group>"; };
@@ -332,6 +334,7 @@
 				B2C3D4E5F60718AAAA000A /* FavoritesView.swift */,
 				B2C3D4E5F60718AAAA000B /* RouteRequestsListView.swift */,
 				B2C3D4E5F60718AAAA000D /* SoloViews.swift */,
+				B2C3D4E5F60718AAAA000E /* BookDayViews.swift */,
 			);
 			path = Commute;
 			sourceTree = "<group>";
@@ -559,6 +562,7 @@
 				B2C3D4E5F60718BBBB000B /* RouteRequestsListView.swift in Sources */,
 				B2C3D4E5F60718BBBB000C /* DriverDemandView.swift in Sources */,
 				B2C3D4E5F60718BBBB000D /* SoloViews.swift in Sources */,
+				B2C3D4E5F60718BBBB000E /* BookDayViews.swift in Sources */,
 
 			);
 			runOnlyForDeploymentPostprocessing = 0;

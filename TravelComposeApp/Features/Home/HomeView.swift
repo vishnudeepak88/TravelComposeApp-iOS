@@ -40,6 +40,7 @@ struct HomeTab: View {
                 onCarpoolTapped:      { switchToSearchTab() },
                 onLongHaulTapped:     { path.append(.longHaulBrowse) },
                 onSoloTapped:         { path.append(.soloPick) },
+                onBookDayTapped:      { path.append(.bookDayPick) },
                 onOpenRoute:          { id in path.append(.routeDetails(routeId: id)) },
                 onOpenNotifications:  { path.append(.notifications) },
                 onOpenCalendar:       { path.append(.calendar()) },
@@ -94,6 +95,11 @@ struct HomeView: View {
     /// — rider picks a route, picks a date, sees the 2× quote, confirms.
     /// Replaces the previous "Coming soon" alert.
     var onSoloTapped: () -> Void = {}
+    /// Tap on the Book-a-day service tile (was "Schedule"). Routes
+    /// to `BookDayPickRouteView` — single ride at 1× seat price,
+    /// no monthly commitment. Replaces the previous coming-soon
+    /// alert on the third tile.
+    var onBookDayTapped: () -> Void = {}
     /// Callback when a "Heading your way" card is tapped. Closures the
     /// route id rather than the row so HomeTab can drill straight into
     /// the shared `AppRoute.routeDetails(...)` without HomeView needing
@@ -651,7 +657,10 @@ struct HomeView: View {
         let tiles: [ServiceTile] = [
             .init(kind: .carpool,  icon: "car.fill",            label: S.homeServiceCarpool,  fg: VPalette.primary,      bg: VPalette.primaryContainer,      isPrimary: true,  badge: S.homeServiceNewBadge),
             .init(kind: .solo,     icon: "person.fill",         label: S.homeServiceSolo,     fg: VPalette.accentCoral,  bg: VPalette.accentCoralContainer),
-            .init(kind: .schedule, icon: "calendar",            label: S.homeServiceSchedule, fg: VPalette.accentPurple, bg: VPalette.accentPurpleContainer),
+            // "Schedule" repurposed to "Book a day" — single ride on a
+            // recurring route at 1× seat price. Different commitment
+            // level from Carpool (monthly) and Solo (whole car).
+            .init(kind: .schedule, icon: "calendar.badge.plus", label: S.homeServiceBookDay,  fg: VPalette.accentPurple, bg: VPalette.accentPurpleContainer),
             // Long-haul is the second real surface (after Carpool):
             // tapping it pushes onto the long-haul browse view.
             .init(kind: .longHaul, icon: "location.north.fill", label: S.homeServiceLongHaul, fg: VPalette.accentAmber,  bg: VPalette.accentAmberContainer, isLongHaul: true)
@@ -663,7 +672,7 @@ struct HomeView: View {
                     case .carpool:  onCarpoolTapped()
                     case .longHaul: onLongHaulTapped()
                     case .solo:     onSoloTapped()
-                    case .schedule: showComingSoonFor = tile.label
+                    case .schedule: onBookDayTapped()
                     }
                 } label: {
                     serviceTileBody(tile)

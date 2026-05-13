@@ -284,6 +284,30 @@
 "home.service.schedule" = "Schedule";
 "home.service.longHaul" = "Long-haul";
 "home.service.newBadge" = "NEW";
+"home.service.bookDay" = "Book a day";
+
+/* Book a day */
+"bookDay.pickTitle" = "Book a day";
+"bookDay.confirmTitle" = "Confirm booking";
+"bookDay.explainer.title" = "One day, no commitment";
+"bookDay.explainer.body" = "Pay 1× the seat price for a single day. Same trusted driver — book just the day you need, no monthly subscription.";
+"bookDay.empty.title" = "Find a route first";
+"bookDay.empty.body" = "Book-a-day rides run on existing carpool routes — find one you like, then pick a day to ride.";
+"bookDay.browseRoutes" = "Browse routes";
+"bookDay.noDates" = "No upcoming dates in the next 2 weeks.";
+"bookDay.seatSuffix" = "seat";
+"bookDay.departsAt" = "Departs %@";
+"bookDay.departs" = "Departs";
+"bookDay.seatPrice" = "Total";
+"bookDay.noSeatsLeft" = "No seats left on this date — try another day.";
+"bookDay.loadFailed" = "Couldn't load this ride";
+"bookDay.payment.couldntStart" = "Payment couldn't start. Try again in a moment.";
+"bookDay.payment.declined" = "Payment declined. Try another day or use a different payment method.";
+"bookDay.confirmCTA" = "Confirm — RM %d";
+"bookDay.whatYouGet.title" = "What you get";
+"bookDay.whatYouGet.seat" = "One reserved seat on this ride";
+"bookDay.whatYouGet.driver" = "Same vetted driver who runs the route daily";
+"bookDay.whatYouGet.noCommit" = "No monthly commitment — pay only for the day";
 "home.whereTo.morning" = "Where to,\nthis morning?";
 "home.whereTo.afternoon" = "Where to,\nthis afternoon?";
 "home.whereTo.evening" = "Where to,\nthis evening?";

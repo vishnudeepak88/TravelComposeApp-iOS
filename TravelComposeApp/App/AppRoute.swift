@@ -55,6 +55,13 @@ enum AppRoute: Hashable {
     // sheet's destination.
     case soloPick
     case soloConfirm(rideInstanceId: String)
+    // Book-a-day — single ride on a recurring route at 1× seat price.
+    // Sibling of solo but doesn't lock the car. Surfaced from the
+    // Home "Schedule" tile (renamed to "Book a day"). Pick view lists
+    // routes + upcoming dates; Confirm view shows the quote and
+    // triggers the Billplz hosted-checkout sheet.
+    case bookDayPick
+    case bookDayConfirm(rideInstanceId: String)
 }
 
 // MARK: - Shared destination builder
@@ -366,6 +373,26 @@ struct AppRouteDestinations: ViewModifier {
                         // After a successful book, pop back to root —
                         // the rider sees the booking on Home/Calendar
                         // via the usual refresh path.
+                        path.removeAll()
+                    }
+                )
+                .navigationBarHidden(true)
+
+            case .bookDayPick:
+                BookDayPickRouteView(
+                    onBack:     { if !path.isEmpty { path.removeLast() } },
+                    onPickRide: { rideId in path.append(.bookDayConfirm(rideInstanceId: rideId)) },
+                    onFindRoutes: { path.append(.findRides) }
+                )
+                .navigationBarHidden(true)
+
+            case .bookDayConfirm(let rideInstanceId):
+                BookDayConfirmView(
+                    rideInstanceId: rideInstanceId,
+                    onBack: { if !path.isEmpty { path.removeLast() } },
+                    onBooked: { _ in
+                        // Pop to root so the rider lands on Home and
+                        // sees the new booking via the refresh chain.
                         path.removeAll()
                     }
                 )
