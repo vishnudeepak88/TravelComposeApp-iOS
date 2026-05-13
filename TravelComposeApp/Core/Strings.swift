@@ -111,6 +111,7 @@ enum S {
     static var cancelSubscriptionTitle: String { Self.t("subscribe.cancelTitle", "Cancel subscription?") }
     static var cancelSubscriptionMessage: String { Self.t("subscribe.cancelMessage", "Your remaining rides will be cancelled. Refunds are calculated by our policy engine and applied to your Voygo Credit.") }
     static var confirmCancel: String { Self.t("subscribe.confirmCancel", "Yes, cancel") }
+    static var subKeepIt: String { Self.t("subscribe.keepIt", "Keep it") }
 
     // MARK: Wallet
 
@@ -175,6 +176,16 @@ enum S {
     static var chatEmptyBody: String  { Self.t("chat.empty.body",  "Say hi to your driver — they'll see it on their next pickup window.") }
     static var chatDirectKicker: String      { Self.t("chat.direct.kicker", "Direct chat") }
     static var chatMessagePlaceholder: String { Self.t("chat.message.placeholder", "Message…") }
+
+    // MARK: Notifications view
+    static var notifTitle: String         { Self.t("notif.title",         "Notifications") }
+    static var notifMarkAllRead: String   { Self.t("notif.markAllRead",   "Mark all read") }
+    static var notifEmptyTitle: String    { Self.t("notif.empty.title",   "No notifications yet") }
+    static var notifEmptyBody: String     { Self.t("notif.empty.body",    "Ride updates, pickup reminders, and chat alerts will appear here.") }
+    static var notifGroupToday: String     { Self.t("notif.group.today",     "Today") }
+    static var notifGroupYesterday: String { Self.t("notif.group.yesterday", "Yesterday") }
+    static var notifGroupThisWeek: String  { Self.t("notif.group.thisWeek",  "This week") }
+    static var notifGroupEarlier: String   { Self.t("notif.group.earlier",   "Earlier") }
 
     // MARK: Wallet (additional)
 

@@ -103,7 +103,7 @@ struct PostLongHaulTripView: View {
                     .foregroundColor(VPalette.text)
                 Spacer()
                 Stepper(value: $pricePerSeatMyr, in: 5...500, step: 5) {
-                    Text("RM \(pricePerSeatMyr)")
+                    Text(Formatters.ringgit(pricePerSeatMyr))
                         .font(.subheadline.weight(.heavy))
                         .foregroundColor(VPalette.primary)
                 }
@@ -113,7 +113,7 @@ struct PostLongHaulTripView: View {
                     .font(.caption)
                     .foregroundColor(VPalette.textHint)
                 Spacer()
-                Text("RM \(seatsTotal * pricePerSeatMyr) at full")
+                Text("\(Formatters.ringgit(seatsTotal * pricePerSeatMyr)) at full")
                     .font(.caption.weight(.semibold))
                     .foregroundColor(VPalette.textSec)
             }

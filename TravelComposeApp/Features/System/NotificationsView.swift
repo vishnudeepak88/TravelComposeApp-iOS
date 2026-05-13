@@ -50,10 +50,10 @@ struct NotificationsView: View {
             }
         }
         var out: [(label: String, items: [NotificationDTO])] = []
-        if !today.isEmpty     { out.append(("Today",     today)) }
-        if !yesterday.isEmpty { out.append(("Yesterday", yesterday)) }
-        if !week.isEmpty      { out.append(("This week", week)) }
-        if !earlier.isEmpty   { out.append(("Earlier",   earlier)) }
+        if !today.isEmpty     { out.append((S.notifGroupToday,     today)) }
+        if !yesterday.isEmpty { out.append((S.notifGroupYesterday, yesterday)) }
+        if !week.isEmpty      { out.append((S.notifGroupThisWeek,  week)) }
+        if !earlier.isEmpty   { out.append((S.notifGroupEarlier,   earlier)) }
         return out
     }
 
@@ -61,24 +61,24 @@ struct NotificationsView: View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Notifications", onBack: onBack) {
+                VPolishedNavBar(title: S.notifTitle, onBack: onBack) {
                     Button {
                         Task { await store.markAllNotificationsRead() }
                     } label: {
-                        Text("Mark all read")
+                        Text(S.notifMarkAllRead)
                             .font(.caption.weight(.bold))
                             .foregroundColor(store.unreadNotificationsCount > 0 ? VPalette.primary : VPalette.textHint)
                     }
                     .buttonStyle(.plain)
                     .disabled(store.unreadNotificationsCount == 0)
-                    .accessibilityLabel("Mark all notifications as read")
+                    .accessibilityLabel(S.notifMarkAllRead)
                 }
 
                 if store.notifications.isEmpty && !isRefreshing {
                     EmptyStateView(
                         icon: "bell.slash",
-                        title: "No notifications yet",
-                        subtitle: "Ride updates, pickup reminders, and chat alerts will appear here."
+                        title: S.notifEmptyTitle,
+                        subtitle: S.notifEmptyBody
                     )
                     .frame(maxHeight: .infinity)
                 } else {
@@ -175,6 +175,24 @@ struct NotificationsView: View {
     /// on this screen — better than navigating to a 404.
     private func handleTap(_ n: NotificationDTO) {
         Task { await store.markNotificationRead(n.id) }
+        // CHAT_MESSAGE: special-case to open the matching thread.
+        // Server-side fan-out sets `routeId` on every CHAT_MESSAGE
+        // notification; we resolve that to the local `ChatThread`
+        // and post `.voygoOpenThread` — same path the in-app push
+        // tap takes. Without this branch, tapping a chat
+        // notification just navigated to Route Details (or
+        // nowhere), and the rider had to manually jump to Inbox.
+        let kind = n.type.uppercased()
+        if (kind == "CHAT_MESSAGE" || kind == "MESSAGE"),
+           let routeId = n.routeId,
+           let thread = store.threads.first(where: { $0.tripId == routeId }) {
+            NotificationCenter.default.post(
+                name: .voygoOpenThread,
+                object: nil,
+                userInfo: ["threadId": thread.id, "title": thread.title]
+            )
+            return
+        }
         if let routeId = n.routeId, store.routes.contains(where: { $0.id == routeId }) {
             onOpenRoute(routeId)
             return

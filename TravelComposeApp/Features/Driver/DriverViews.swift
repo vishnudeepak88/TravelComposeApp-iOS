@@ -229,7 +229,7 @@ struct DriverRouteCard: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("\(route.startLocation) → \(route.endLocation)")
                             .font(.headline).foregroundColor(VoygoTheme.textPrimary)
-                        Text("RM \(route.pricePerSeat)/seat · \(route.carType.label)")
+                        Text("\(Formatters.ringgit(route.pricePerSeat))/seat · \(route.carType.label)")
                             .font(.caption).foregroundColor(VoygoTheme.textSecondary)
                     }
                     Spacer()
@@ -267,7 +267,7 @@ struct DriverRouteCard: View {
                                 .foregroundColor(VoygoTheme.textSecondary)
                         }
                         Spacer()
-                        Text("RM \(upcomingSolos.compactMap { $0.soloPriceMyr }.reduce(0, +))")
+                        Text(Formatters.ringgit(upcomingSolos.compactMap { $0.soloPriceMyr }.reduce(0, +)))
                             .font(.footnote.weight(.black))
                             .foregroundColor(VoygoTheme.accent)
                     }

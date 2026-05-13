@@ -113,20 +113,28 @@ struct MySubscriptionsView: View {
             hasLoaded = true
         }
         .alert(
-            "Cancel subscription?",
+            S.cancelSubscriptionTitle,
             isPresented: Binding(
                 get: { pendingCancellation != nil },
                 set: { if !$0 { pendingCancellation = nil } }
             ),
             presenting: pendingCancellation
         ) { item in
-            Button("Cancel subscription", role: .destructive) {
+            Button(S.confirmCancel, role: .destructive) {
                 cancelSubscription(item)
                 pendingCancellation = nil
             }
-            Button("Keep it", role: .cancel) { pendingCancellation = nil }
+            Button(S.subKeepIt, role: .cancel) { pendingCancellation = nil }
         } message: { item in
-            Text("\(item.route.startLocation) → \(item.route.endLocation). A mid-month admin fee may apply per your subscription tier. You'll need to subscribe again to ride.")
+            // Use the canonical S.cancelSubscriptionMessage instead of
+            // the old "mid-month admin fee may apply" copy — that
+            // string contradicted both the localized message in
+            // Strings.swift (which the rest of the app uses) and the
+            // actual policy engine (cancellation refunds are
+            // tiered: full ≥12h, 50% ≥2h, none <2h — admin fees
+            // don't enter into it). Prefix the route name so the
+            // rider sees which sub they're cancelling.
+            Text("\(item.route.startLocation) → \(item.route.endLocation).\n\(S.cancelSubscriptionMessage)")
         }
     }
 

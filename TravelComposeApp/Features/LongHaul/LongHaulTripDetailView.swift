@@ -143,13 +143,21 @@ struct LongHaulTripDetailView: View {
                     .foregroundColor(VPalette.textSec)
             }
             HStack(spacing: 16) {
-                Stepper("Seats: \(seats)", value: $seats, in: 1...min(trip.seatsAvailable, 8))
+                // CRASH GUARD: `Stepper(value:in:)` crashes if
+                // upperBound < lowerBound. When a trip flips to
+                // seatsAvailable == 0 between fetch + render (booked
+                // out underneath us), `1...min(0, 8)` collapses to
+                // `1...0` → ClosedRange precondition failure. The
+                // `max(1, ...)` keeps the range valid; the outer
+                // `trip.isOpen` gate at the CTA prevents an actual
+                // 0-seat booking from being submitted.
+                Stepper("Seats: \(seats)", value: $seats, in: 1...max(1, min(trip.seatsAvailable, 8)))
                     .labelsHidden()
                 Text("\(seats) seat\(seats == 1 ? "" : "s")")
                     .font(.subheadline.weight(.heavy))
                     .foregroundColor(VPalette.text)
                 Spacer()
-                Text("RM \(trip.pricePerSeatMyr * seats)")
+                Text(Formatters.ringgit(trip.pricePerSeatMyr * seats))
                     .font(.body.weight(.black))
                     .foregroundColor(VPalette.primary)
             }
@@ -181,7 +189,7 @@ struct LongHaulTripDetailView: View {
             switch bookState {
             case .booking: return "Booking…"
             case .success: return "Booked"
-            default:       return "Book \(seats) seat\(seats == 1 ? "" : "s") · RM \(trip.pricePerSeatMyr * seats)"
+            default:       return "Book \(seats) seat\(seats == 1 ? "" : "s") · \(Formatters.ringgit(trip.pricePerSeatMyr * seats))"
             }
         }()
         return VPrimaryButton(label,
@@ -206,6 +214,12 @@ struct LongHaulTripDetailView: View {
     }
 
     private func book(trip: LongHaulTrip) async {
+        // Idempotency guard. The CTA's `isEnabled: bookState != .booking`
+        // gates the button visually, but two rapid taps before the
+        // state propagates can both reach `book(trip:)` — and the
+        // `Task { … }` wrapper is fire-and-forget. Re-entry here
+        // is the last line of defense against a double-charge.
+        guard bookState != .booking else { return }
         bookState = .booking
         let result = await store.bookLongHaul(tripId: trip.id, seats: seats)
         switch result {

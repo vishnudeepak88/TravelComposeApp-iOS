@@ -50,6 +50,13 @@ import SwiftUI
     }
 
     func subscribe() {
+        // Idempotency guard — prevent a second tap during the
+        // sub-create / charge round-trip from firing two POSTs and
+        // two charges. Previously the button's `isEnabled` didn't
+        // factor `isInFlight`, so a rapid double-tap could spawn
+        // two parallel `subscribe → charge` chains. Re-entry here
+        // is the last line of defense.
+        guard !subscribeState.isInFlight else { return }
         guard let store, let route, let pickupId = selectedPickupId, let dropId = selectedDropId else { return }
         let days = Int(numberOfDays) ?? 30
         // Local pre-computed total stays for the in-flight CTA copy
@@ -74,18 +81,50 @@ import SwiftUI
                 )
                 switch chargeResult {
                 case .success(let charge):
-                    if let urlString = charge.paymentUrl, let url = URL(string: urlString), charge.status == .pending {
-                        // Live Billplz: present the hosted checkout sheet.
-                        // The view's onDismiss handler will fire `onSubscribed`
-                        // once the rider returns from the redirect.
-                        pendingPaymentURL = url
-                        subscribeState = .success(subscriptionId)
-                    } else {
-                        // Mock mode (or already paid): jump straight to the
-                        // celebratory confirmed screen.
+                    // Branch by EXPLICIT payment status, not by
+                    // "did we get a URL". The old code treated
+                    // anything-not-pending as success — including
+                    // `.failed` returns where the FPX bank declined
+                    // in-line. Riders saw "Subscription active!"
+                    // for a payment that never moved any money.
+                    switch charge.status {
+                    case .pending:
+                        if let urlString = charge.paymentUrl, let url = URL(string: urlString) {
+                            // Live Billplz: present the hosted checkout
+                            // sheet. The view's onDismiss handler will
+                            // fire `onSubscribed` once the rider
+                            // returns from the redirect.
+                            pendingPaymentURL = url
+                            subscribeState = .success(subscriptionId)
+                        } else {
+                            // Backend said .pending but didn't give us
+                            // a URL — misconfigured Billplz or a
+                            // contract drift. Treat as a charge failure
+                            // so we pause and tell the rider to retry.
+                            let pauseResult = await store.updateSubscription(id: subscriptionId, status: .paused)
+                            if case .failure(let pauseErr) = pauseResult {
+                                subscribeState = .error("Payment couldn't start and we couldn't pause: \(pauseErr.localizedDescription). Cancel from My Subscriptions before retrying.")
+                            } else {
+                                subscribeState = .error("Payment couldn't start. Subscription paused — retry from My Subscriptions.")
+                            }
+                            load(routeId: route.id)
+                        }
+                    case .paid:
+                        // Mock mode (no Billplz creds) or instant
+                        // success path: jump straight to confirmed.
                         subscribeState = .success(subscriptionId)
                         load(routeId: route.id)
                         onSubscribed?(subscriptionId)
+                    case .failed, .refunded:
+                        // Bank declined in-line, or refunded before
+                        // we even rendered. Pause + surface error.
+                        let pauseResult = await store.updateSubscription(id: subscriptionId, status: .paused)
+                        if case .failure(let pauseErr) = pauseResult {
+                            subscribeState = .error("Payment declined and pause also failed: \(pauseErr.localizedDescription). Cancel from My Subscriptions before retrying.")
+                        } else {
+                            subscribeState = .error("Payment declined. Subscription paused — retry from My Subscriptions.")
+                        }
+                        load(routeId: route.id)
                     }
                 case .failure(let err):
                     // Subscription was created but the charge failed. Auto-
@@ -213,7 +252,7 @@ struct RouteDetailsView: View {
                                         }
                                         Spacer()
                                         VStack(alignment: .trailing) {
-                                            Text("RM \(route.pricePerSeat)").font(.title2.bold()).foregroundColor(VoygoTheme.primary)
+                                            Text(Formatters.ringgit(route.pricePerSeat)).font(.title2.bold()).foregroundColor(VoygoTheme.primary)
                                             Text("per seat").font(.caption2).foregroundColor(VoygoTheme.textHint)
                                         }
                                     }
@@ -341,7 +380,7 @@ struct RouteDetailsView: View {
                                         .font(.caption.weight(.bold))
                                         .foregroundColor(VoygoTheme.textSecondary)
                                     Spacer()
-                                    Text("RM \(vm.subscriptionTotalMyr)")
+                                    Text(Formatters.ringgit(vm.subscriptionTotalMyr))
                                         .font(.title3.weight(.heavy))
                                         .foregroundColor(VoygoTheme.primary)
                                         .monospacedDigit()
@@ -361,7 +400,8 @@ struct RouteDetailsView: View {
                                     // "Subscribe & pay RM 0".
                                     isEnabled: vm.selectedPickupId != nil
                                         && vm.selectedDropId != nil
-                                        && vm.subscriptionTotalMyr > 0,
+                                        && vm.subscriptionTotalMyr > 0
+                                        && !vm.subscribeState.isInFlight,
                                     action: vm.subscribe
                                 )
 
@@ -400,7 +440,7 @@ struct RouteDetailsView: View {
                                                 Text("Book solo for a day")
                                                     .font(.footnote.weight(.heavy))
                                                     .foregroundColor(VoygoTheme.textPrimary)
-                                                Text("RM \(route.pricePerSeat * 2) — whole car, no other passengers")
+                                                Text("\(Formatters.ringgit(route.pricePerSeat * 2)) — whole car, no other passengers")
                                                     .font(.caption2)
                                                     .foregroundColor(VoygoTheme.textSecondary)
                                             }
@@ -465,7 +505,7 @@ struct RouteDetailsView: View {
         switch vm.subscribeState {
         case .loading:   return "Creating subscription…"
         case .charging:  return "Charging payment…"
-        default:         return "Subscribe & pay RM \(vm.subscriptionTotalMyr)"
+        default:         return S.subscribeAndPay(amountMyr: vm.subscriptionTotalMyr)
         }
     }
 

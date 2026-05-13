@@ -108,16 +108,12 @@ struct PrivacySecurityView: View {
                     )
                 )
                 divider()
-                preferenceToggle(
-                    icon: "faceid", color: VPalette.accent,
-                    title: "Lock wallet with Face ID",
-                    subtitle: "Require biometric to view payments + receipts",
-                    isOn: Binding(
-                        get: { prefs?.biometricLock ?? false },
-                        set: { update(.biometricLock, $0) }
-                    )
-                )
-                divider()
+                // Face ID lock toggle removed — the preference persisted
+                // but no LAContext gate was ever wired up in WalletView,
+                // so toggling on did nothing. Restoring this requires
+                // adding the biometric prompt in WalletView.body before
+                // the credit hero renders. Until then a placebo toggle
+                // is worse than no toggle.
                 preferenceToggle(
                     icon: "envelope.fill", color: VPalette.secondary,
                     title: "Promotional emails",

@@ -169,6 +169,19 @@
 "chat.direct.kicker" = "Sembang terus";
 "chat.message.placeholder" = "Mesej…";
 
+/* Notifications */
+"notif.title" = "Pemberitahuan";
+"notif.markAllRead" = "Tandai semua dibaca";
+"notif.empty.title" = "Tiada pemberitahuan lagi";
+"notif.empty.body" = "Kemas kini perjalanan, peringatan penjemputan, dan amaran sembang akan muncul di sini.";
+"notif.group.today" = "Hari ini";
+"notif.group.yesterday" = "Semalam";
+"notif.group.thisWeek" = "Minggu ini";
+"notif.group.earlier" = "Lebih awal";
+
+/* Subscriptions extras */
+"subscribe.keepIt" = "Simpan";
+
 /* Wallet — extras */
 "wallet.paymentMethods" = "Kaedah pembayaran";
 "wallet.noPayments" = "Tiada pembayaran lagi";

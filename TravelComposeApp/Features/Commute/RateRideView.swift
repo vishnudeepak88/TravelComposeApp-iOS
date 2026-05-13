@@ -160,7 +160,7 @@ struct RateRideView: View {
             }
             HStack(spacing: 8) {
                 ForEach([2, 5, 10, -1], id: \.self) { val in
-                    let label = val == -1 ? "Custom" : "RM \(val)"
+                    let label = val == -1 ? "Custom" : Formatters.ringgit(val)
                     let on = val == tip
                     Button { if val != -1 { tip = val } } label: {
                         Text(label)

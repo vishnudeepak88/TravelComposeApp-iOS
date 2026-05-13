@@ -101,7 +101,7 @@ private struct FavoriteRouteRow: View {
                     .foregroundColor(VPalette.textHint)
             }
             Spacer()
-            Text("RM \(route.pricePerSeat)")
+            Text(Formatters.ringgit(route.pricePerSeat))
                 .font(.subheadline.weight(.heavy))
                 .foregroundColor(VPalette.primary)
         }

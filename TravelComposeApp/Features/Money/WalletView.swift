@@ -10,7 +10,6 @@ struct WalletView: View {
     /// in credit". Without it the empty state and the API-down state
     /// looked identical.
     @State private var isPaymentsLoading: Bool = false
-    @State private var showComingSoonFor: String? = nil
 
     private struct Method: Identifiable {
         let id = UUID()
@@ -89,18 +88,12 @@ struct WalletView: View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: S.walletPageTitle, kicker: S.walletPageKicker, onBack: onBack) {
-                    Button { showComingSoonFor = "Wallet export" } label: {
-                        Image(systemName: "arrow.up.right")
-                            .font(.callout.weight(.bold))
-                            .foregroundColor(VPalette.text)
-                            .frame(width: 40, height: 40)
-                            .background(VPalette.surface)
-                            .overlay(Circle().stroke(VPalette.border, lineWidth: 1))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
+                // Trailing ↗ "Wallet export" button removed — it
+                // popped a coming-soon alert with no real flow behind
+                // it. Real CSV/PDF export already lives in Privacy &
+                // Security → Data export (PDPA path). The header is
+                // cleaner without the placebo button.
+                VPolishedNavBar(title: S.walletPageTitle, kicker: S.walletPageKicker, onBack: onBack)
 
                 ScrollView {
                     VStack(spacing: 18) {
@@ -131,18 +124,6 @@ struct WalletView: View {
             isPaymentsLoading = true
             await store.refreshPayments()
             isPaymentsLoading = false
-        }
-        .alert(
-            S.comingSoonTitle,
-            isPresented: Binding(
-                get: { showComingSoonFor != nil },
-                set: { if !$0 { showComingSoonFor = nil } }
-            ),
-            presenting: showComingSoonFor
-        ) { _ in
-            Button("OK", role: .cancel) { showComingSoonFor = nil }
-        } message: { feature in
-            Text(S.comingSoonMessage(feature: feature))
         }
     }
 

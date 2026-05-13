@@ -44,7 +44,7 @@ struct TripHistoryView: View {
             let dow = weekdayShort(p.createdAt).uppercased()
             let day = String(Calendar.current.component(.day, from: p.createdAt))
             let mo  = monthShort(p.createdAt).uppercased()
-            let amount = "RM \(p.amountMyr)"
+            let amount = Formatters.ringgit(p.amountMyr)
             let cancelled = p.status == .refunded || p.status == .failed
             return Trip(
                 id:       p.id,
@@ -163,9 +163,9 @@ struct TripHistoryView: View {
 
     private var summary: some View {
         HStack(spacing: 8) {
-            stat("Total",   value: "RM \(totalCharged)",  color: VPalette.primary)
+            stat("Total",   value: Formatters.ringgit(totalCharged),  color: VPalette.primary)
             stat("Trips",   value: "\(completedCount)",     color: VPalette.success)
-            stat("Refunded", value: "RM \(totalRefunded)", color: VPalette.accent)
+            stat("Refunded", value: Formatters.ringgit(totalRefunded), color: VPalette.accent)
         }
     }
 

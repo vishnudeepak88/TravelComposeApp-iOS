@@ -1,4 +1,5 @@
 import SwiftUI
+import SafariServices
 
 // MARK: - Solo seat
 //
@@ -153,7 +154,7 @@ struct SoloPickRouteView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundColor(VPalette.textSec)
                             .lineLimit(1)
-                        Text("\(route.departureTime) · RM \(route.pricePerSeat * 2)/solo")
+                        Text("\(route.departureTime) · \(Formatters.ringgit(route.pricePerSeat * 2))/solo")
                             .font(.caption2)
                             .foregroundColor(VPalette.textHint)
                     }
@@ -235,6 +236,14 @@ struct SoloConfirmView: View {
     @State private var quote: SoloQuoteResponse? = nil
     @State private var isBooking = false
     @State private var errorMessage: String? = nil
+    /// Set when the server returns a Billplz hosted-checkout URL on
+    /// the book response. We open it in an SFSafariViewController
+    /// sheet — same pattern as Long-haul and the commute subscribe
+    /// flow. Previously `book()` discarded `response.payment` and
+    /// jumped straight to `onBooked`, which left riders with an
+    /// unpaid solo booking and no way to pay.
+    @State private var pendingPaymentURL: URL? = nil
+    @State private var bookedRideInstanceId: String? = nil
 
     enum LoadState { case loading, ready, failed(String) }
 
@@ -284,7 +293,7 @@ struct SoloConfirmView: View {
                 VStack {
                     Spacer()
                     VPrimaryButton(
-                        "Confirm — RM \(q.soloPriceMyr)",
+                        "Confirm — \(Formatters.ringgit(q.soloPriceMyr))",
                         isLoading: isBooking,
                         isEnabled: !isBooking
                     ) {
@@ -296,6 +305,27 @@ struct SoloConfirmView: View {
             }
         }
         .task { await loadQuote() }
+        .sheet(item: bindingForCheckout()) { holder in
+            SoloSafariView(url: holder.url) {
+                pendingPaymentURL = nil
+                // Refresh local state and fire `onBooked` once the
+                // rider returns from Billplz. We don't gate on
+                // payment success here — the webhook will land the
+                // PAID status server-side; the local refresh just
+                // pulls the new booking row.
+                Task {
+                    await store.refreshAll()
+                    if let id = bookedRideInstanceId { onBooked(id) }
+                }
+            }
+        }
+    }
+
+    private func bindingForCheckout() -> Binding<SoloURLHolder?> {
+        Binding(
+            get: { pendingPaymentURL.map(SoloURLHolder.init) },
+            set: { if $0 == nil { pendingPaymentURL = nil } }
+        )
     }
 
     @ViewBuilder
@@ -332,7 +362,7 @@ struct SoloConfirmView: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundColor(VPalette.textSec)
                 Spacer()
-                Text("RM \(q.pricePerSeatMyr)")
+                Text(Formatters.ringgit(q.pricePerSeatMyr))
                     .font(.footnote.weight(.semibold))
                     .foregroundColor(VPalette.textSec)
             }
@@ -341,7 +371,7 @@ struct SoloConfirmView: View {
                     .font(.subheadline.weight(.black))
                     .foregroundColor(VPalette.text)
                 Spacer()
-                Text("RM \(q.soloPriceMyr)")
+                Text(Formatters.ringgit(q.soloPriceMyr))
                     .font(.body.weight(.black))
                     .foregroundColor(VPalette.primary)
             }
@@ -432,13 +462,67 @@ struct SoloConfirmView: View {
         defer { isBooking = false }
         do {
             let result = try await VoygoAPIClient.soloBook(rideInstanceId: rideInstanceId)
-            // Refresh local state so the calendar reflects the new
-            // exclusive booking on next render.
-            await store.refreshAll()
-            onBooked(result.rideInstanceId)
+            bookedRideInstanceId = result.rideInstanceId
+            // Branch by EXPLICIT payment status. Live Billplz returns
+            // .pending with a hosted-checkout URL — we must open it.
+            // Mock mode returns .paid and the URL is nil. The old
+            // code discarded `result.payment` entirely and called
+            // `onBooked` straight away, which dismissed the screen
+            // before any payment UI could appear.
+            switch result.payment.status {
+            case .pending:
+                if let urlString = result.payment.paymentUrl,
+                   let url = URL(string: urlString) {
+                    pendingPaymentURL = url
+                    // Don't fire onBooked yet — the sheet's onDismiss
+                    // handler will refresh + fire once the rider
+                    // returns from Billplz.
+                    return
+                } else {
+                    errorMessage = "Payment couldn't start. Try again in a moment."
+                    return
+                }
+            case .paid:
+                // Mock mode (or instant success): refresh + dismiss.
+                await store.refreshAll()
+                onBooked(result.rideInstanceId)
+            case .failed, .refunded:
+                errorMessage = "Payment declined. Try again or pick another date."
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+// MARK: - Billplz checkout sheet support
+//
+// Identical-by-shape duplicates of LongHaulTripDetailView's private
+// SafariView + URLHolder. Tracking a Core/PaymentCheckout module
+// promotion as a separate cleanup so we don't have three private
+// copies long-term.
+
+private struct SoloURLHolder: Identifiable {
+    let url: URL
+    var id: URL { url }
+}
+
+private struct SoloSafariView: UIViewControllerRepresentable {
+    let url: URL
+    let onDismiss: () -> Void
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let vc = SFSafariViewController(url: url)
+        vc.delegate = context.coordinator
+        return vc
+    }
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+    func makeCoordinator() -> Coordinator { Coordinator(onDismiss: onDismiss) }
+
+    final class Coordinator: NSObject, SFSafariViewControllerDelegate {
+        let onDismiss: () -> Void
+        init(onDismiss: @escaping () -> Void) { self.onDismiss = onDismiss }
+        func safariViewControllerDidFinish(_ controller: SFSafariViewController) { onDismiss() }
     }
 }
 

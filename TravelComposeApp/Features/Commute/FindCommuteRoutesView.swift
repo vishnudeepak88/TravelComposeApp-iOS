@@ -204,6 +204,15 @@ enum CommuteSortOption: String, CaseIterable, Identifiable {
             )
             self.results = applySort(to: results)
             self.isSearching = false
+            // Distinguish "no matches" from "session expired". The
+            // store returns [] in both cases — but if the user just
+            // got bounced (clearSession ran), we want the sign-in
+            // banner, not the productive empty state which would
+            // tell them to "try a wider time window" (useless
+            // advice when the real fix is to sign in).
+            if !store.isAuthenticated && store.useOnline {
+                self.errorMessage = S.sessionExpired
+            }
             // Persist the successful search so the next launch can
             // hydrate the form without the rider re-typing.
             await persistSavedSearch()
@@ -629,7 +638,7 @@ struct FindCommuteRoutesView: View {
         let prices = store.routes.map(\.pricePerSeat).filter { $0 > 0 }
         guard !prices.isEmpty else { return "—" }
         let avg = prices.reduce(0, +) / prices.count
-        return "RM \(avg)"
+        return Formatters.ringgit(avg)
     }
 
     /// Time-of-day greeting in MYT (the device's current time zone). A
@@ -810,7 +819,7 @@ struct PolishedRouteCard: View {
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 1) {
-                        Text("RM \(match.route.pricePerSeat)")
+                        Text(Formatters.ringgit(match.route.pricePerSeat))
                             .font(.callout.weight(.black)).tracking(-0.3)
                             .foregroundColor(VPalette.primary)
                         VKicker(text: "per ride", size: 9)
@@ -1157,7 +1166,7 @@ struct RouteMatchCard: View {
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
-                            Text("RM \(match.route.pricePerSeat)")
+                            Text(Formatters.ringgit(match.route.pricePerSeat))
                                 .font(.title3.bold()).foregroundColor(VoygoTheme.primary)
                             Text("per seat").font(.caption2).foregroundColor(VoygoTheme.textHint)
                         }
@@ -1285,7 +1294,7 @@ struct CommuteFiltersBar: View {
                 if priceCapEnabled {
                     Slider(value: $priceCap, in: 5...50, step: 1)
                         .tint(VPalette.primary)
-                    Text("RM \(Int(priceCap))")
+                    Text(Formatters.ringgit(Int(priceCap)))
                         .font(.caption.weight(.heavy)).foregroundColor(VPalette.primary)
                         .frame(width: 50, alignment: .trailing)
                 } else {

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 // MARK: - App Store (session + hybrid repository, mirrors Android AppGraph)
 
@@ -1665,6 +1666,13 @@ final class AppStore {
         UserDefaults.standard.removeObject(forKey: SessionKeys.displayName)
         UserDefaults.standard.removeObject(forKey: SessionKeys.kycStatus)
         UserDefaults.standard.removeObject(forKey: SessionKeys.phone)
+        // PDPA hardening: reset analytics consent + reset push badge
+        // so the next user on this device doesn't inherit the previous
+        // user's privacy posture. Previously TelemetryConsent stayed
+        // ON across logouts, which meant a fresh user's events were
+        // captured under their predecessor's opt-in.
+        TelemetryConsent.isEnabled = false
+        UIApplication.shared.applicationIconBadgeNumber = 0
         isAuthenticated = false
         phoneNumber = ""
         riderId = ""

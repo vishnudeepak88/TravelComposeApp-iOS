@@ -168,6 +168,19 @@
 "chat.direct.kicker" = "Direct chat";
 "chat.message.placeholder" = "Message…";
 
+/* Notifications */
+"notif.title" = "Notifications";
+"notif.markAllRead" = "Mark all read";
+"notif.empty.title" = "No notifications yet";
+"notif.empty.body" = "Ride updates, pickup reminders, and chat alerts will appear here.";
+"notif.group.today" = "Today";
+"notif.group.yesterday" = "Yesterday";
+"notif.group.thisWeek" = "This week";
+"notif.group.earlier" = "Earlier";
+
+/* Subscriptions extras */
+"subscribe.keepIt" = "Keep it";
+
 /* Wallet — extras */
 "wallet.paymentMethods" = "Payment methods";
 "wallet.noPayments" = "No payments yet";

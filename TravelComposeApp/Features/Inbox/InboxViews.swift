@@ -28,9 +28,9 @@ struct InboxView: View {
                     if store.threads.isEmpty {
                         EmptyStateView(
                             icon: "bubble.left.and.bubble.right",
-                            title: "No messages",
-                            subtitle: "Subscribe to a route or post a long-haul trip — chats appear here once you're matched with a driver or rider.",
-                            ctaLabel: "Find a route",
+                            title: S.inboxEmpty,
+                            subtitle: S.inboxEmptyBody,
+                            ctaLabel: S.inboxFindRoutes,
                             ctaAction: {
                                 // Pull-through to Carpool tab via the existing
                                 // tab-reselect notification pattern. MainTabView
@@ -141,11 +141,15 @@ struct ThreadRow: View {
                         Text(thread.title).font(.subheadline.weight(.semibold)).foregroundColor(VoygoTheme.textPrimary)
                         Spacer()
                         if thread.unreadCount > 0 {
-                            Text("\(thread.unreadCount)").font(.caption2.bold())
+                            // 99+ cap so a noisy thread (100+ unread)
+                            // doesn't blow out the 18×18 badge frame.
+                            Text(thread.unreadCount > 99 ? "99+" : "\(thread.unreadCount)")
+                                .font(.caption2.bold())
                                 .frame(minWidth: 18, minHeight: 18)
+                                .padding(.horizontal, 4)
                                 .background(VoygoTheme.primary)
                                 .foregroundColor(.white)
-                                .clipShape(Circle())
+                                .clipShape(Capsule())
                         }
                     }
                     Text(thread.lastMessage).font(.caption).foregroundColor(VoygoTheme.textSecondary).lineLimit(1)
@@ -168,6 +172,20 @@ struct ChatThreadView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var newMessage = ""
     @State private var scrollProxy: ScrollViewProxy? = nil
+    /// Set when the LOCAL user just hit Send. Drives the next
+    /// scroll-to-bottom so we follow our own messages but DON'T
+    /// yank the rider mid-history-scroll when a poll lands a new
+    /// inbound message. Previously every messages.count delta
+    /// scrolled — riders reading older chat got slammed back to
+    /// the bottom every 4s while the driver typed.
+    @State private var pendingScrollAfterSend = false
+    @State private var sendError: String? = nil
+
+    /// Server caps chat messages at 4000 chars (see backend
+    /// MAX_CHAT_MESSAGE_CHARS). Mirror it client-side so a 100kB
+    /// paste shows a clear error before the optimistic bubble is
+    /// stamped and the network call fails.
+    private static let maxChatChars = 4000
 
     var messages: [ChatMessage] { store.messages(for: threadId) }
 
@@ -203,7 +221,26 @@ struct ChatThreadView: View {
                         }
                     }
                     .onAppear { scrollProxy = proxy; scrollToBottom() }
-                    .onChange(of: messages.count) { _, _ in scrollToBottom() }
+                    // Only auto-scroll when the LOCAL user just sent —
+                    // ignore poll-driven message arrivals so the rider
+                    // can scroll up to read history without being
+                    // yanked back to the bottom every 4 seconds.
+                    .onChange(of: messages.count) { _, _ in
+                        if pendingScrollAfterSend {
+                            pendingScrollAfterSend = false
+                            scrollToBottom()
+                        }
+                    }
+                }
+
+                if let err = sendError {
+                    Text(err)
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(VPalette.danger)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .background(VPalette.dangerContainer)
+                        .onTapGesture { sendError = nil }
                 }
 
                 // Input bar
@@ -277,6 +314,19 @@ struct ChatThreadView: View {
     }
 
     private func sendMessage() {
+        let trimmed = newMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Empty / whitespace-only — the button is already disabled,
+        // but defend against IME edge cases.
+        guard !trimmed.isEmpty else { return }
+        // Length cap mirrors the backend (4000 chars). Show a clear
+        // error rather than letting the optimistic bubble appear and
+        // then silently disappear when the server returns 413.
+        if trimmed.count > Self.maxChatChars {
+            sendError = "Message is too long. Keep it under \(Self.maxChatChars) characters."
+            return
+        }
+        sendError = nil
+        pendingScrollAfterSend = true
         let text = newMessage
         newMessage = ""
         Task {
