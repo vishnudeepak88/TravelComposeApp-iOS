@@ -12,6 +12,13 @@
 "common.error.unknown" = "Something went wrong. Try again in a moment.";
 "common.error.network" = "You're offline. Reconnect and try again.";
 "common.error.sessionExpired" = "Sign in to continue.";
+"common.signInToContinue.title" = "Sign in to continue";
+"solo.loadFailed.title" = "Couldn't load this ride";
+"longhaul.page.title" = "Long-haul";
+"longhaul.page.kicker" = "ONE-OFF INTER-CITY TRIPS";
+"wallet.page.title" = "Wallet";
+"wallet.page.kicker" = "Payments & credits";
+"profile.page.title" = "Profile";
 
 "auth.enterPhone" = "Enter your phone number";
 "auth.enterOtp" = "Enter the 6-digit code";
@@ -136,6 +143,10 @@
 "home.service.schedule" = "Schedule";
 "home.service.longHaul" = "Long-haul";
 "home.service.newBadge" = "NEW";
+"home.whereTo.morning" = "Where to,\nthis morning?";
+"home.whereTo.afternoon" = "Where to,\nthis afternoon?";
+"home.whereTo.evening" = "Where to,\nthis evening?";
+"home.whereTo.late" = "Where to next?";
 "home.when.today" = "Today";
 "home.when.tomorrow" = "Tomorrow";
 "home.action.calendar" = "Calendar";

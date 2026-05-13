@@ -31,6 +31,16 @@ enum S {
     static var unknownError: String { Self.t("common.error.unknown", "Something went wrong. Try again in a moment.") }
     static var networkError: String { Self.t("common.error.network", "You're offline. Reconnect and try again.") }
     static var sessionExpired: String { Self.t("common.error.sessionExpired", "Sign in to continue.") }
+    /// Banner / empty-state title pair for `sessionExpired`. The body
+    /// is the period-terminated `sessionExpired` string; this is the
+    /// short title shown above it.
+    static var signInToContinueTitle: String { Self.t("common.signInToContinue.title", "Sign in to continue") }
+    static var soloLoadFailed: String { Self.t("solo.loadFailed.title", "Couldn't load this ride") }
+    static var longHaulPageTitle: String { Self.t("longhaul.page.title", "Long-haul") }
+    static var longHaulKicker: String    { Self.t("longhaul.page.kicker", "ONE-OFF INTER-CITY TRIPS") }
+    static var walletPageTitle: String   { Self.t("wallet.page.title", "Wallet") }
+    static var walletPageKicker: String  { Self.t("wallet.page.kicker", "Payments & credits") }
+    static var profilePageTitle: String  { Self.t("profile.page.title", "Profile") }
 
     // MARK: Auth
 
@@ -118,6 +128,10 @@ enum S {
     // MARK: Home (super-app)
 
     static var homeWhereTo: String { Self.t("home.whereTo", "Where to,\nthis morning?") }
+    static var homeWhereToMorning: String   { Self.t("home.whereTo.morning",   "Where to,\nthis morning?") }
+    static var homeWhereToAfternoon: String { Self.t("home.whereTo.afternoon", "Where to,\nthis afternoon?") }
+    static var homeWhereToEvening: String   { Self.t("home.whereTo.evening",   "Where to,\nthis evening?") }
+    static var homeWhereToLate: String      { Self.t("home.whereTo.late",      "Where to next?") }
     static var homeFindRide: String { Self.t("home.findRide", "Find ride") }
     static var homeBookARide: String { Self.t("home.bookARide", "Book a ride") }
     static var homeHeadingYourWay: String { Self.t("home.headingYourWay", "Heading your way") }

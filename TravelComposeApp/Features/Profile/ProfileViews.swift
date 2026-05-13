@@ -42,7 +42,7 @@ struct ProfileView: View {
             ZStack {
                 VPalette.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
-                    VPolishedNavBar(title: "Profile")
+                    VPolishedNavBar(title: S.profilePageTitle)
 
                     ScrollViewReader { proxy in
                         ScrollView {

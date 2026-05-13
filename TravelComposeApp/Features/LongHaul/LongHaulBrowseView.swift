@@ -37,7 +37,7 @@ struct LongHaulBrowseView: View {
         ZStack(alignment: .top) {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Long-haul", kicker: "One-off inter-city trips", onBack: onBack) {
+                VPolishedNavBar(title: S.longHaulPageTitle, kicker: S.longHaulKicker, onBack: onBack) {
                     Button(action: onPostTrip) {
                         Image(systemName: "plus")
                             .font(.callout.weight(.bold))

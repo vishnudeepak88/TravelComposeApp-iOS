@@ -125,6 +125,20 @@ struct HomeView: View {
         }
     }
 
+    /// Time-aware hero subtitle. The previous hardcoded "Where to,
+    /// this morning?" looked weird in the evening and broke the
+    /// promise the greeting just made ("Good evening" + "this
+    /// morning?" reads as if the app forgot what time it is).
+    private var heroSubtitle: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12:  return S.homeWhereToMorning
+        case 12..<17: return S.homeWhereToAfternoon
+        case 17..<22: return S.homeWhereToEvening
+        default:      return S.homeWhereToLate
+        }
+    }
+
     private var firstName: String {
         let full = store.currentUser.name
         guard !full.isEmpty else { return "there" }
@@ -563,7 +577,7 @@ struct HomeView: View {
                     .buttonStyle(.plain)
                 }
 
-                Text(S.homeWhereTo)
+                Text(heroSubtitle)
                     .font(.title2.weight(.black))
                     .tracking(-0.5)
                     .foregroundColor(.white)

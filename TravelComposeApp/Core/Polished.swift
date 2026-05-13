@@ -639,10 +639,22 @@ struct VErrorBanner: View {
     /// `AppError.message(...)` so the typed branching still works:
     /// these are always non-retryable composed strings, so the
     /// banner renders icon + title + the message verbatim.
+    ///
+    /// SPECIAL CASE: a bare sign-in prompt (the exact text of
+    /// `S.sessionExpired`) gets promoted to `.unauthorized` so the
+    /// banner shows the calmer "Sign in again" title + lock icon
+    /// instead of the red "Something went wrong" framing. Legacy
+    /// call sites that surface a stringly-typed unauth error (Long-
+    /// haul Browse, etc.) used to render as if the server broke;
+    /// promoting here means every existing call site fixes itself.
     init(message: String,
          onRetry: (() -> Void)? = nil,
          onSignIn: (() -> Void)? = nil) {
-        self.error = .message(message)
+        if message == S.sessionExpired {
+            self.error = .unauthorized
+        } else {
+            self.error = .message(message)
+        }
         self.onRetry = onRetry
         self.onSignIn = onSignIn
     }
@@ -723,7 +735,7 @@ struct VErrorBanner: View {
 
     private var title: String {
         switch error {
-        case .unauthorized: return "Sign in again"
+        case .unauthorized: return S.signInToContinueTitle
         case .network:      return "You're offline"
         case .validation:   return "Check your input"
         case .server:       return "Server error"

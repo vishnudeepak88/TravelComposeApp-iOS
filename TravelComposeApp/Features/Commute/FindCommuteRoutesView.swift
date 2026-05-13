@@ -424,7 +424,9 @@ struct FindCommuteRoutesView: View {
                                         .font(.callout.weight(.black))
                                         .tracking(-0.3)
                                         .foregroundColor(VPalette.text)
-                                    Text("\(vm.results.count) routes available now")
+                                    Text(vm.results.count == 1
+                                         ? "1 route available now"
+                                         : "\(vm.results.count) routes available now")
                                         .font(.caption).foregroundColor(VPalette.textSec)
                                 }
                                 Spacer()

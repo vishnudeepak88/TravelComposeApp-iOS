@@ -13,6 +13,13 @@
 "common.error.unknown" = "Sesuatu telah berlaku. Cuba lagi sebentar lagi.";
 "common.error.network" = "Anda tidak dalam talian. Sambung semula dan cuba lagi.";
 "common.error.sessionExpired" = "Sila log masuk untuk teruskan.";
+"common.signInToContinue.title" = "Sila log masuk untuk teruskan";
+"solo.loadFailed.title" = "Tidak dapat memuatkan perjalanan ini";
+"longhaul.page.title" = "Antarabandar";
+"longhaul.page.kicker" = "PERJALANAN ANTARABANDAR SEKALI";
+"wallet.page.title" = "Dompet";
+"wallet.page.kicker" = "Bayaran & kredit";
+"profile.page.title" = "Profil";
 
 "auth.enterPhone" = "Masukkan nombor telefon anda";
 "auth.enterOtp" = "Masukkan kod 6 digit";
@@ -137,6 +144,10 @@
 "home.service.schedule" = "Jadual";
 "home.service.longHaul" = "Antarabandar";
 "home.service.newBadge" = "BARU";
+"home.whereTo.morning" = "Ke mana hari ini,\npagi ini?";
+"home.whereTo.afternoon" = "Ke mana hari ini,\ntengah hari?";
+"home.whereTo.evening" = "Ke mana hari ini,\npetang ini?";
+"home.whereTo.late" = "Hendak ke mana?";
 "home.when.today" = "Hari ini";
 "home.when.tomorrow" = "Esok";
 "home.action.calendar" = "Jadual";

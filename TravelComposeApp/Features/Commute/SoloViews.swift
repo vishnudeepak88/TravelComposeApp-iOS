@@ -45,7 +45,7 @@ struct SoloPickRouteView: View {
         ZStack(alignment: .top) {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Ride solo", onBack: onBack)
+                VPolishedNavBar(title: S.soloRideTitle, onBack: onBack)
                 explainerCard
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
@@ -242,7 +242,7 @@ struct SoloConfirmView: View {
         ZStack(alignment: .top) {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Confirm solo ride", onBack: onBack)
+                VPolishedNavBar(title: S.soloConfirmTitle, onBack: onBack)
                 ScrollView {
                     VStack(spacing: 16) {
                         switch loadState {
@@ -250,9 +250,17 @@ struct SoloConfirmView: View {
                             ProgressView()
                                 .padding(.top, 60)
                         case .failed(let msg):
+                            // Distinguish "you need to sign in" from "the
+                            // server actually broke" — the former is a
+                            // calm prompt, the latter is a warning. Same
+                            // EmptyStateView with the title/icon swapped
+                            // so unauthenticated visitors (e.g. dev-skip
+                            // path) don't see a red triangle for what is
+                            // really just a sign-in gate.
+                            let isAuthIssue = msg == S.sessionExpired
                             EmptyStateView(
-                                icon: "exclamationmark.triangle",
-                                title: "Couldn't load this ride",
+                                icon: isAuthIssue ? "person.fill" : "exclamationmark.triangle",
+                                title: isAuthIssue ? S.signInToContinueTitle : S.soloLoadFailed,
                                 subtitle: msg
                             )
                             .padding(.top, 30)
