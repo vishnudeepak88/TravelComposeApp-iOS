@@ -1496,6 +1496,119 @@ final class AppStore {
         }
     }
 
+    /// Driver-only: patch editable route fields. Optimistic local
+    /// update so the driver sees the new price/seats/etc immediately;
+    /// roll back on failure. Server enforces price-freeze when
+    /// active subscribers exist — that surfaces as `.message` with
+    /// the server's `detail: "price_locked_active_subscribers"`.
+    func patchRoute(routeId: String,
+                    pricePerSeat: Int? = nil,
+                    seatCount: Int? = nil,
+                    carType: String? = nil,
+                    startLocation: String? = nil,
+                    endLocation: String? = nil) async -> Result<Void, AppError> {
+        guard let i = routes.firstIndex(where: { $0.id == routeId }) else {
+            return .failure(.message("Route not found"))
+        }
+        // Snapshot for rollback on failure.
+        let snapshot = routes[i]
+        if let v = pricePerSeat   { routes[i].pricePerSeat   = v }
+        if let v = seatCount      { routes[i].seatCount      = v }
+        if let v = startLocation  { routes[i].startLocation  = v }
+        if let v = endLocation    { routes[i].endLocation    = v }
+        if let v = carType, let carT = CarType(rawValue: v) { routes[i].carType = carT }
+        do {
+            try await VoygoAPIClient.patchRoute(
+                routeId: routeId,
+                pricePerSeat: pricePerSeat,
+                seatCount: seatCount,
+                carType: carType,
+                startLocation: startLocation,
+                endLocation: endLocation
+            )
+            lastSyncError = nil
+            connectionState = .online
+            return .success(())
+        } catch APIError.unauthorized {
+            routes[i] = snapshot
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            routes[i] = snapshot
+            return .failure(.from(error))
+        }
+    }
+
+    /// Driver-only: mark a ride instance IN_PROGRESS. Server flips
+    /// the status, stamps started_at, and notifies passengers.
+    func startRide(rideInstanceId: String) async -> Result<Void, AppError> {
+        guard useOnline, isAuthenticated else { return .failure(.message("Sign in first")) }
+        guard let i = rideInstances.firstIndex(where: { $0.id == rideInstanceId }) else {
+            return .failure(.message("Ride not found"))
+        }
+        let prev = rideInstances[i].rideStatus
+        rideInstances[i].rideStatus = .inProgress
+        do {
+            try await VoygoAPIClient.startRide(rideInstanceId: rideInstanceId)
+            lastSyncError = nil
+            connectionState = .online
+            return .success(())
+        } catch APIError.unauthorized {
+            rideInstances[i].rideStatus = prev
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            rideInstances[i].rideStatus = prev
+            return .failure(.from(error))
+        }
+    }
+
+    /// Driver-only: flip ride to COMPLETED. Notifies passengers to
+    /// rate.
+    func endRide(rideInstanceId: String) async -> Result<Void, AppError> {
+        guard useOnline, isAuthenticated else { return .failure(.message("Sign in first")) }
+        guard let i = rideInstances.firstIndex(where: { $0.id == rideInstanceId }) else {
+            return .failure(.message("Ride not found"))
+        }
+        let prev = rideInstances[i].rideStatus
+        rideInstances[i].rideStatus = .completed
+        do {
+            try await VoygoAPIClient.endRide(rideInstanceId: rideInstanceId)
+            lastSyncError = nil
+            connectionState = .online
+            return .success(())
+        } catch APIError.unauthorized {
+            rideInstances[i].rideStatus = prev
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            rideInstances[i].rideStatus = prev
+            return .failure(.from(error))
+        }
+    }
+
+    /// Driver-only: mark a specific passenger as NO_SHOW on a ride
+    /// instance. Idempotent server-side. Triggers the cancellation
+    /// record + a courteous notification to the rider.
+    func markRiderNoShow(rideInstanceId: String, riderId: String) async -> Result<Void, AppError> {
+        guard useOnline, isAuthenticated else { return .failure(.message("Sign in first")) }
+        do {
+            try await VoygoAPIClient.markRiderNoShow(rideInstanceId: rideInstanceId, riderId: riderId)
+            lastSyncError = nil
+            connectionState = .online
+            // Best-effort refresh so the UI removes the rider from
+            // the confirmed-passenger list. The server already
+            // flipped the row; this just syncs local state.
+            await refreshAll()
+            return .success(())
+        } catch APIError.unauthorized {
+            clearSession()
+            return .failure(.unauthorized)
+        } catch {
+            return .failure(.from(error))
+        }
+    }
+
     func refreshMessages(threadId: String) async {
         guard useOnline, isAuthenticated else { return }
         do {

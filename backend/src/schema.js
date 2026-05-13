@@ -227,6 +227,10 @@ async function initSchema(pool) {
   await pool.query("ALTER TABLE commute_ride_instances ADD COLUMN IF NOT EXISTS solo_price_myr INTEGER NULL");
   await pool.query("ALTER TABLE commute_ride_instances ADD COLUMN IF NOT EXISTS solo_payment_id UUID NULL");
   await pool.query("ALTER TABLE commute_ride_instances ADD COLUMN IF NOT EXISTS solo_booked_at TIMESTAMPTZ NULL");
+  // Ride lifecycle timestamps. Set when the driver taps Start/End
+  // on the day-of card; consumed by on-time-rate + payout calc.
+  await pool.query("ALTER TABLE commute_ride_instances ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ NULL");
+  await pool.query("ALTER TABLE commute_ride_instances ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ NULL");
   // Partial index so the "is this ride still solo-available?" lookup
   // doesn't scan every instance, only the small set already flagged.
   await pool.query(

@@ -275,6 +275,30 @@ enum S {
     static var driverEmptyTitle: String { Self.t("driver.empty.title", "No routes yet") }
     static var driverEmptyBody: String { Self.t("driver.empty.body", "Create your first recurring route to start picking up riders") }
     static var driverEmptyCTA: String { Self.t("driver.empty.cta", "Create a route") }
+    static var driverTodayRide: String       { Self.t("driver.todayRide",       "Today's ride") }
+    static var driverRideScheduled: String   { Self.t("driver.rideScheduled",   "Scheduled") }
+    static var driverRideInProgress: String  { Self.t("driver.rideInProgress",  "Live") }
+    static var driverStartRide: String       { Self.t("driver.startRide",       "Start ride") }
+    static var driverEndRide: String         { Self.t("driver.endRide",         "End ride") }
+    static var driverMarkNoShow: String      { Self.t("driver.markNoShow",      "No-show") }
+    static var driverConfirmNoShowTitle: String {
+        Self.t("driver.noShow.confirm.title", "Mark rider as no-show?")
+    }
+    static func driverConfirmNoShowBody(_ name: String) -> String {
+        let template = Self.t("driver.noShow.confirm.body", "%@ will be removed from this ride and notified. This can affect their trust score.")
+        return String(format: template, name)
+    }
+    static var driverEditRoute: String       { Self.t("driver.editRoute",       "Edit route") }
+    static var driverEditPricing: String     { Self.t("driver.editPricing",     "Pricing") }
+    static var driverEditPricePerSeat: String { Self.t("driver.editPricePerSeat", "Price per seat") }
+    static var driverEditPriceLocked: String { Self.t("driver.editPriceLocked", "Price is locked while riders are subscribed. Wait for current subs to lapse before re-pricing.") }
+    static var driverEditSeats: String       { Self.t("driver.editSeats",       "Seats") }
+    static var driverEditRouteLabels: String { Self.t("driver.editRouteLabels", "Route labels") }
+    static var driverEditStart: String       { Self.t("driver.editStart",       "Start location") }
+    static var driverEditEnd: String         { Self.t("driver.editEnd",         "End location") }
+    static var driverEditCarType: String     { Self.t("driver.editCarType",     "Car type") }
+    static var driverEditSave: String        { Self.t("driver.editSave",        "Save changes") }
+    static var driverEditSaved: String       { Self.t("driver.editSaved",       "Saved") }
 
     // MARK: KYC
 

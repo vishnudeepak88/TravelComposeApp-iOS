@@ -32,6 +32,9 @@ struct DriverDashboardView: View {
     /// renders, so we don't briefly tell the driver "No routes yet"
     /// while their data is still arriving.
     @State private var hasLoaded: Bool = false
+    /// Set when the driver taps "Edit" on a route card. Drives the
+    /// `EditRouteSheet` sheet presentation.
+    @State private var editingRouteId: String? = nil
 
     var dashboards: [DriverRouteDashboard] { store.driverDashboards() }
 
@@ -125,7 +128,8 @@ struct DriverDashboardView: View {
                                     onSetAllDays: { routeId, time in
                                         scheduleUpdate(routeId: routeId, time: time, days: .allDays, label: "all days")
                                     },
-                                    onCalendar: { onOpenCalendar($0) }
+                                    onCalendar: { onOpenCalendar($0) },
+                                    onEdit: { routeId in editingRouteId = routeId }
                                 )
                                 .padding(.horizontal, 16)
                             }
@@ -160,6 +164,21 @@ struct DriverDashboardView: View {
             Button("Cancel", role: .cancel) { pendingToggle = nil }
         } message: { _ in
             Text("Pausing cancels every scheduled pickup on this route. Riders will be notified.")
+        }
+        .sheet(item: Binding(
+            get: { editingRouteId.map { EditRouteSheetID(routeId: $0) } },
+            set: { if $0 == nil { editingRouteId = nil } }
+        )) { id in
+            if let route = store.routes.first(where: { $0.id == id.routeId }) {
+                EditRouteSheet(
+                    route: route,
+                    hasActiveSubscribers: store.subscriptions.contains {
+                        $0.routeId == id.routeId && $0.status == .active
+                    }
+                ) {
+                    editingRouteId = nil
+                }
+            }
         }
     }
 
@@ -216,10 +235,29 @@ struct DriverRouteCard: View {
     var onSetWeekdays: (String, String) -> Void
     var onSetAllDays:  (String, String) -> Void
     var onCalendar: (String) -> Void
+    /// Optional — opens the route-edit sheet from the dashboard.
+    /// Nil-defaulted so existing call sites compile without churn.
+    var onEdit: ((String) -> Void)? = nil
 
+    @Environment(AppStore.self) private var store
     @State private var departureInput: String = ""
+    @State private var rideControlInFlight: Bool = false
+    @State private var rideControlError: String? = nil
+    @State private var pendingNoShowRiderId: String? = nil
+    @State private var noShowConfirmFor: (rideId: String, riderId: String)? = nil
 
     var route: RecurringRoute { dashboard.route }
+
+    /// Today's ride for this route, if any. Drives the ride-control
+    /// panel — only shown when the driver actually has a ride today
+    /// (SCHEDULED or IN_PROGRESS).
+    private var todayRide: CommuteRideInstance? {
+        let cal = Calendar.current
+        return dashboard.upcomingRides.first(where: {
+            cal.isDateInToday($0.date) &&
+            ($0.rideStatus == .scheduled || $0.rideStatus == .inProgress)
+        })
+    }
 
     var body: some View {
         VoygoCard {
@@ -300,6 +338,15 @@ struct DriverRouteCard: View {
                     Spacer()
                 }
 
+                // Today's ride control panel — only when the driver
+                // has a ride scheduled or in progress TODAY. Without
+                // these the on-time-rate metric (which feeds the
+                // payout streak bonus) and the no-show penalty engine
+                // had no way to be triggered from iOS.
+                if let ride = todayRide {
+                    rideControlPanel(ride)
+                }
+
                 // Action buttons
                 HStack(spacing: 10) {
                     Button(action: { onTogglePause(route.id, route.activeStatus == .active) }) {
@@ -332,9 +379,188 @@ struct DriverRouteCard: View {
                         .cornerRadius(12)
                     }
                 }
+
+                // Edit row — only shown when the parent wired an
+                // `onEdit` callback. Opens the EditRouteSheet which
+                // handles price (with active-rider freeze) + seats +
+                // car type + start/end labels. Pickup/drop point
+                // editing lives in a future iteration.
+                if let onEdit {
+                    Button { onEdit(route.id) } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "square.and.pencil")
+                            Text(S.driverEditRoute)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(VoygoTheme.textSecondary.opacity(0.10))
+                        .foregroundColor(VoygoTheme.textPrimary)
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(16)
         }
+    }
+
+    /// Inline ride-control panel for today's ride. Replaces the
+    /// missing "start / end / no-show" surface that drivers needed
+    /// to trigger the on-time-rate metric and penalty engine. The
+    /// passenger list is read from `ride.confirmedPassengers` and
+    /// each name has a swipe-style "No-show" affordance (currently
+    /// rendered as a small label — could promote to a swipe action
+    /// once we add a List wrapper).
+    @ViewBuilder
+    private func rideControlPanel(_ ride: CommuteRideInstance) -> some View {
+        let inProgress = ride.rideStatus == .inProgress
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: inProgress ? "dot.radiowaves.left.and.right" : "clock.fill")
+                    .foregroundColor(inProgress ? VoygoTheme.success : VoygoTheme.warning)
+                Text(S.driverTodayRide)
+                    .font(.footnote.weight(.heavy))
+                    .foregroundColor(VoygoTheme.textPrimary)
+                Spacer()
+                StatusBadge(
+                    text: inProgress ? S.driverRideInProgress : S.driverRideScheduled,
+                    color: inProgress ? VoygoTheme.success : VoygoTheme.warning
+                )
+            }
+
+            // Confirmed-passenger list with per-row No-show action.
+            // Empty state: a ride with no confirmed passengers is
+            // unusual but valid (subscription model — riders show
+            // up if they want); render nothing rather than a label.
+            if !ride.confirmedPassengers.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(ride.confirmedPassengers, id: \.self) { riderId in
+                        HStack(spacing: 8) {
+                            Image(systemName: "person.fill")
+                                .font(.caption)
+                                .foregroundColor(VoygoTheme.textSecondary)
+                            Text(displayName(forRider: riderId))
+                                .font(.caption.weight(.semibold))
+                                .foregroundColor(VoygoTheme.textPrimary)
+                            Spacer()
+                            // No-show requires confirmation — destructive
+                            // action with a clear undo path.
+                            Button {
+                                noShowConfirmFor = (ride.id, riderId)
+                            } label: {
+                                Text(S.driverMarkNoShow)
+                                    .font(.caption2.weight(.bold))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(VoygoTheme.warning.opacity(0.15))
+                                    .foregroundColor(VoygoTheme.warning)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(rideControlInFlight && pendingNoShowRiderId == riderId)
+                        }
+                    }
+                }
+            }
+
+            if let err = rideControlError {
+                Text(err)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(VoygoTheme.warning)
+                    .onTapGesture { rideControlError = nil }
+            }
+
+            // Start / End buttons. Only one is enabled at a time
+            // depending on ride state — server enforces this too.
+            HStack(spacing: 10) {
+                Button {
+                    Task { await runStart(rideId: ride.id) }
+                } label: {
+                    Label(S.driverStartRide, systemImage: "play.fill")
+                        .font(.caption.weight(.bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background(VoygoTheme.success.opacity(0.15))
+                        .foregroundColor(VoygoTheme.success)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                .disabled(inProgress || rideControlInFlight)
+
+                Button {
+                    Task { await runEnd(rideId: ride.id) }
+                } label: {
+                    Label(S.driverEndRide, systemImage: "checkmark.circle.fill")
+                        .font(.caption.weight(.bold))
+                        .frame(maxWidth: .infinity).padding(.vertical, 10)
+                        .background((inProgress ? VoygoTheme.primary : VoygoTheme.textSecondary).opacity(0.15))
+                        .foregroundColor(inProgress ? VoygoTheme.primary : VoygoTheme.textSecondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                .disabled(!inProgress || rideControlInFlight)
+            }
+        }
+        .padding(12)
+        .background(VoygoTheme.primary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .alert(
+            S.driverConfirmNoShowTitle,
+            isPresented: Binding(
+                get: { noShowConfirmFor != nil },
+                set: { if !$0 { noShowConfirmFor = nil } }
+            ),
+            presenting: noShowConfirmFor
+        ) { pair in
+            Button(S.driverMarkNoShow, role: .destructive) {
+                let p = pair
+                noShowConfirmFor = nil
+                Task { await runNoShow(rideId: p.rideId, riderId: p.riderId) }
+            }
+            Button(S.cancel, role: .cancel) { noShowConfirmFor = nil }
+        } message: { pair in
+            Text(S.driverConfirmNoShowBody(displayName(forRider: pair.riderId)))
+        }
+    }
+
+    private func displayName(forRider riderId: String) -> String {
+        // Look up the rider's display name from cached threads /
+        // subscriptions if we have it; otherwise show a short id.
+        if let sub = dashboard.subscribedRiders.first(where: { $0.riderId == riderId }) {
+            return sub.riderName.isEmpty ? String(riderId.prefix(8)) : sub.riderName
+        }
+        return String(riderId.prefix(8))
+    }
+
+    private func runStart(rideId: String) async {
+        rideControlInFlight = true
+        rideControlError = nil
+        let result = await store.startRide(rideInstanceId: rideId)
+        if case .failure(let err) = result {
+            rideControlError = err.localizedDescription
+        }
+        rideControlInFlight = false
+    }
+
+    private func runEnd(rideId: String) async {
+        rideControlInFlight = true
+        rideControlError = nil
+        let result = await store.endRide(rideInstanceId: rideId)
+        if case .failure(let err) = result {
+            rideControlError = err.localizedDescription
+        }
+        rideControlInFlight = false
+    }
+
+    private func runNoShow(rideId: String, riderId: String) async {
+        rideControlInFlight = true
+        rideControlError = nil
+        pendingNoShowRiderId = riderId
+        let result = await store.markRiderNoShow(rideInstanceId: rideId, riderId: riderId)
+        if case .failure(let err) = result {
+            rideControlError = err.localizedDescription
+        }
+        rideControlInFlight = false
+        pendingNoShowRiderId = nil
     }
 
     /// Comma-separated month-day list of upcoming solo bookings —
@@ -1370,5 +1596,207 @@ private struct StopsCard: View {
             return String(s[..<comma])
         }
         return String(s.prefix(28))
+    }
+}
+
+// MARK: - Edit Route Sheet
+
+/// Identifiable wrapper so the `.sheet(item:)` modifier on
+/// DriverDashboardView can re-render when `editingRouteId` changes.
+private struct EditRouteSheetID: Identifiable {
+    let routeId: String
+    var id: String { routeId }
+}
+
+/// Driver-only edit sheet. Pre-fills price / seats / car type /
+/// start+end labels from the existing route and patches them via
+/// `AppStore.patchRoute`. Pickup/drop POINT editing is excluded
+/// from this iteration — the existing flow surfaces those during
+/// route creation only, and re-editing the point set requires a
+/// separate spatial validation pass we haven't built yet.
+///
+/// Price-freeze guard: if the route has active subscribers the
+/// price field is disabled with an inline hint. The server ALSO
+/// rejects with 409 — defense in depth.
+struct EditRouteSheet: View {
+    let route: RecurringRoute
+    let hasActiveSubscribers: Bool
+    var onClose: () -> Void
+
+    @Environment(AppStore.self) private var store
+    @State private var pricePerSeat: Int
+    @State private var seatCount: Int
+    @State private var carType: CarType
+    @State private var startLocation: String
+    @State private var endLocation: String
+    @State private var submitState: SubmitState = .idle
+    @State private var errorMessage: String? = nil
+
+    enum SubmitState: Equatable { case idle, submitting, success }
+
+    init(route: RecurringRoute, hasActiveSubscribers: Bool, onClose: @escaping () -> Void) {
+        self.route = route
+        self.hasActiveSubscribers = hasActiveSubscribers
+        self.onClose = onClose
+        _pricePerSeat = State(initialValue: route.pricePerSeat)
+        _seatCount = State(initialValue: route.seatCount)
+        _carType = State(initialValue: route.carType)
+        _startLocation = State(initialValue: route.startLocation)
+        _endLocation = State(initialValue: route.endLocation)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    sectionCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(S.driverEditPricing)
+                                .font(.subheadline.weight(.heavy))
+                                .foregroundColor(VoygoTheme.textPrimary)
+
+                            HStack {
+                                Text(S.driverEditPricePerSeat)
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundColor(VoygoTheme.textSecondary)
+                                Spacer()
+                                Stepper(value: $pricePerSeat, in: 1...500, step: 1) {
+                                    Text(Formatters.ringgit(pricePerSeat))
+                                        .font(.subheadline.weight(.heavy))
+                                        .foregroundColor(VoygoTheme.primary)
+                                }
+                                .disabled(hasActiveSubscribers)
+                            }
+                            if hasActiveSubscribers {
+                                Text(S.driverEditPriceLocked)
+                                    .font(.caption2)
+                                    .foregroundColor(VoygoTheme.warning)
+                            }
+
+                            HStack {
+                                Text(S.driverEditSeats)
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundColor(VoygoTheme.textSecondary)
+                                Spacer()
+                                Stepper(value: $seatCount, in: 1...8) {
+                                    Text("\(seatCount)")
+                                        .font(.subheadline.weight(.heavy))
+                                        .foregroundColor(VoygoTheme.textPrimary)
+                                }
+                            }
+                        }
+                    }
+
+                    sectionCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(S.driverEditRouteLabels)
+                                .font(.subheadline.weight(.heavy))
+                                .foregroundColor(VoygoTheme.textPrimary)
+                            VoygoTextField(label: S.driverEditStart, text: $startLocation,
+                                           placeholder: route.startLocation)
+                            VoygoTextField(label: S.driverEditEnd, text: $endLocation,
+                                           placeholder: route.endLocation)
+                        }
+                    }
+
+                    sectionCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(S.driverEditCarType)
+                                .font(.subheadline.weight(.heavy))
+                                .foregroundColor(VoygoTheme.textPrimary)
+                            // Use a Picker so the menu adapts naturally
+                            // to AX sizes; segmented would clip labels.
+                            Picker("", selection: $carType) {
+                                ForEach(CarType.allCases, id: \.self) { ct in
+                                    Text(ct.label).tag(ct)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(VoygoTheme.primary)
+                        }
+                    }
+
+                    if let err = errorMessage {
+                        InfoBanner(message: err, color: VoygoTheme.danger) {
+                            errorMessage = nil
+                        }
+                    }
+
+                    Button {
+                        Task { await submit() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if submitState == .submitting { ProgressView().controlSize(.small).tint(.white) }
+                            Text(submitState == .success ? S.driverEditSaved : S.driverEditSave)
+                        }
+                        .font(.subheadline.weight(.heavy))
+                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                        .background(VoygoTheme.primary)
+                        .foregroundColor(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!hasChanges || submitState == .submitting)
+                    .opacity(hasChanges ? 1.0 : 0.5)
+                }
+                .padding(16)
+            }
+            .background(VoygoTheme.background)
+            .navigationTitle(S.driverEditRoute)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(S.cancel) { onClose() }
+                }
+            }
+        }
+    }
+
+    /// At least one field has diverged from the route's current
+    /// values — gates the Save button so a no-op submit can't fire.
+    private var hasChanges: Bool {
+        pricePerSeat != route.pricePerSeat ||
+        seatCount != route.seatCount ||
+        carType != route.carType ||
+        startLocation != route.startLocation ||
+        endLocation != route.endLocation
+    }
+
+    @ViewBuilder
+    private func sectionCard<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            content()
+        }
+        .padding(14)
+        .background(VoygoTheme.surface)
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(VoygoTheme.cardBorder, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func submit() async {
+        guard submitState != .submitting else { return }
+        submitState = .submitting
+        errorMessage = nil
+        // Send only the fields that diverged so the server's diff
+        // tracking + audit log captures intent cleanly.
+        let result = await store.patchRoute(
+            routeId: route.id,
+            pricePerSeat: pricePerSeat != route.pricePerSeat ? pricePerSeat : nil,
+            seatCount: seatCount != route.seatCount ? seatCount : nil,
+            carType: carType != route.carType ? carType.rawValue : nil,
+            startLocation: startLocation != route.startLocation ? startLocation : nil,
+            endLocation: endLocation != route.endLocation ? endLocation : nil
+        )
+        switch result {
+        case .success:
+            submitState = .success
+            // Auto-dismiss after a beat so the driver sees the
+            // success confirmation flash.
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            onClose()
+        case .failure(let err):
+            submitState = .idle
+            errorMessage = err.localizedDescription
+        }
     }
 }

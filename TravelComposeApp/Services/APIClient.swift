@@ -371,6 +371,47 @@ struct VoygoAPIClient {
         _ = try await putVoid(body, to: baseURL.appendingPathComponent("commute/routes/\(routeId)/schedule"))
     }
 
+    // PATCH /commute/routes/{id} — full route edit (price, seats,
+    // car type, start/end location label). All fields optional; ship
+    // only the ones that changed. Server returns 204 on success or
+    // 409 with `detail: "price_locked_active_subscribers"` if you try
+    // to change pricePerSeat while riders are ACTIVE.
+    static func patchRoute(routeId: String,
+                           pricePerSeat: Int? = nil,
+                           seatCount: Int? = nil,
+                           carType: String? = nil,
+                           startLocation: String? = nil,
+                           endLocation: String? = nil) async throws {
+        let body = PatchRouteRequest(
+            pricePerSeat: pricePerSeat,
+            seatCount: seatCount,
+            carType: carType,
+            startLocation: startLocation,
+            endLocation: endLocation
+        )
+        _ = try await patchVoid(body, to: baseURL.appendingPathComponent("commute/routes/\(routeId)"))
+    }
+
+    // POST /rides/{id}/start — driver-only. Flips ride_status to
+    // IN_PROGRESS, stamps started_at, notifies confirmed passengers.
+    static func startRide(rideInstanceId: String) async throws {
+        try await postVoidNoBody(baseURL.appendingPathComponent("rides/\(rideInstanceId)/start"))
+    }
+
+    // POST /rides/{id}/end — driver-only. Flips ride_status to
+    // COMPLETED, stamps ended_at, notifies passengers to rate.
+    static func endRide(rideInstanceId: String) async throws {
+        try await postVoidNoBody(baseURL.appendingPathComponent("rides/\(rideInstanceId)/end"))
+    }
+
+    // POST /rides/{id}/no-show — driver-only. Marks a specific rider
+    // as NO_SHOW on this instance + records a cancellation_records
+    // row for the payout / trust engine.
+    static func markRiderNoShow(rideInstanceId: String, riderId: String) async throws {
+        let body = NoShowRequest(riderId: riderId)
+        _ = try await postVoid(body, to: baseURL.appendingPathComponent("rides/\(rideInstanceId)/no-show"))
+    }
+
     // GET /chats/threads
     static func getThreads() async throws -> [ChatThread] {
         try await get(baseURL.appendingPathComponent("chats/threads"), as: [ChatThread].self)
@@ -718,6 +759,25 @@ struct VoygoAPIClient {
     private static func putVoid<B: Encodable>(_ body: B, to url: URL) async throws {
         var req = authedRequest(url, method: "PUT")
         req.httpBody = try encoder.encode(body)
+        let (data, response) = try await session.data(for: req)
+        try validate(response, data: data, url: url)
+    }
+
+    /// PATCH with an Encodable body. Used by partial-update endpoints
+    /// (e.g. `PATCH /commute/routes/:id` for the driver's edit-route
+    /// sheet) where the client only ships the fields that changed.
+    private static func patchVoid<B: Encodable>(_ body: B, to url: URL) async throws {
+        var req = authedRequest(url, method: "PATCH")
+        req.httpBody = try encoder.encode(body)
+        let (data, response) = try await session.data(for: req)
+        try validate(response, data: data, url: url)
+    }
+
+    /// Bodyless POST — used for state-flip endpoints like
+    /// `/rides/:id/start` and `/end` where the URL encodes the
+    /// intent and the backend returns 204.
+    private static func postVoidNoBody(_ url: URL) async throws {
+        let req = authedRequest(url, method: "POST")
         let (data, response) = try await session.data(for: req)
         try validate(response, data: data, url: url)
     }
@@ -1314,6 +1374,18 @@ struct UpdateRouteScheduleRequest: Encodable {
     var departureTime: String
     var daysOfWeek: [String: Bool]
 }
+/// PATCH /commute/routes/:id body. All fields optional — the server
+/// whitelists what it'll accept and ignores unknown keys, so future
+/// editable columns can be added here without bumping the API.
+struct PatchRouteRequest: Encodable {
+    var pricePerSeat: Int?
+    var seatCount: Int?
+    var carType: String?
+    var startLocation: String?
+    var endLocation: String?
+}
+/// POST /rides/:id/no-show body.
+struct NoShowRequest: Encodable { var riderId: String }
 struct SendMessageRequest: Encodable { var text: String }
 struct HealthResponse: Decodable { var status: String }
 

@@ -181,6 +181,29 @@
 /* Subscriptions extras */
 "subscribe.keepIt" = "Keep it";
 
+/* Driver ride control panel */
+"driver.todayRide" = "Today's ride";
+"driver.rideScheduled" = "Scheduled";
+"driver.rideInProgress" = "Live";
+"driver.startRide" = "Start ride";
+"driver.endRide" = "End ride";
+"driver.markNoShow" = "No-show";
+"driver.noShow.confirm.title" = "Mark rider as no-show?";
+"driver.noShow.confirm.body" = "%@ will be removed from this ride and notified. This can affect their trust score.";
+
+/* Driver edit-route sheet */
+"driver.editRoute" = "Edit route";
+"driver.editPricing" = "Pricing";
+"driver.editPricePerSeat" = "Price per seat";
+"driver.editPriceLocked" = "Price is locked while riders are subscribed. Wait for current subs to lapse before re-pricing.";
+"driver.editSeats" = "Seats";
+"driver.editRouteLabels" = "Route labels";
+"driver.editStart" = "Start location";
+"driver.editEnd" = "End location";
+"driver.editCarType" = "Car type";
+"driver.editSave" = "Save changes";
+"driver.editSaved" = "Saved";
+
 /* Wallet — extras */
 "wallet.paymentMethods" = "Payment methods";
 "wallet.noPayments" = "No payments yet";

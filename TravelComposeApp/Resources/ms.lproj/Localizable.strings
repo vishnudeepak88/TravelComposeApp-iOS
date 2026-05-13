@@ -182,6 +182,29 @@
 /* Subscriptions extras */
 "subscribe.keepIt" = "Simpan";
 
+/* Driver ride control panel */
+"driver.todayRide" = "Perjalanan hari ini";
+"driver.rideScheduled" = "Dijadualkan";
+"driver.rideInProgress" = "Sedang berjalan";
+"driver.startRide" = "Mulakan perjalanan";
+"driver.endRide" = "Tamatkan perjalanan";
+"driver.markNoShow" = "Tidak hadir";
+"driver.noShow.confirm.title" = "Tanda penumpang sebagai tidak hadir?";
+"driver.noShow.confirm.body" = "%@ akan dikeluarkan daripada perjalanan ini dan diberitahu. Ini boleh menjejaskan skor amanah mereka.";
+
+/* Driver edit-route sheet */
+"driver.editRoute" = "Sunting laluan";
+"driver.editPricing" = "Harga";
+"driver.editPricePerSeat" = "Harga setiap tempat duduk";
+"driver.editPriceLocked" = "Harga dikunci semasa penumpang melanggan. Tunggu langganan tamat sebelum mengubah harga.";
+"driver.editSeats" = "Tempat duduk";
+"driver.editRouteLabels" = "Label laluan";
+"driver.editStart" = "Lokasi mula";
+"driver.editEnd" = "Lokasi akhir";
+"driver.editCarType" = "Jenis kereta";
+"driver.editSave" = "Simpan perubahan";
+"driver.editSaved" = "Disimpan";
+
 /* Wallet — extras */
 "wallet.paymentMethods" = "Kaedah pembayaran";
 "wallet.noPayments" = "Tiada pembayaran lagi";

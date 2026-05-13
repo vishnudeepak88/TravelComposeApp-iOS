@@ -2618,6 +2618,307 @@ app.put(
   })
 );
 
+// PATCH /commute/routes/:routeId — full route edit (price, seat
+// count, car type, pickup/drop points). Pause/resume + schedule
+// have their own endpoints (status, schedule) so this handler
+// covers the rest.
+//
+// SAFETY: price changes are blocked when a route has active
+// subscribers — riders agreed to the original price for the
+// remainder of their tier. Drivers can still change price by
+// pausing → cancelling active subs → resuming, but that costs
+// them the rider; the friction is intentional.
+app.patch(
+  "/commute/routes/:routeId",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const routeId = req.params.routeId;
+    const owner = await loadRouteOwner(routeId);
+    if (owner == null) {
+      res.status(404).json({ detail: "Route not found" });
+      return;
+    }
+    if (String(owner) !== req.user.id) {
+      res.status(403).json({ detail: "not your route" });
+      return;
+    }
+    const body = req.body || {};
+
+    // Whitelist the patchable fields. Anything not in this list is
+    // ignored — protects against a stale client trying to flip
+    // status or reassign driver_id.
+    const updates = [];
+    const params = [routeId];
+
+    const pricePerSeat = bodyValue(body, "pricePerSeat", "price_per_seat");
+    if (pricePerSeat != null) {
+      const n = Number(pricePerSeat);
+      if (!Number.isFinite(n) || n < 1 || n > 500) {
+        res.status(400).json({ detail: "pricePerSeat out of range" });
+        return;
+      }
+      // Price-freeze guard: block if any rider is currently ACTIVE.
+      const activeRes = await pool.query(
+        `SELECT COUNT(*)::int AS c
+           FROM route_subscriptions
+          WHERE route_id = $1 AND status = 'ACTIVE'`,
+        [routeId]
+      );
+      if (Number(activeRes.rows[0]?.c || 0) > 0) {
+        res.status(409).json({
+          detail: "price_locked_active_subscribers",
+          message: "Price can't change while riders are subscribed. Pause active subs or wait for them to lapse before re-pricing."
+        });
+        return;
+      }
+      params.push(n);
+      updates.push(`price_per_seat = $${params.length}`);
+    }
+
+    const seatCount = bodyValue(body, "seatCount", "seat_count");
+    if (seatCount != null) {
+      const n = Number(seatCount);
+      if (!Number.isFinite(n) || n < 1 || n > 8) {
+        res.status(400).json({ detail: "seatCount out of range" });
+        return;
+      }
+      params.push(n);
+      updates.push(`seat_count = $${params.length}`);
+    }
+
+    const carType = bodyValue(body, "carType", "car_type");
+    if (carType != null) {
+      const s = String(carType).slice(0, 32);
+      params.push(s);
+      updates.push(`car_type = $${params.length}`);
+    }
+
+    const startLocation = bodyValue(body, "startLocation", "start_location");
+    if (startLocation != null) {
+      const s = String(startLocation).slice(0, 200);
+      params.push(s);
+      updates.push(`start_location = $${params.length}`);
+    }
+
+    const endLocation = bodyValue(body, "endLocation", "end_location");
+    if (endLocation != null) {
+      const s = String(endLocation).slice(0, 200);
+      params.push(s);
+      updates.push(`end_location = $${params.length}`);
+    }
+
+    if (updates.length === 0) {
+      res.status(400).json({ detail: "no patchable fields supplied" });
+      return;
+    }
+
+    await pool.query(
+      `UPDATE recurring_routes SET ${updates.join(", ")}, updated_at = NOW() WHERE id = $1`,
+      params
+    );
+
+    // Notify subscribers so they know the route they're on changed.
+    // The schedule-update notifier sends a generic line; this one is
+    // explicit about the patch so a rider doesn't think their pickup
+    // time moved when really the price went up.
+    await notifyRouteSubscribers(
+      routeId,
+      "ROUTE_UPDATED",
+      "Route updated",
+      "Your driver updated this route. Open the route to see what changed."
+    );
+
+    res.status(204).send();
+  })
+);
+
+// ----------------------------------------------------------------
+// Ride-instance lifecycle endpoints.
+//
+// Without these, the on-time rate metric (which drives the streak
+// bonus in payouts.js) and the no-show penalty engine had no way
+// to be triggered from the iOS client. Drivers tapped Start / End
+// on the day-of card; passengers got auto-flipped to NO_SHOW from
+// a separate dedicated endpoint.
+//
+// Auth: every endpoint requires the caller to BE the route's
+// driver. Riders can't start/end their own ride.
+// ----------------------------------------------------------------
+
+async function loadRideOwner(rideInstanceId) {
+  const res = await pool.query(
+    `SELECT r.driver_id AS driver_id, i.ride_status, i.route_id
+       FROM commute_ride_instances i
+       JOIN recurring_routes r ON r.id = i.route_id
+      WHERE i.id = $1
+      LIMIT 1`,
+    [rideInstanceId]
+  );
+  return res.rows[0] || null;
+}
+
+app.post(
+  "/rides/:rideId/start",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const rideId = req.params.rideId;
+    const owner = await loadRideOwner(rideId);
+    if (!owner) {
+      res.status(404).json({ detail: "ride_not_found" });
+      return;
+    }
+    if (String(owner.driver_id) !== req.user.id) {
+      res.status(403).json({ detail: "not_your_ride" });
+      return;
+    }
+    if (owner.ride_status !== "SCHEDULED") {
+      res.status(409).json({ detail: "ride_not_startable", currentStatus: owner.ride_status });
+      return;
+    }
+    await pool.query(
+      `UPDATE commute_ride_instances
+          SET ride_status = 'IN_PROGRESS', started_at = NOW()
+        WHERE id = $1`,
+      [rideId]
+    );
+
+    // Fan out a notification to every confirmed passenger so they
+    // know the driver has rolled. The push has the routeId so
+    // .voygoOpenRoute / .voygoOpenThread handlers work.
+    const passengers = await pool.query(
+      `SELECT DISTINCT rider_id
+         FROM commute_ride_passengers
+        WHERE instance_id = $1 AND status = 'CONFIRMED'`,
+      [rideId]
+    );
+    await Promise.all(
+      passengers.rows.map((row) =>
+        createNotification({
+          userId: row.rider_id,
+          type: "RIDE_STARTED",
+          title: "Driver started the ride",
+          body: "Pickup window is now open. Head to your stop.",
+          routeId: owner.route_id,
+          rideInstanceId: rideId
+        }).catch((e) => console.warn(`[ride start] notify failed: ${e.message}`))
+      )
+    );
+
+    res.status(204).send();
+  })
+);
+
+app.post(
+  "/rides/:rideId/end",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const rideId = req.params.rideId;
+    const owner = await loadRideOwner(rideId);
+    if (!owner) {
+      res.status(404).json({ detail: "ride_not_found" });
+      return;
+    }
+    if (String(owner.driver_id) !== req.user.id) {
+      res.status(403).json({ detail: "not_your_ride" });
+      return;
+    }
+    if (owner.ride_status !== "IN_PROGRESS" && owner.ride_status !== "SCHEDULED") {
+      res.status(409).json({ detail: "ride_not_endable", currentStatus: owner.ride_status });
+      return;
+    }
+    await pool.query(
+      `UPDATE commute_ride_instances
+          SET ride_status = 'COMPLETED', ended_at = NOW()
+        WHERE id = $1`,
+      [rideId]
+    );
+    // Notify riders so the in-app trip history reflects the
+    // completion the moment the driver taps End.
+    const passengers = await pool.query(
+      `SELECT DISTINCT rider_id
+         FROM commute_ride_passengers
+        WHERE instance_id = $1 AND status = 'CONFIRMED'`,
+      [rideId]
+    );
+    await Promise.all(
+      passengers.rows.map((row) =>
+        createNotification({
+          userId: row.rider_id,
+          type: "RIDE_COMPLETED",
+          title: "Ride completed",
+          body: "Rate your driver — it helps the next rider.",
+          routeId: owner.route_id,
+          rideInstanceId: rideId
+        }).catch((e) => console.warn(`[ride end] notify failed: ${e.message}`))
+      )
+    );
+
+    res.status(204).send();
+  })
+);
+
+app.post(
+  "/rides/:rideId/no-show",
+  requireAuth,
+  rateLimitWrite,
+  asyncHandler(async (req, res) => {
+    const rideId = req.params.rideId;
+    const riderId = String(req.body?.riderId || "").slice(0, 80);
+    if (!riderId) {
+      res.status(400).json({ detail: "riderId required" });
+      return;
+    }
+    const owner = await loadRideOwner(rideId);
+    if (!owner) {
+      res.status(404).json({ detail: "ride_not_found" });
+      return;
+    }
+    if (String(owner.driver_id) !== req.user.id) {
+      res.status(403).json({ detail: "not_your_ride" });
+      return;
+    }
+    // Idempotent + scoped: only the named rider on THIS instance
+    // is touched; status flips CONFIRMED → NO_SHOW. Already-no-show
+    // rows are a no-op (zero rowCount → 200 with same shape).
+    await pool.query(
+      `UPDATE commute_ride_passengers
+          SET status = 'NO_SHOW'
+        WHERE instance_id = $1
+          AND rider_id = $2
+          AND status = 'CONFIRMED'`,
+      [rideId, riderId]
+    );
+    // Record the no-show in cancellation_records so the trust /
+    // payout engines have a single source of truth. The penalty
+    // amount is left at 0 here — the policy engine in payouts.js
+    // calculates the actual hit at payout time.
+    await pool.query(
+      `INSERT INTO cancellation_records (id, route_id, ride_instance_id, actor, kind, penalty_amount, reported_at, notes)
+       VALUES ($1, $2, $3, 'DRIVER', 'NO_SHOW', 0, NOW(), $4)
+       ON CONFLICT DO NOTHING`,
+      [crypto.randomUUID(), owner.route_id, rideId, `driver=${req.user.id} rider=${riderId}`]
+    ).catch((e) => console.warn(`[no-show] record insert: ${e.message}`));
+
+    // Notify the no-shown rider so they know what happened (often
+    // they had forgotten or had a connectivity issue and want to
+    // contest). The body intentionally doesn't accuse them — just
+    // states the fact.
+    await createNotification({
+      userId: riderId,
+      type: "NO_SHOW",
+      title: "Marked as no-show",
+      body: "Your driver couldn't pick you up today. Contact support if this is a mistake.",
+      routeId: owner.route_id,
+      rideInstanceId: rideId
+    }).catch((e) => console.warn(`[no-show] notify failed: ${e.message}`));
+
+    res.status(204).send();
+  })
+);
+
 app.get(
   "/commute/routes/driver/:driverId",
   requireAuth,
