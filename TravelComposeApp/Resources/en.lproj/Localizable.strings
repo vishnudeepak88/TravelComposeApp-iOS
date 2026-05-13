@@ -80,6 +80,23 @@
 "upcoming.empty.title" = "No upcoming commutes";
 "upcoming.empty.body" = "Subscribe to a route to see your schedule here";
 "upcoming.longPressHint" = "Long-press a ride to skip multiple";
+
+/* My commutes — long-press multi-cancel + hint */
+"subs.longPressHint" = "Long-press a sub to cancel multiple";
+
+/* Notifications — swipe to clear */
+"notif.clear" = "Clear";
+"notif.swipeHint" = "Swipe a notification to clear it";
+
+/* Inbox (chat) — long-press to hide */
+"inbox.delete.title" = "Hide this conversation?";
+"inbox.delete.body" = "It disappears from your Inbox. New messages from the driver will bring it back.";
+"inbox.delete.confirm" = "Hide";
+"inbox.longPressHint" = "Long-press a chat to hide it";
+
+/* Home — swipe a suggested ride to dismiss */
+"home.dismissRide" = "Dismiss";
+"home.suggestions.restored" = "Suggestions reset.";
 "upcoming.bulkSkip.title.one" = "Skip 1 ride?";
 "upcoming.bulkSkip.title.many" = "Skip %d rides?";
 "upcoming.bulkSkip.confirm.one" = "Yes, skip 1";

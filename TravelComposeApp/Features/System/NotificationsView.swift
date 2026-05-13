@@ -94,17 +94,21 @@ struct NotificationsView: View {
                             ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
                                 VStack(alignment: .leading, spacing: 8) {
                                     VKicker(text: group.label).padding(.horizontal, 4)
-                                    VStack(spacing: 0) {
-                                        ForEach(Array(group.items.enumerated()), id: \.element.id) { idx, n in
+                                    // Per-row cards (was a single grouped
+                                    // container) so each row can have its
+                                    // own swipe-to-clear gesture without
+                                    // the action button getting clipped by
+                                    // the parent's rounded corners.
+                                    VStack(spacing: 8) {
+                                        ForEach(group.items, id: \.id) { n in
                                             notifRow(n)
-                                            if idx < group.items.count - 1 {
-                                                Rectangle().fill(VPalette.border).frame(height: 1)
-                                            }
+                                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
+                                                .swipeToClear(label: S.notifClear) {
+                                                    store.dismissNotificationLocally(n.id)
+                                                }
                                         }
                                     }
-                                    .background(VPalette.surface)
-                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(VPalette.border, lineWidth: 1))
                                 }
                             }
                         }

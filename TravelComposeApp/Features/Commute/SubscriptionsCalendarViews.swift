@@ -23,11 +23,27 @@ struct MySubscriptionsView: View {
     /// Tracks whether the initial refresh has completed so we can
     /// show a skeleton instead of the empty-state on first paint.
     @State private var hasLoaded: Bool = false
-    // Multi-select moved to Upcoming Commutes (calendar view), where
-    // bulk-action operates on per-day rides via SKIP — the real
-    // common case ("I'm on vacation Mon–Fri, skip all 5"). Cancelling
-    // a recurring subscription is a deliberate per-row act, so the
-    // single × on each card is the right affordance here.
+
+    // Multi-select state — entry is a long-press on any sub card (the
+    // iOS-native pattern, mirrors Mail / Photos). Bulk-cancel is rare
+    // (most riders have 1–3 subs) but when you need it — say a rider
+    // dropping all their commutes before a move — it's tedious to do
+    // one at a time. Long-press is invisible at rest so the dominant
+    // experience stays the simple per-card × button.
+    @State private var isSelectMode: Bool = false
+    @State private var selectedSubIds: Set<String> = []
+    @State private var pendingBulkCancel: Bool = false
+    @State private var bulkCancelInFlight: Bool = false
+    /// Sticky flag that hides the discoverability hint once the rider
+    /// has used the gesture at least once. Same pattern as
+    /// `voygo.upcomingLongPressUsed` on Upcoming Commutes.
+    @AppStorage("voygo.subsLongPressUsed") private var hasUsedLongPress: Bool = false
+
+    /// Subset of items that can be batch-cancelled. Already-cancelled
+    /// rows are not selectable.
+    private var cancellableItems: [RouteSubscriptionWithRoute] {
+        items.filter { $0.subscription.status != .cancelled }
+    }
 
     var items: [RouteSubscriptionWithRoute] { store.mySubscriptions() }
 
@@ -36,16 +52,34 @@ struct MySubscriptionsView: View {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VPolishedNavBar(title: S.subscriptionsTitle, onBack: onBack) {
-                    Button(action: onOpenCalendar) {
-                        Image(systemName: "calendar")
-                            .font(.callout.weight(.bold))
-                            .foregroundColor(VPalette.primary)
-                            .frame(width: 40, height: 40)
-                            .background(VPalette.primaryContainer)
-                            .clipShape(Circle())
+                    if isSelectMode {
+                        // Done is the obvious exit from a mode entered
+                        // via gesture — no Select button to mirror.
+                        Button {
+                            isSelectMode = false
+                            selectedSubIds = []
+                        } label: {
+                            Text(S.subsDone)
+                                .font(.footnote.weight(.heavy))
+                                .foregroundColor(VPalette.primary)
+                                .padding(.horizontal, 14).padding(.vertical, 10)
+                                .background(VPalette.primaryContainer)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(S.subsDone)
+                    } else {
+                        Button(action: onOpenCalendar) {
+                            Image(systemName: "calendar")
+                                .font(.callout.weight(.bold))
+                                .foregroundColor(VPalette.primary)
+                                .frame(width: 40, height: 40)
+                                .background(VPalette.primaryContainer)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(S.subsCalendarA11y)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(S.subsCalendarA11y)
                 }
 
                 if items.isEmpty && !hasLoaded {
@@ -84,23 +118,41 @@ struct MySubscriptionsView: View {
                                         .onTapGesture { actionError = nil }
                                 }
 
-                                ForEach(items) { item in
-                                    SubscriptionCard(
-                                        item: item,
-                                        onOpen:   { onOpenRoute(item.route.id) },
-                                        onPause:  { updateSubscription(item.subscription.id, status: .paused) },
-                                        onResume: { updateSubscription(item.subscription.id, status: .active) },
-                                        onCancel: { pendingCancellation = item },
-                                        onRetryPayment: { retryPayment(item) },
-                                        isRetryingPayment: retryingId == item.subscription.id
-                                    )
+                                // Discoverability hint for the long-press
+                                // entry into multi-cancel. Same auto-hide
+                                // pattern as Upcoming Commutes.
+                                if !isSelectMode,
+                                   !cancellableItems.isEmpty,
+                                   !hasUsedLongPress {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "hand.tap")
+                                            .font(.caption2.weight(.semibold))
+                                        Text(S.subsLongPressHint)
+                                            .font(.caption2.weight(.semibold))
+                                        Spacer()
+                                    }
+                                    .foregroundColor(VPalette.textHint)
                                     .padding(.horizontal, 16)
+                                }
+
+                                ForEach(items) { item in
+                                    subscriptionRow(item)
                                 }
                             }
                             .padding(.vertical, 16)
                         }
                         .refreshable {
                             await store.refreshAll()
+                        }
+                        // Bulk-cancel action bar pinned above the tab bar
+                        // when in select mode. Same `.safeAreaInset`
+                        // pattern as Upcoming Commutes' bulk-skip — tab
+                        // bar stays visible.
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            if isSelectMode {
+                                bulkCancelBar
+                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                            }
                         }
                         .onReceive(NotificationCenter.default.publisher(for: .voygoTabReselected)) { note in
                             if (note.userInfo?["index"] as? Int) == 2 {
@@ -113,6 +165,7 @@ struct MySubscriptionsView: View {
                 }
             }
         }
+        .animation(.easeOut(duration: 0.18), value: isSelectMode)
         .task {
             await store.refreshAll()
             hasLoaded = true
@@ -140,6 +193,196 @@ struct MySubscriptionsView: View {
             // don't enter into it). Prefix the route name so the
             // rider sees which sub they're cancelling.
             Text("\(item.route.startLocation) → \(item.route.endLocation).\n\(S.cancelSubscriptionMessage)")
+        }
+        // Bulk-cancel confirm. Body interpolates the selected count.
+        .alert(
+            S.subsBulkCancelTitle(selectedSubIds.count),
+            isPresented: $pendingBulkCancel
+        ) {
+            Button(S.subsBulkCancelConfirm(selectedSubIds.count), role: .destructive) {
+                Task { await runBulkCancel() }
+            }
+            Button(S.subKeepIt, role: .cancel) { }
+        } message: {
+            Text(S.subsBulkCancelBody)
+        }
+    }
+
+    /// Single-row render — splits into two branches so the long-press
+    /// gesture only attaches in non-select mode, and the per-card
+    /// action buttons stay suppressed inside select mode (the whole
+    /// card reads as a selectable unit).
+    @ViewBuilder
+    private func subscriptionRow(_ item: RouteSubscriptionWithRoute) -> some View {
+        if isSelectMode {
+            let isCancellable = item.subscription.status != .cancelled
+            HStack(spacing: 12) {
+                Image(systemName: selectedSubIds.contains(item.subscription.id)
+                      ? "checkmark.circle.fill"
+                      : (isCancellable ? "circle" : "minus.circle"))
+                    .font(.title3.weight(.semibold))
+                    .foregroundColor(
+                        selectedSubIds.contains(item.subscription.id)
+                            ? VPalette.primary
+                            : (isCancellable ? VPalette.textHint : VPalette.textHint.opacity(0.4))
+                    )
+                    .transition(.opacity)
+                    .padding(.leading, 16)
+                SubscriptionCard(
+                    item: item,
+                    onOpen:   { },
+                    onPause:  { },
+                    onResume: { },
+                    onCancel: { },
+                    onRetryPayment: nil,
+                    isRetryingPayment: false,
+                    actionsHidden: true
+                )
+            }
+            .padding(.trailing, 16)
+            .contentShape(Rectangle())
+            .onTapGesture { toggleSubSelection(item) }
+        } else {
+            SubscriptionCard(
+                item: item,
+                onOpen:   { onOpenRoute(item.route.id) },
+                onPause:  { updateSubscription(item.subscription.id, status: .paused) },
+                onResume: { updateSubscription(item.subscription.id, status: .active) },
+                onCancel: { pendingCancellation = item },
+                onRetryPayment: { retryPayment(item) },
+                isRetryingPayment: retryingId == item.subscription.id
+            )
+            .padding(.horizontal, 16)
+            // simultaneousGesture so the long-press coexists with the
+            // inner per-row Open/Pause/Cancel buttons. Auto-selects
+            // the pressed sub on entry — same UX as Upcoming Commutes.
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.4)
+                    .onEnded { _ in
+                        guard item.subscription.status != .cancelled else { return }
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        isSelectMode = true
+                        selectedSubIds.insert(item.subscription.id)
+                        hasUsedLongPress = true
+                    }
+            )
+        }
+    }
+
+    private func toggleSubSelection(_ item: RouteSubscriptionWithRoute) {
+        guard item.subscription.status != .cancelled else { return }
+        let id = item.subscription.id
+        if selectedSubIds.contains(id) {
+            selectedSubIds.remove(id)
+        } else {
+            selectedSubIds.insert(id)
+        }
+    }
+
+    /// Bottom action bar shown while in select mode. Mirrors the
+    /// bulk-skip bar on Upcoming Commutes but the destructive action
+    /// uses the danger palette since cancellation is heavier than skip.
+    private var bulkCancelBar: some View {
+        HStack(spacing: 10) {
+            Button {
+                let allIds = Set(cancellableItems.map(\.subscription.id))
+                if selectedSubIds == allIds {
+                    selectedSubIds = []
+                } else {
+                    selectedSubIds = allIds
+                }
+            } label: {
+                Text({
+                    let allIds = Set(cancellableItems.map(\.subscription.id))
+                    return selectedSubIds == allIds && !allIds.isEmpty
+                        ? S.subsClearAll : S.subsSelectAll
+                }())
+                    .font(.footnote.weight(.heavy))
+                    .foregroundColor(VPalette.primary)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
+                    .background(VPalette.primaryContainer)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+
+            Button {
+                pendingBulkCancel = true
+            } label: {
+                HStack(spacing: 6) {
+                    if bulkCancelInFlight {
+                        ProgressView().tint(.white).controlSize(.small)
+                    } else {
+                        Image(systemName: "xmark.bin.fill")
+                    }
+                    Text(S.subsBulkCancelCTA(selectedSubIds.count))
+                }
+                .font(.footnote.weight(.heavy))
+                .foregroundColor(.white)
+                .padding(.horizontal, 16).padding(.vertical, 12)
+                .background(selectedSubIds.isEmpty || bulkCancelInFlight ? VPalette.textHint : VPalette.danger)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(selectedSubIds.isEmpty || bulkCancelInFlight)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .overlay(Rectangle().fill(VPalette.border).frame(height: 1), alignment: .top)
+    }
+
+    /// Cancel every selected sub in parallel. Each call goes through the
+    /// same two-step (updateSubscription → reportCancellation) flow as
+    /// the per-row × so server-side state stays consistent. Failures
+    /// surface in the action banner with a list of route labels.
+    private func runBulkCancel() async {
+        guard !bulkCancelInFlight else { return }
+        bulkCancelInFlight = true
+        defer { bulkCancelInFlight = false }
+        let chosen = items.filter { selectedSubIds.contains($0.subscription.id) }
+        var failedRoutes: [String] = []
+        await withTaskGroup(of: (RouteSubscriptionWithRoute, Bool).self) { group in
+            for item in chosen {
+                group.addTask {
+                    let cancelResult = await store.updateSubscription(id: item.subscription.id, status: .cancelled)
+                    if case .failure = cancelResult { return (item, false) }
+                    let reportResult = await store.reportCancellation(
+                        rideInstanceId: nil,
+                        routeId: item.route.id,
+                        subscriptionId: item.subscription.id,
+                        actor: .rider,
+                        kind: .riderCancelMidMonth,
+                        notes: nil
+                    )
+                    if case .failure = reportResult {
+                        // Roll back the cancellation so the ledger
+                        // doesn't drift — the per-row cancellation flow
+                        // does the same rollback.
+                        _ = await store.updateSubscription(id: item.subscription.id, status: .active)
+                        return (item, false)
+                    }
+                    return (item, true)
+                }
+            }
+            for await (item, ok) in group {
+                if !ok {
+                    failedRoutes.append("\(item.route.startLocation) → \(item.route.endLocation)")
+                }
+            }
+        }
+        if failedRoutes.isEmpty {
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            isSelectMode = false
+            selectedSubIds = []
+            actionError = nil
+        } else {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            actionError = S.subsBulkCancelFailed(failedRoutes.joined(separator: ", "))
+            selectedSubIds = selectedSubIds.intersection(
+                Set(cancellableItems.map(\.subscription.id))
+            )
         }
     }
 

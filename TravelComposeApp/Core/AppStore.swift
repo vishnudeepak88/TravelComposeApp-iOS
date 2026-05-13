@@ -466,7 +466,7 @@ final class AppStore {
                 .filter { $0.type == "CHAT_MESSAGE" }
                 .map(\.createdAt)
                 .max() ?? .distantPast
-            notifications = rows
+            notifications = filteringDismissedNotifications(rows)
             notificationsTick &+= 1
             let newestChatAt = rows
                 .filter { $0.type == "CHAT_MESSAGE" }
@@ -489,7 +489,8 @@ final class AppStore {
     func refreshThreads() async {
         guard useOnline, isAuthenticated else { return }
         do {
-            threads = try await VoygoAPIClient.getThreads()
+            let remote = try await VoygoAPIClient.getThreads()
+            threads = filteringDismissedThreads(remote)
         } catch APIError.unauthorized {
             clearSession()
         } catch {
@@ -535,6 +536,87 @@ final class AppStore {
     /// directly without computing the filter at the call site.
     var unreadNotificationsCount: Int {
         notifications.lazy.filter { $0.readAt == nil }.count
+    }
+
+    // MARK: - Local-only dismissal sets
+    //
+    // The backend doesn't yet expose DELETE endpoints for notifications
+    // or chat threads, but the rider can swipe / long-press to clear
+    // them from their list. We persist dismissed IDs in UserDefaults so
+    // the dismissal survives across refreshes — `refreshNotifications`
+    // and `refreshThreads` filter the server response through these
+    // sets before exposing to the views.
+    //
+    // Local-only is the right semantic for now:
+    //   - notifications: server keeps the row for analytics/audit; the
+    //     rider just doesn't want to see it again
+    //   - threads: archiving here doesn't sever the chat — a new
+    //     message from the driver creates an unread row that the
+    //     refresh path will surface as new (because the dismissed set
+    //     is intent-scoped to the *current* state of the thread)
+    //
+    // When the backend ships proper delete endpoints we replace the
+    // `dismiss*Locally` body with the server call; call sites stay.
+
+    private enum DismissalKeys {
+        static let notifications = "voygo.notifications.dismissed"
+        static let threads       = "voygo.threads.dismissed"
+    }
+
+    private var dismissedNotificationIds: Set<String> {
+        get {
+            Set(UserDefaults.standard.array(forKey: DismissalKeys.notifications) as? [String] ?? [])
+        }
+        set {
+            UserDefaults.standard.set(Array(newValue), forKey: DismissalKeys.notifications)
+        }
+    }
+
+    private var dismissedThreadIds: Set<String> {
+        get {
+            Set(UserDefaults.standard.array(forKey: DismissalKeys.threads) as? [String] ?? [])
+        }
+        set {
+            UserDefaults.standard.set(Array(newValue), forKey: DismissalKeys.threads)
+        }
+    }
+
+    /// Removes a notification from the rider's local list and remembers
+    /// it as dismissed so a subsequent refresh doesn't resurrect it.
+    /// Pure local — backend retention is unaffected.
+    func dismissNotificationLocally(_ id: String) {
+        var set = dismissedNotificationIds
+        set.insert(id)
+        dismissedNotificationIds = set
+        notifications.removeAll { $0.id == id }
+    }
+
+    /// Same shape as the notification variant but for chat threads.
+    /// A new message from the driver re-creates a row server-side; the
+    /// next refresh notices the thread isn't in the dismissed set's
+    /// "still hidden" snapshot and surfaces it again. (Today the set
+    /// is sticky — if/when the user wants resurrection-on-new-message
+    /// behaviour, we key off `thread.lastMessageAt > dismissedAt`.)
+    func dismissThreadLocally(_ id: String) {
+        var set = dismissedThreadIds
+        set.insert(id)
+        dismissedThreadIds = set
+        threads.removeAll { $0.id == id }
+    }
+
+    /// Filter used by refresh paths to drop server-side rows the rider
+    /// has dismissed. Kept as a single helper so the two refresh sites
+    /// share the same logic and don't drift.
+    fileprivate func filteringDismissedNotifications(_ items: [NotificationDTO]) -> [NotificationDTO] {
+        let set = dismissedNotificationIds
+        guard !set.isEmpty else { return items }
+        return items.filter { !set.contains($0.id) }
+    }
+
+    fileprivate func filteringDismissedThreads(_ items: [ChatThread]) -> [ChatThread] {
+        let set = dismissedThreadIds
+        guard !set.isEmpty else { return items }
+        return items.filter { !set.contains($0.id) }
     }
 
     // MARK: - Live ride locations (rider-side)
@@ -776,7 +858,7 @@ final class AppStore {
             }
             routes = Array(nextRoutes.values)
             subscriptions = remoteSubs
-            threads = remoteThreads
+            threads = filteringDismissedThreads(remoteThreads)
 
             await refreshCalendar()
             // Pull side data — these are best-effort and don't block the

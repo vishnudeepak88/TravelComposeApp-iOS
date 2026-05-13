@@ -121,6 +121,22 @@ struct HomeView: View {
 
     @State private var showComingSoonFor: String? = nil
 
+    /// Comma-separated list of dismissed suggested-ride keys.
+    /// `@AppStorage` can't persist a Set<String> natively, so we
+    /// round-trip through a CSV string. Keys are stable per row (route
+    /// id when available, otherwise the row's name + time hash) so a
+    /// dismissed real route stays gone even if the surrounding list is
+    /// re-sorted.
+    @AppStorage("voygo.home.dismissedRides") private var dismissedRidesCSV: String = ""
+    private var dismissedRideKeys: Set<String> {
+        Set(dismissedRidesCSV.split(separator: ",").map(String.init))
+    }
+    private func dismissRide(key: String) {
+        var set = dismissedRideKeys
+        set.insert(key)
+        dismissedRidesCSV = set.sorted().joined(separator: ",")
+    }
+
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
@@ -774,8 +790,18 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
             }
-            ForEach(suggestedRideRows) { row in
+            // Dismissed-set filter — riders can swipe a card away and
+            // the keys persist across launches via @AppStorage. Empty
+            // lists are still acceptable: the See-all CTA in the
+            // header funnels them into Search.
+            let visible = suggestedRideRows.filter { !dismissedRideKeys.contains(stableKey(for: $0)) }
+            ForEach(visible) { row in
                 suggestedRideCard(row)
+                    .swipeToClear(label: S.homeDismissRide,
+                                  systemImage: "eye.slash.fill",
+                                  background: VPalette.textHint) {
+                        dismissRide(key: stableKey(for: row))
+                    }
             }
         }
         .padding(.horizontal, 20)
@@ -863,6 +889,15 @@ struct HomeView: View {
     private func shortLabel(_ raw: String) -> String {
         let trimmed = raw.split(separator: ",").first.map(String.init) ?? raw
         return trimmed.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Identity key for dismissal persistence. Real routes use their
+    /// server id so a renamed driver doesn't resurrect a dismissed
+    /// suggestion; demo rows fall back to `name|time|route` so the
+    /// keys stay stable across re-renders even without a backing id.
+    private func stableKey(for row: SuggestedRide) -> String {
+        if let id = row.routeId { return "route:\(id)" }
+        return "demo:\(row.name)|\(row.time)|\(row.route)"
     }
 }
 

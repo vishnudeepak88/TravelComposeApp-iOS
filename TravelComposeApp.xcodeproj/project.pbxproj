@@ -14,6 +14,7 @@
 		0F1E2D3C4B5A69788796A5B4 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */; };
 		C1A2B3D4E5F607182939A4B5 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A2B3D4E5F607182939A4B4 /* KeychainStore.swift */; };
 		D1A2B3D4E5F607182939A001 /* Polished.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A101 /* Polished.swift */; };
+		D1A2B3D4E5F607182939F001 /* SwipeToClear.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939F101 /* SwipeToClear.swift */; };
 		D1A2B3D4E5F607182939A201 /* SafeURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A202 /* SafeURL.swift */; };
 		D1A2B3D4E5F607182939A301 /* FocusFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A302 /* FocusFilter.swift */; };
 		D1A2B3D4E5F607182939A401 /* AppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A2B3D4E5F607182939A402 /* AppIntents.swift */; };
@@ -97,6 +98,7 @@
 		0F1E2D3C4B5A69788796A5B3 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		C1A2B3D4E5F607182939A4B4 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		D1A2B3D4E5F607182939A101 /* Polished.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Polished.swift; sourceTree = "<group>"; };
+		D1A2B3D4E5F607182939F101 /* SwipeToClear.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwipeToClear.swift; sourceTree = "<group>"; };
 		D1A2B3D4E5F607182939A202 /* SafeURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeURL.swift; sourceTree = "<group>"; };
 		D1A2B3D4E5F607182939A302 /* FocusFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusFilter.swift; sourceTree = "<group>"; };
 		D1A2B3D4E5F607182939A402 /* AppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntents.swift; sourceTree = "<group>"; };
@@ -227,6 +229,7 @@
 				AC7DA9910E6D4CA595C6D018 /* AppStore.swift */,
 				17E574B7331F4475B16CC22C /* DesignSystem.swift */,
 				D1A2B3D4E5F607182939A101 /* Polished.swift */,
+				D1A2B3D4E5F607182939F101 /* SwipeToClear.swift */,
 				D1A2B3D4E5F607182939A202 /* SafeURL.swift */,
 				D1A2B3D4E5F607182939A302 /* FocusFilter.swift */,
 				D1A2B3D4E5F607182939A402 /* AppIntents.swift */,
@@ -513,6 +516,7 @@
 				0F1E2D3C4B5A69788796A5B4 /* LocationService.swift in Sources */,
 				C1A2B3D4E5F607182939A4B5 /* KeychainStore.swift in Sources */,
 				D1A2B3D4E5F607182939A001 /* Polished.swift in Sources */,
+				D1A2B3D4E5F607182939F001 /* SwipeToClear.swift in Sources */,
 				D1A2B3D4E5F607182939A201 /* SafeURL.swift in Sources */,
 				D1A2B3D4E5F607182939A301 /* FocusFilter.swift in Sources */,
 				D1A2B3D4E5F607182939A401 /* AppIntents.swift in Sources */,

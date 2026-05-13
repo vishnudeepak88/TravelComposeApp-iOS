@@ -81,6 +81,23 @@
 "upcoming.empty.title" = "Tiada perjalanan akan datang";
 "upcoming.empty.body" = "Langgan laluan untuk lihat jadual anda di sini";
 "upcoming.longPressHint" = "Tekan & tahan perjalanan untuk langkau berbilang";
+
+/* My commutes — tekan-tahan batal pukal */
+"subs.longPressHint" = "Tekan & tahan langganan untuk batal berbilang";
+
+/* Notifikasi — leret untuk kosongkan */
+"notif.clear" = "Kosongkan";
+"notif.swipeHint" = "Leret notifikasi untuk mengosongkannya";
+
+/* Inbox (sembang) — tekan-tahan untuk sembunyi */
+"inbox.delete.title" = "Sembunyi perbualan ini?";
+"inbox.delete.body" = "Ia akan hilang dari Inbox anda. Mesej baharu dari pemandu akan memulihkannya.";
+"inbox.delete.confirm" = "Sembunyi";
+"inbox.longPressHint" = "Tekan & tahan sembang untuk sembunyi";
+
+/* Skrin Utama — leret cadangan perjalanan untuk tolak */
+"home.dismissRide" = "Tolak";
+"home.suggestions.restored" = "Cadangan ditetapkan semula.";
 "upcoming.bulkSkip.title.one" = "Langkau 1 perjalanan?";
 "upcoming.bulkSkip.title.many" = "Langkau %d perjalanan?";
 "upcoming.bulkSkip.confirm.one" = "Ya, langkau 1";

@@ -14,6 +14,15 @@ struct InboxView: View {
     /// system blue back arrow that came with the legacy NavigationLink.
     @State private var path: [InboxRoute] = []
 
+    /// Holds the thread the rider has long-pressed for hiding. Drives
+    /// the confirm alert — only commits the dismissal on explicit
+    /// confirmation so an accidental long-press doesn't lose the
+    /// conversation from the list.
+    @State private var pendingHideThread: ChatThread? = nil
+    /// Sticky discoverability flag — same pattern as the long-press
+    /// hint on My commutes + Upcoming Commutes.
+    @AppStorage("voygo.inboxLongPressUsed") private var hasUsedLongPress: Bool = false
+
     enum InboxRoute: Hashable {
         case thread(id: String, title: String)
     }
@@ -47,6 +56,17 @@ struct InboxView: View {
                             ScrollView {
                                 VStack(spacing: 10) {
                                     Color.clear.frame(height: 0).id("top")
+                                    if !hasUsedLongPress {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "hand.tap")
+                                                .font(.caption2.weight(.semibold))
+                                            Text(S.inboxLongPressHint)
+                                                .font(.caption2.weight(.semibold))
+                                            Spacer()
+                                        }
+                                        .foregroundColor(VPalette.textHint)
+                                        .padding(.horizontal, 16)
+                                    }
                                     ForEach(store.threads) { thread in
                                         Button {
                                             path.append(.thread(id: thread.id, title: thread.title))
@@ -55,6 +75,18 @@ struct InboxView: View {
                                                 .padding(.horizontal, 16)
                                         }
                                         .buttonStyle(.plain)
+                                        // Long-press → confirm hide. Same
+                                        // simultaneousGesture pattern as
+                                        // the rest of the app so the row
+                                        // tap (open chat) still works.
+                                        .simultaneousGesture(
+                                            LongPressGesture(minimumDuration: 0.4)
+                                                .onEnded { _ in
+                                                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                    pendingHideThread = thread
+                                                    hasUsedLongPress = true
+                                                }
+                                        )
                                     }
                                 }
                                 .padding(.vertical, 12)
@@ -119,6 +151,27 @@ struct InboxView: View {
             if path.last != .thread(id: threadId, title: title) {
                 path.append(.thread(id: threadId, title: title))
             }
+        }
+        // Long-press → confirm hide. Dismissal is local-only — the
+        // server keeps the thread; a new message from the driver
+        // refreshes a new row server-side (the dismissed set is
+        // intent-scoped via UserDefaults).
+        .alert(
+            S.inboxDeleteTitle,
+            isPresented: Binding(
+                get: { pendingHideThread != nil },
+                set: { if !$0 { pendingHideThread = nil } }
+            ),
+            presenting: pendingHideThread
+        ) { thread in
+            Button(S.inboxDeleteConfirm, role: .destructive) {
+                store.dismissThreadLocally(thread.id)
+                pendingHideThread = nil
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+            Button(S.cancel, role: .cancel) { pendingHideThread = nil }
+        } message: { _ in
+            Text(S.inboxDeleteBody)
         }
     }
 

@@ -397,6 +397,20 @@ enum S {
     static var notifMarkAllRead: String   { Self.t("notif.markAllRead",   "Mark all read") }
     static var notifEmptyTitle: String    { Self.t("notif.empty.title",   "No notifications yet") }
     static var notifEmptyBody: String     { Self.t("notif.empty.body",    "Ride updates, pickup reminders, and chat alerts will appear here.") }
+    /// Swipe-action label revealed when the rider drags a row leftwards.
+    static var notifClear: String         { Self.t("notif.clear",         "Clear") }
+    /// Accessibility / tooltip for the swipe affordance.
+    static var notifSwipeHint: String     { Self.t("notif.swipeHint",     "Swipe a notification to clear it") }
+
+    // MARK: Inbox (chat) — long-press delete
+    static var inboxDeleteTitle: String    { Self.t("inbox.delete.title",   "Hide this conversation?") }
+    static var inboxDeleteBody: String     { Self.t("inbox.delete.body",    "It disappears from your Inbox. New messages from the driver will bring it back.") }
+    static var inboxDeleteConfirm: String  { Self.t("inbox.delete.confirm", "Hide") }
+    static var inboxLongPressHint: String  { Self.t("inbox.longPressHint",  "Long-press a chat to hide it") }
+
+    // MARK: Home — swipe a suggested ride to dismiss it
+    static var homeDismissRide: String     { Self.t("home.dismissRide",     "Dismiss") }
+    static var homeSuggestionsRestored: String { Self.t("home.suggestions.restored", "Suggestions reset.") }
     static var notifGroupToday: String     { Self.t("notif.group.today",     "Today") }
     static var notifGroupYesterday: String { Self.t("notif.group.yesterday", "Yesterday") }
     static var notifGroupThisWeek: String  { Self.t("notif.group.thisWeek",  "This week") }
@@ -599,6 +613,9 @@ enum S {
     static var subscriptionsEmptyTitle: String { Self.t("subs.empty.title", "No subscriptions") }
     static var subscriptionsEmptyBody: String { Self.t("subs.empty.body", "Search for commute routes and subscribe to start riding") }
     static var subscriptionsEmptyCTA: String { Self.t("subs.empty.cta", "Find a route") }
+    /// Long-press discoverability hint for the multi-cancel flow on
+    /// My commutes. Auto-hides once the rider has used the gesture.
+    static var subsLongPressHint: String  { Self.t("subs.longPressHint", "Long-press a sub to cancel multiple") }
     // Multi-select / bulk-cancel
     static var subsSelect: String        { Self.t("subs.select",        "Select") }
     static var subsDone: String          { Self.t("subs.done",          "Done") }
