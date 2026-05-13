@@ -190,6 +190,14 @@ struct MySubscriptionsView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        // Hide the native TabView's bottom tab bar while the rider is
+        // in select mode so our `bulkActionBar` takes the bottom space
+        // cleanly. Without this the iOS 26 Liquid Glass tab bar
+        // overlays our action bar — the destructive "Cancel N"
+        // button only peeks out as a thin red sliver behind the tab
+        // icons. Hiding the tab bar is the standard iOS pattern for
+        // contextual toolbars (Mail / Photos delete-many).
+        .toolbar(isSelectMode ? .hidden : .visible, for: .tabBar)
         .animation(.easeOut(duration: 0.18), value: isSelectMode)
         .task {
             await store.refreshAll()

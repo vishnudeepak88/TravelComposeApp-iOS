@@ -65,8 +65,19 @@ struct RootView: View {
 
 struct MainTabView: View {
     @Environment(AppStore.self) private var store
-    @State private var selectedTab: VoygoTab = .home
+    /// Persisted across `.id(appLanguage)` remounts via @AppStorage.
+    /// Without persistence, switching the in-app language inside
+    /// Profile → Settings → Language tore down MainTabView and
+    /// re-created it with `selectedTab = .home` — bouncing the
+    /// rider away from wherever they were back to the Home tab.
+    /// Reading the int rawValue from AppStorage on init keeps the
+    /// rider on the same tab through a language hot-remount.
+    @AppStorage("voygo.selectedTab") private var selectedTabRaw: Int = VoygoTab.home.rawValue
     @State private var pendingRouteDeepLink: String?
+
+    private var selectedTab: VoygoTab {
+        VoygoTab(rawValue: selectedTabRaw) ?? .home
+    }
 
     enum VoygoTab: Int, Hashable {
         case home = 0, search = 1, calendar = 2, inbox = 3, profile = 4
@@ -88,7 +99,7 @@ struct MainTabView: View {
                         userInfo: ["index": newValue.rawValue]
                     )
                 } else {
-                    selectedTab = newValue
+                    selectedTabRaw = newValue.rawValue
                 }
             }
         )
@@ -162,25 +173,25 @@ struct MainTabView: View {
         // before; the native TabView selection works exactly like the
         // old `selectedTab` Int.
         .onReceive(NotificationCenter.default.publisher(for: HomeTab.switchToInboxNotification)) { _ in
-            selectedTab = .inbox
+            selectedTabRaw = VoygoTab.inbox.rawValue
         }
         .onReceive(NotificationCenter.default.publisher(for: .voygoOpenThread)) { _ in
-            selectedTab = .inbox
+            selectedTabRaw = VoygoTab.inbox.rawValue
         }
         .onReceive(NotificationCenter.default.publisher(for: InboxView.openFindRoutesNotification)) { _ in
-            selectedTab = .search
+            selectedTabRaw = VoygoTab.search.rawValue
         }
         .onReceive(NotificationCenter.default.publisher(for: .voygoOpenFindRoutes)) { _ in
-            selectedTab = .search
+            selectedTabRaw = VoygoTab.search.rawValue
         }
         .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRoute)) { note in
             if let routeId = note.userInfo?["routeId"] as? String {
                 pendingRouteDeepLink = routeId
             }
-            selectedTab = .search
+            selectedTabRaw = VoygoTab.search.rawValue
         }
         .onReceive(NotificationCenter.default.publisher(for: .voygoOpenRide)) { _ in
-            selectedTab = .calendar
+            selectedTabRaw = VoygoTab.calendar.rawValue
         }
     }
 }

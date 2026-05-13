@@ -1786,6 +1786,9 @@ final class AppStore {
         // captured under their predecessor's opt-in.
         TelemetryConsent.isEnabled = false
         UIApplication.shared.applicationIconBadgeNumber = 0
+        // Reset the persisted-tab pref so the next user lands on
+        // Home rather than inheriting where the previous user was.
+        UserDefaults.standard.removeObject(forKey: "voygo.selectedTab")
         isAuthenticated = false
         phoneNumber = ""
         riderId = ""
