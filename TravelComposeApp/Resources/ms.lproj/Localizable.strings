@@ -158,6 +158,16 @@
 "home.status.paused" = "Dijeda";
 "home.status.completed" = "Selesai";
 "home.status.cancelled" = "Dibatalkan";
+"sub.status.active" = "Aktif";
+"sub.status.paused" = "Dijeda";
+"sub.status.cancelled" = "Dibatalkan";
+"sub.status.completed" = "Selesai";
+
+/* Chat empty state */
+"chat.empty.title" = "Tiada mesej lagi";
+"chat.empty.body" = "Sapa pemandu anda — mereka akan baca semasa tetingkap penjemputan seterusnya.";
+"chat.direct.kicker" = "Sembang terus";
+"chat.message.placeholder" = "Mesej…";
 
 /* Wallet — extras */
 "wallet.paymentMethods" = "Kaedah pembayaran";

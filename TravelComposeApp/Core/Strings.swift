@@ -162,6 +162,20 @@ enum S {
     static var homeStatusCompleted: String { Self.t("home.status.completed", "Completed") }
     static var homeStatusCancelled: String { Self.t("home.status.cancelled", "Cancelled") }
 
+    // Subscription / route status — used by model `label` getter so any
+    // screen that surfaces `RouteSubscriptionStatus.label` (e.g. the
+    // StatusBadge on the Calendar/My-commutes card) localizes for free.
+    static var subStatusActive: String    { Self.t("sub.status.active",    "Active") }
+    static var subStatusPaused: String    { Self.t("sub.status.paused",    "Paused") }
+    static var subStatusCancelled: String { Self.t("sub.status.cancelled", "Cancelled") }
+    static var subStatusCompleted: String { Self.t("sub.status.completed", "Completed") }
+
+    // Chat empty state
+    static var chatEmptyTitle: String { Self.t("chat.empty.title", "No messages yet") }
+    static var chatEmptyBody: String  { Self.t("chat.empty.body",  "Say hi to your driver — they'll see it on their next pickup window.") }
+    static var chatDirectKicker: String      { Self.t("chat.direct.kicker", "Direct chat") }
+    static var chatMessagePlaceholder: String { Self.t("chat.message.placeholder", "Message…") }
+
     // MARK: Wallet (additional)
 
     static var walletPaymentMethods: String { Self.t("wallet.paymentMethods", "Payment methods") }

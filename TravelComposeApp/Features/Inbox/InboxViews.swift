@@ -23,7 +23,7 @@ struct InboxView: View {
             ZStack(alignment: .top) {
                 VPalette.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
-                    VPolishedNavBar(title: "Inbox", kicker: inboxKicker)
+                    VPolishedNavBar(title: S.tabInbox, kicker: inboxKicker)
 
                     if store.threads.isEmpty {
                         EmptyStateView(
@@ -175,20 +175,32 @@ struct ChatThreadView: View {
         ZStack {
             VPalette.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: title, kicker: "Direct chat", onBack: onBack)
+                VPolishedNavBar(title: title, kicker: S.chatDirectKicker, onBack: onBack)
 
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 6) {
-                            ForEach(messages) { msg in
-                                ChatBubble(message: msg, onRetry: {
-                                    Task { await store.retryFailedMessage(msg.id) }
-                                })
-                                .id(msg.id)
+                        if messages.isEmpty {
+                            // Empty-state guard. Without this the chat
+                            // detail used to render a blank page when a
+                            // thread existed (preview row in Inbox)
+                            // but no messages had been fetched / sent
+                            // yet — looked like a broken screen. The
+                            // calm empty state turns "0 messages" into
+                            // an invitation to start the conversation.
+                            chatEmptyState
+                                .padding(.top, 60)
+                        } else {
+                            LazyVStack(spacing: 6) {
+                                ForEach(messages) { msg in
+                                    ChatBubble(message: msg, onRetry: {
+                                        Task { await store.retryFailedMessage(msg.id) }
+                                    })
+                                    .id(msg.id)
+                                }
                             }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
                     }
                     .onAppear { scrollProxy = proxy; scrollToBottom() }
                     .onChange(of: messages.count) { _, _ in scrollToBottom() }
@@ -196,7 +208,7 @@ struct ChatThreadView: View {
 
                 // Input bar
                 HStack(spacing: 10) {
-                    TextField("Message...", text: $newMessage, axis: .vertical)
+                    TextField(S.chatMessagePlaceholder, text: $newMessage, axis: .vertical)
                         .lineLimit(1...4)
                         .padding(.horizontal, 14).padding(.vertical, 10)
                         .background(VPalette.surfaceHigh)
@@ -240,6 +252,28 @@ struct ChatThreadView: View {
                 Task { await store.markThreadRead(threadId: threadId) }
             }
         }
+    }
+
+    /// Friendly placeholder shown when the thread has no messages
+    /// yet. Mirrors the rest of the app's empty-state vocabulary —
+    /// icon + short title + sub-line, kept compact so the typing
+    /// bar still feels like the primary action.
+    private var chatEmptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 36, weight: .regular))
+                .foregroundColor(VPalette.textHint)
+            Text(S.chatEmptyTitle)
+                .font(.footnote.weight(.heavy))
+                .foregroundColor(VPalette.textSec)
+            Text(S.chatEmptyBody)
+                .font(.caption2)
+                .foregroundColor(VPalette.textHint)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 28)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func sendMessage() {

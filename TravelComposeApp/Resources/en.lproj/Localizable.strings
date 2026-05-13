@@ -157,6 +157,16 @@
 "home.status.paused" = "Paused";
 "home.status.completed" = "Completed";
 "home.status.cancelled" = "Cancelled";
+"sub.status.active" = "Active";
+"sub.status.paused" = "Paused";
+"sub.status.cancelled" = "Cancelled";
+"sub.status.completed" = "Completed";
+
+/* Chat empty state */
+"chat.empty.title" = "No messages yet";
+"chat.empty.body" = "Say hi to your driver — they'll see it on their next pickup window.";
+"chat.direct.kicker" = "Direct chat";
+"chat.message.placeholder" = "Message…";
 
 /* Wallet — extras */
 "wallet.paymentMethods" = "Payment methods";

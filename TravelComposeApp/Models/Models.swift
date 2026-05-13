@@ -43,7 +43,19 @@ enum CarType: String, CaseIterable, Identifiable, Codable {
 enum RouteActiveStatus: String, Codable { case active = "ACTIVE", paused = "PAUSED" }
 enum RouteSubscriptionStatus: String, Codable {
     case active = "ACTIVE", paused = "PAUSED", cancelled = "CANCELLED", completed = "COMPLETED"
-    var label: String { rawValue.capitalized }
+    /// Localized human label. The StatusBadge on the Calendar /
+    /// My-commutes card surfaces this verbatim (and uppercases at
+    /// render time), so swapping to localized strings here makes
+    /// the chip read "AKTIF" / "DIJEDA" / etc. in Bahasa without
+    /// every call site needing to know about the locale.
+    var label: String {
+        switch self {
+        case .active:    return S.subStatusActive
+        case .paused:    return S.subStatusPaused
+        case .cancelled: return S.subStatusCancelled
+        case .completed: return S.subStatusCompleted
+        }
+    }
     var color: String {
         switch self {
         case .active: "green"
