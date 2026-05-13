@@ -150,7 +150,23 @@ struct ProfileView: View {
                 )
                 .presentationDetents([.height(440)])
             }
-            .task { await store.refreshMe() }
+            .task {
+                await store.refreshMe()
+                // One-shot restore after a language-switch hot-remount.
+                // LanguageSettingsView writes this flag right before
+                // mutating the app-language @AppStorage; we read it
+                // on the very first task tick AFTER the remount,
+                // re-push the Language route, and clear the flag so
+                // a normal cold launch never triggers this.
+                let defaults = UserDefaults.standard
+                if defaults.bool(forKey: AppLocale.restoreToLanguageKey) {
+                    defaults.removeObject(forKey: AppLocale.restoreToLanguageKey)
+                    // Avoid duplicate-push if user navigated quickly.
+                    if path.last != .language {
+                        path.append(.language)
+                    }
+                }
+            }
             .enableSwipeBack()
         }
     }

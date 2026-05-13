@@ -169,6 +169,20 @@ struct MySubscriptionsView: View {
                         .refreshable {
                             await store.refreshAll()
                         }
+                        // Bulk-action bar pinned ABOVE the native tab
+                        // bar (not replacing it) via safeAreaInset.
+                        // The inset both reserves layout space inside
+                        // the ScrollView (so the bottom cards aren't
+                        // covered) AND renders above the Liquid Glass
+                        // tab bar. Result: rider can still navigate
+                        // between tabs while selecting, and the
+                        // action buttons are fully visible.
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            if isSelectMode {
+                                bulkActionBar
+                                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                            }
+                        }
                         .onReceive(NotificationCenter.default.publisher(for: .voygoTabReselected)) { note in
                             if (note.userInfo?["index"] as? Int) == 2 {
                                 withAnimation(.easeOut(duration: 0.3)) {
@@ -179,25 +193,7 @@ struct MySubscriptionsView: View {
                     }
                 }
             }
-
-            // Bottom action bar — appears only in multi-select mode.
-            // Pinned to the bottom via the parent ZStack so it floats
-            // above the ScrollView like a contextual toolbar. The
-            // primary destructive button is disabled until at least
-            // one row is checked.
-            if isSelectMode {
-                bulkActionBar
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
         }
-        // Hide the native TabView's bottom tab bar while the rider is
-        // in select mode so our `bulkActionBar` takes the bottom space
-        // cleanly. Without this the iOS 26 Liquid Glass tab bar
-        // overlays our action bar — the destructive "Cancel N"
-        // button only peeks out as a thin red sliver behind the tab
-        // icons. Hiding the tab bar is the standard iOS pattern for
-        // contextual toolbars (Mail / Photos delete-many).
-        .toolbar(isSelectMode ? .hidden : .visible, for: .tabBar)
         .animation(.easeOut(duration: 0.18), value: isSelectMode)
         .task {
             await store.refreshAll()
@@ -248,58 +244,58 @@ struct MySubscriptionsView: View {
     /// iOS Mail / Photos delete-many pattern: Select all (left),
     /// destructive primary (centre/wide), Cancel (right).
     private var bulkActionBar: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            HStack(spacing: 10) {
-                Button {
-                    if selectedIds.count == items.count {
-                        // Already all selected → tap means "clear".
-                        selectedIds = []
-                    } else {
-                        selectedIds = Set(items.map { $0.subscription.id })
-                    }
-                } label: {
-                    Text(selectedIds.count == items.count && !items.isEmpty
-                         ? S.subsClearAll
-                         : S.subsSelectAll)
-                        .font(.footnote.weight(.heavy))
-                        .foregroundColor(VPalette.primary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-                        .background(VPalette.primaryContainer)
-                        .clipShape(Capsule())
+        // No outer VStack / Spacer / ignoresSafeArea — the parent now
+        // hosts this via `.safeAreaInset(edge: .bottom)` which sizes
+        // the inset to wrap the content and places it above the
+        // native tab bar's safe area.
+        HStack(spacing: 10) {
+            Button {
+                if selectedIds.count == items.count {
+                    // Already all selected → tap means "clear".
+                    selectedIds = []
+                } else {
+                    selectedIds = Set(items.map { $0.subscription.id })
                 }
-                .buttonStyle(.plain)
-
-                Spacer(minLength: 0)
-
-                Button {
-                    pendingBulkCancel = true
-                } label: {
-                    HStack(spacing: 6) {
-                        if bulkCancelInFlight {
-                            ProgressView().tint(.white).controlSize(.small)
-                        } else {
-                            Image(systemName: "xmark.bin.fill")
-                        }
-                        Text(S.subsBulkCancelCTA(selectedIds.count))
-                    }
+            } label: {
+                Text(selectedIds.count == items.count && !items.isEmpty
+                     ? S.subsClearAll
+                     : S.subsSelectAll)
                     .font(.footnote.weight(.heavy))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
+                    .foregroundColor(VPalette.primary)
+                    .padding(.horizontal, 14)
                     .padding(.vertical, 12)
-                    .background(selectedIds.isEmpty || bulkCancelInFlight ? VPalette.textHint : VPalette.danger)
+                    .background(VPalette.primaryContainer)
                     .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .disabled(selectedIds.isEmpty || bulkCancelInFlight)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial)
-            .overlay(Rectangle().fill(VPalette.border).frame(height: 1), alignment: .top)
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 0)
+
+            Button {
+                pendingBulkCancel = true
+            } label: {
+                HStack(spacing: 6) {
+                    if bulkCancelInFlight {
+                        ProgressView().tint(.white).controlSize(.small)
+                    } else {
+                        Image(systemName: "xmark.bin.fill")
+                    }
+                    Text(S.subsBulkCancelCTA(selectedIds.count))
+                }
+                .font(.footnote.weight(.heavy))
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(selectedIds.isEmpty || bulkCancelInFlight ? VPalette.textHint : VPalette.danger)
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(selectedIds.isEmpty || bulkCancelInFlight)
         }
-        .ignoresSafeArea(edges: .bottom)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .overlay(Rectangle().fill(VPalette.border).frame(height: 1), alignment: .top)
     }
 
     /// Toggle a subscription's selection state. Used by the row tap

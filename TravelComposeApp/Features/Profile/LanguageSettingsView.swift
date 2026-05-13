@@ -63,10 +63,16 @@ struct LanguageSettingsView: View {
     private func row(_ option: AppLocale) -> some View {
         let isSelected = selected == option
         return Button {
-            // Writing to @AppStorage fires RootView's id-change which
-            // remounts the tree. We don't dismiss the picker — the
-            // rider can verify the change live (this nav bar's title
-            // flips immediately) before tapping back.
+            // Writing to @AppStorage fires RootView's `.id(...)` change
+            // which hot-remounts the tree. Without the restore flag
+            // below, the remount tears down Profile's NavigationStack
+            // path and the rider lands back on the Profile root —
+            // confusing. We flag a one-shot "land me back on the
+            // Language page" signal that ProfileView's task reads
+            // immediately after the remount and re-pushes `.language`.
+            // The flag clears itself after the push so a later cold
+            // launch doesn't auto-navigate.
+            UserDefaults.standard.set(true, forKey: AppLocale.restoreToLanguageKey)
             stored = option.rawValue
         } label: {
             HStack(spacing: 12) {

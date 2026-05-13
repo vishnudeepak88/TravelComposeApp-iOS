@@ -1028,6 +1028,12 @@ enum AppLocale: String, CaseIterable {
     case ms
 
     static let storageKey = "voygo.appLanguage"
+    /// One-shot flag that LanguageSettingsView sets BEFORE writing a
+    /// language change. The Profile view reads + clears it on its
+    /// next `.task` after the hot-remount and re-pushes the Language
+    /// route. Keeps the rider on the Language page during a switch
+    /// instead of dropping them back at Profile root.
+    static let restoreToLanguageKey = "voygo.restoreToLanguage"
 
     /// Returns the currently-selected language, falling back to
     /// `.system` if no override has been written yet.
