@@ -915,6 +915,20 @@ final class AppStore {
         guard isAuthenticated else { return .failure(.message("Sign in first")) }
         let snapshot = rideInstances.first(where: { $0.id == rideInstanceId })
         rideInstances.removeAll { $0.id == rideInstanceId }
+
+        // Dev-skip-login mode keeps the calendar populated from local
+        // seed data; there's no real backend session, the auth token
+        // is the literal string "DEV", and POST /trips/:id/skip would
+        // come back 401 — which restored the snapshot and made the
+        // Skip pill feel completely dead. For dev users we treat the
+        // skip as locally complete so the flow is exercisable end-to-
+        // end without a server. Real (online) users still go through
+        // the proper API path below.
+        if !useOnline {
+            Telemetry.track("ride_skipped", ["ride_id": .string(rideInstanceId)])
+            return .success(())
+        }
+
         do {
             _ = try await VoygoAPIClient.skipRide(rideInstanceId: rideInstanceId)
             Telemetry.track("ride_skipped", ["ride_id": .string(rideInstanceId)])
