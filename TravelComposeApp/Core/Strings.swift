@@ -636,6 +636,10 @@ enum S {
     static var upcomingCommutesTitle: String { Self.t("upcoming.title", "Upcoming Commutes") }
     static var upcomingEmptyTitle: String    { Self.t("upcoming.empty.title", "No upcoming commutes") }
     static var upcomingEmptyBody: String     { Self.t("upcoming.empty.body",  "Subscribe to a route to see your schedule here") }
+    /// Subtle hint shown above the list to teach the long-press
+    /// gesture that replaces the old Select button. Hidden in select
+    /// mode and on empty lists.
+    static var upcomingLongPressHint: String { Self.t("upcoming.longPressHint", "Long-press a ride to skip multiple") }
 
     /// Confirm-dialog title for bulk-skip. Two branches so the singular
     /// reads naturally instead of "Skip 1 rides?".

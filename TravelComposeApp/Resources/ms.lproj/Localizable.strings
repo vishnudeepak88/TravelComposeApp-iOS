@@ -80,6 +80,7 @@
 "upcoming.title" = "Perjalanan Akan Datang";
 "upcoming.empty.title" = "Tiada perjalanan akan datang";
 "upcoming.empty.body" = "Langgan laluan untuk lihat jadual anda di sini";
+"upcoming.longPressHint" = "Tekan & tahan perjalanan untuk langkau berbilang";
 "upcoming.bulkSkip.title.one" = "Langkau 1 perjalanan?";
 "upcoming.bulkSkip.title.many" = "Langkau %d perjalanan?";
 "upcoming.bulkSkip.confirm.one" = "Ya, langkau 1";

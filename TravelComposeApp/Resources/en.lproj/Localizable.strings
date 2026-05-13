@@ -79,6 +79,7 @@
 "upcoming.title" = "Upcoming Commutes";
 "upcoming.empty.title" = "No upcoming commutes";
 "upcoming.empty.body" = "Subscribe to a route to see your schedule here";
+"upcoming.longPressHint" = "Long-press a ride to skip multiple";
 "upcoming.bulkSkip.title.one" = "Skip 1 ride?";
 "upcoming.bulkSkip.title.many" = "Skip %d rides?";
 "upcoming.bulkSkip.confirm.one" = "Yes, skip 1";

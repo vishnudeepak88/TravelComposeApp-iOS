@@ -375,32 +375,38 @@ struct UpcomingCalendarView: View {
     }
 
     @State private var actionError: String? = nil
-    /// Multi-select state. The Select button in the nav bar flips this;
-    /// each card row grows a checkmark; a bottom action bar pinned via
-    /// `.safeAreaInset` lets the rider Select-all + "Skip N rides".
-    /// Real use case: skipping a vacation week in one go.
+    /// Multi-select state. Entry point is a long-press on any row
+    /// (iOS-native pattern — Mail, Photos); each card row grows a
+    /// checkmark, and a bottom action bar pinned via `.safeAreaInset`
+    /// lets the rider Select-all + "Skip N rides". Real use case:
+    /// skipping a vacation week in one go.
     @State private var isSelectMode: Bool = false
     @State private var selectedRideIds: Set<String> = []
     @State private var pendingBulkSkip: Bool = false
     @State private var bulkSkipInFlight: Bool = false
+    /// Sticky flag that hides the "Long-press to skip multiple" hint
+    /// once the rider has used the gesture at least once. Persisted
+    /// per-account in UserDefaults so the hint doesn't keep nagging
+    /// on every visit. Reset on logout (via the dev/onboarding key
+    /// cleanup) so a new rider sees it fresh.
+    @AppStorage("voygo.upcomingLongPressUsed") private var hasUsedLongPress: Bool = false
 
     var body: some View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
                 VPolishedNavBar(title: S.upcomingCommutesTitle, onBack: onBack) {
-                    // Select / Done toggle. Hidden when there's nothing
-                    // skippable so we don't tease an empty action.
-                    if !skippableItems.isEmpty {
+                    // Select mode is entered via long-press on a row
+                    // (iOS-native pattern, mirrors Mail / Photos), so
+                    // the nav bar only surfaces "Done" as the exit. We
+                    // never show a "Select" button because the entry
+                    // point is the gesture itself.
+                    if isSelectMode {
                         Button {
-                            if isSelectMode {
-                                isSelectMode = false
-                                selectedRideIds = []
-                            } else {
-                                isSelectMode = true
-                            }
+                            isSelectMode = false
+                            selectedRideIds = []
                         } label: {
-                            Text(isSelectMode ? S.subsDone : S.subsSelect)
+                            Text(S.subsDone)
                                 .font(.footnote.weight(.heavy))
                                 .foregroundColor(VPalette.primary)
                                 .padding(.horizontal, 14).padding(.vertical, 10)
@@ -408,7 +414,7 @@ struct UpcomingCalendarView: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(isSelectMode ? S.subsDone : S.subsSelect)
+                        .accessibilityLabel(S.subsDone)
                     }
                 }
                 .background(VoygoTheme.background)
@@ -425,6 +431,27 @@ struct UpcomingCalendarView: View {
                                 .padding(.horizontal, 16)
                                 .padding(.top, 12)
                                 .onTapGesture { actionError = nil }
+                        }
+                        // Discoverability hint for the long-press entry
+                        // into multi-select. Hidden in select mode + on
+                        // empty lists so it never duplicates the visible
+                        // affordance. Auto-hides once the rider has used
+                        // the gesture (UserDefaults flag flips on first
+                        // successful long-press).
+                        if !isSelectMode,
+                           !skippableItems.isEmpty,
+                           !hasUsedLongPress {
+                            HStack(spacing: 6) {
+                                Image(systemName: "hand.tap")
+                                    .font(.caption2.weight(.semibold))
+                                Text(S.upcomingLongPressHint)
+                                    .font(.caption2.weight(.semibold))
+                                Spacer()
+                            }
+                            .foregroundColor(VPalette.textHint)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 10)
+                            .padding(.bottom, -4)
                         }
                         // Group by week
                         let grouped = Dictionary(grouping: items) { i -> String in
@@ -483,10 +510,43 @@ struct UpcomingCalendarView: View {
                                             // local removal in
                                             // `store.skipRide` ever
                                             // diverges from server state.
+                                            //
+                                            // Long-press enters select mode
+                                            // AND auto-selects the pressed
+                                            // row — the iOS-native pattern
+                                            // (Mail, Photos). A medium
+                                            // haptic confirms the gesture
+                                            // because the transition is
+                                            // subtle (checkmark fades in,
+                                            // bottom bar slides up). We
+                                            // also flip the sticky hint-
+                                            // dismissed flag so the
+                                            // discoverability tip stops
+                                            // showing on future visits.
                                             CalendarItemCard(item: item,
                                                              onSkipped: { actionError = nil },
                                                              skipHidden: false)
                                                 .padding(.horizontal, 16)
+                                                // simultaneousGesture (not
+                                                // onLongPressGesture) so the
+                                                // long-press coexists with
+                                                // the inner per-row Skip
+                                                // button. With the latter,
+                                                // SwiftUI gives the inner
+                                                // Button gesture priority
+                                                // and the long-press never
+                                                // fires.
+                                                .simultaneousGesture(
+                                                    LongPressGesture(minimumDuration: 0.4)
+                                                        .onEnded { _ in
+                                                            guard isSkippable(item),
+                                                                  let rideId = item.rideInstanceId else { return }
+                                                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                                            isSelectMode = true
+                                                            selectedRideIds.insert(rideId)
+                                                            hasUsedLongPress = true
+                                                        }
+                                                )
                                         }
                                     }
                                 }
