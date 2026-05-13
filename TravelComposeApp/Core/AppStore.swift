@@ -1536,10 +1536,26 @@ final class AppStore {
             threads[i].unreadCount = 0
         }
 
+        // Dev-skip path: `signInForDevelopment()` deliberately sets
+        // `useOnline = false` so refresh calls don't hit the server,
+        // but the rider is still authenticated locally. Treat chat
+        // as local-only in this mode — flip the optimistic bubble to
+        // `.sent` so the chat UI is testable end-to-end without a
+        // backend. The "Skip login → home screen" CTA already warns
+        // that server-backed actions won't persist, so a delivered-
+        // locally bubble is honest.
+        if !useOnline && isAuthenticated {
+            if let i = messages.firstIndex(where: { $0.id == localId }) {
+                messages[i].deliveryState = .sent
+            }
+            return
+        }
+
         guard useOnline, isAuthenticated else {
-            // Offline — flag the local row so it doesn't pretend to be
-            // delivered. Until we ship a real outbox, the rider gets
-            // an honest red retry indicator instead of a phantom send.
+            // Genuine offline (signed-in user without connectivity).
+            // Flag the local row so it doesn't pretend to be delivered.
+            // Until we ship a real outbox, the rider gets an honest
+            // red retry indicator instead of a phantom send.
             markMessageFailed(localId: localId)
             return
         }
