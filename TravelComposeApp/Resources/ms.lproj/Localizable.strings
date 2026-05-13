@@ -76,6 +76,9 @@
 "kyc.upload" = "Muat naik";
 "kyc.replace" = "Gantikan";
 "kyc.reupload" = "Muat naik semula";
+"kyc.rejected.fallback" = "ditolak";
+"kyc.a11y.reupload" = "Muat naik semula %1$@ — %2$@";
+"kyc.a11y.action" = "%1$@ %2$@";
 "kyc.rejected" = "Ditolak — %@";
 
 /* Auth — Terms link copy */
@@ -175,10 +178,21 @@
 "profile.name.placeholder" = "cth. Vishnu Kumar";
 "profile.name.editHint" = "Ketik untuk sunting nama paparan anda";
 
+/* Help Center */
+"help.center.title" = "Pusat Bantuan";
+"help.needHelp" = "Perlukan bantuan?";
+"help.hereForYou" = "Kami sedia membantu";
+"help.emailSupport" = "E-mel sokongan";
+"help.inAppChat" = "Sembang dalam aplikasi";
+"help.inAppChatValue" = "Boleh diakses dari tab Mesej";
+"help.faq" = "Soalan Lazim";
+"help.footer" = "Untuk langganan ulang-alik, isu laluan atau soalan pembayaran, hubungi pasukan sokongan kami. Kami biasanya membalas dalam masa 2 jam.";
+
 /* Profile — KYC card on Profile screen */
 "profile.kyc.message.approved" = "Anda telah disahkan sepenuhnya · MyKad dalam fail";
 "profile.kyc.message.pending" = "Pengesahan sedang disemak";
 "profile.kyc.message.rejected" = "Pengesahan ditolak – hantar semula";
+"profile.kyc.message.rejected.withReason" = "%1$@ ditolak — %2$@";
 "profile.kyc.message.notStarted" = "Lengkapkan pengesahan untuk memandu";
 "profile.kyc.badge.verified" = "Disahkan";
 "profile.kyc.badge.pending" = "Menunggu";

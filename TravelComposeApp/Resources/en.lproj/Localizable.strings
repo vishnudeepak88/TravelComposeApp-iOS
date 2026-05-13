@@ -75,6 +75,9 @@
 "kyc.upload" = "Upload";
 "kyc.replace" = "Replace";
 "kyc.reupload" = "Re-upload";
+"kyc.rejected.fallback" = "rejected";
+"kyc.a11y.reupload" = "Re-upload %1$@ — %2$@";
+"kyc.a11y.action" = "%1$@ %2$@";
 "kyc.rejected" = "Rejected — %@";
 
 /* Auth — Terms link copy */
@@ -174,10 +177,21 @@
 "profile.name.placeholder" = "e.g. Vishnu Kumar";
 "profile.name.editHint" = "Tap to edit your display name";
 
+/* Help Center */
+"help.center.title" = "Help Center";
+"help.needHelp" = "Need help?";
+"help.hereForYou" = "We're here for you";
+"help.emailSupport" = "Email support";
+"help.inAppChat" = "In-app chat";
+"help.inAppChatValue" = "Available from Inbox tab";
+"help.faq" = "FAQ";
+"help.footer" = "For commute subscriptions, route issues, or payment questions, contact our support team. We typically respond within 2 hours.";
+
 /* Profile — KYC card on Profile screen */
 "profile.kyc.message.approved" = "You are fully verified · MyKad on file";
 "profile.kyc.message.pending" = "Verification under review";
 "profile.kyc.message.rejected" = "Verification rejected – resubmit";
+"profile.kyc.message.rejected.withReason" = "%1$@ rejected — %2$@";
 "profile.kyc.message.notStarted" = "Complete verification to drive";
 "profile.kyc.badge.verified" = "Verified";
 "profile.kyc.badge.pending" = "Pending";

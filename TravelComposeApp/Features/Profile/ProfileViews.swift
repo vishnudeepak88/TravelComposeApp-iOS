@@ -109,7 +109,18 @@ struct ProfileView: View {
                 Button(S.profileLogOutTitle, role: .destructive) {
                     guard !isLoggingOut else { return }
                     isLoggingOut = true
+                    // `store.logout()` flips `isAuthenticated` which
+                    // unmounts this view (RootView swaps to AuthPhoneView).
+                    // In the dev-skip path that's synchronous; on a real
+                    // user it briefly runs an async server call to
+                    // invalidate the token. Reset `isLoggingOut` on the
+                    // next runloop tick so a transient logout failure
+                    // doesn't permanently lock the rider out of retrying.
                     store.logout()
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 250_000_000)
+                        isLoggingOut = false
+                    }
                 }
                 Button(S.cancel, role: .cancel, action: {})
             } message: { Text(S.profileLogOutMessage) }
@@ -559,7 +570,18 @@ struct ProfileView: View {
         switch store.kycStatus {
         case .approved: return S.profileKycMessageApproved
         case .pending:  return S.profileKycMessagePending
-        case .rejected: return S.profileKycMessageRejected
+        case .rejected:
+            // Surface the FIRST rejected document's reason inline so
+            // the rider sees which doc + why without having to drill
+            // into KycVerificationView first. The generic "resubmit"
+            // copy is the fallback when the per-doc reason isn't
+            // populated (older review records, free-form rejections).
+            if let firstReject = store.kycDocuments.first(where: {
+                ($0.rejectionReason ?? "").isEmpty == false
+            }), let reason = firstReject.rejectionReason {
+                return S.profileKycMessageRejectedWithReason(firstReject.kind.label, reason)
+            }
+            return S.profileKycMessageRejected
         default:        return S.profileKycMessageNotStarted
         }
     }
@@ -625,14 +647,14 @@ struct HelpCenterView: View {
         ZStack(alignment: .top) {
             VoygoTheme.background.ignoresSafeArea()
             VStack(spacing: 0) {
-                VPolishedNavBar(title: "Help Center", onBack: onBack)
+                VPolishedNavBar(title: S.helpCenterTitle, onBack: onBack)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         HStack {
                             Image(systemName: "questionmark.bubble.fill").font(.largeTitle).foregroundStyle(VoygoTheme.primaryGradient).accessibilityHidden(true)
                             VStack(alignment: .leading) {
-                                Text("Need Help?").font(.title3.bold()).foregroundColor(VoygoTheme.textPrimary)
-                                Text("We're here for you").font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
+                                Text(S.helpNeedHelp).font(.title3.bold()).foregroundColor(VoygoTheme.textPrimary)
+                                Text(S.helpHereForYou).font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
                             }
                         }
                         VoygoCard {
@@ -644,26 +666,26 @@ struct HelpCenterView: View {
                                 if let mailto = URL(string: "mailto:support@voygo.app") {
                                     Link(destination: mailto) {
                                         HelpRow(icon: "envelope.fill",
-                                                title: "Email Support",
+                                                title: S.helpEmailSupport,
                                                 value: "support@voygo.app")
                                     }
                                 }
                                 Divider().background(VoygoTheme.cardBorder)
                                 HelpRow(icon: "bubble.left.and.bubble.right.fill",
-                                        title: "In-App Chat",
-                                        value: "Available from Inbox tab")
+                                        title: S.helpInAppChat,
+                                        value: S.helpInAppChatValue)
                                 Divider().background(VoygoTheme.cardBorder)
                                 if let faq = URL(string: "https://voygo.app/help") {
                                     Link(destination: faq) {
                                         HelpRow(icon: "doc.text.fill",
-                                                title: "FAQ",
+                                                title: S.helpFAQ,
                                                 value: "voygo.app/help")
                                     }
                                 }
                             }
                             .padding(16)
                         }
-                        Text("For commute subscriptions, route issues, or payment questions, contact our support team. We typically respond within 2 hours.")
+                        Text(S.helpFooter)
                             .font(.subheadline).foregroundColor(VoygoTheme.textSecondary)
                     }
                     .padding(20)

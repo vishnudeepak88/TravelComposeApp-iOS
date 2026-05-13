@@ -166,11 +166,27 @@ enum S {
     static var profileNamePlaceholder: String { Self.t("profile.name.placeholder", "e.g. Vishnu Kumar") }
     static var profileNameEditHint: String { Self.t("profile.name.editHint", "Tap to edit your display name") }
 
+    // Help Center
+    static var helpCenterTitle: String   { Self.t("help.center.title", "Help Center") }
+    static var helpNeedHelp: String      { Self.t("help.needHelp",     "Need help?") }
+    static var helpHereForYou: String    { Self.t("help.hereForYou",   "We're here for you") }
+    static var helpEmailSupport: String  { Self.t("help.emailSupport", "Email support") }
+    static var helpInAppChat: String     { Self.t("help.inAppChat",    "In-app chat") }
+    static var helpInAppChatValue: String { Self.t("help.inAppChatValue", "Available from Inbox tab") }
+    static var helpFAQ: String           { Self.t("help.faq",          "FAQ") }
+    static var helpFooter: String        { Self.t("help.footer",       "For commute subscriptions, route issues, or payment questions, contact our support team. We typically respond within 2 hours.") }
+
     // KYC card on Profile — message + badge text.
     static var profileKycMessageApproved: String { Self.t("profile.kyc.message.approved", "You are fully verified · MyKad on file") }
     static var profileKycMessagePending: String { Self.t("profile.kyc.message.pending", "Verification under review") }
     static var profileKycMessageRejected: String { Self.t("profile.kyc.message.rejected", "Verification rejected – resubmit") }
     static var profileKycMessageNotStarted: String { Self.t("profile.kyc.message.notStarted", "Complete verification to drive") }
+    /// Inline rejection-reason variant shown on the Profile KYC card.
+    /// `%1$@` is the doc kind label, `%2$@` is the reason.
+    static func profileKycMessageRejectedWithReason(_ kind: String, _ reason: String) -> String {
+        let template = Self.t("profile.kyc.message.rejected.withReason", "%1$@ rejected — %2$@")
+        return String(format: template, kind, reason)
+    }
     static var profileKycBadgeVerified: String { Self.t("profile.kyc.badge.verified", "Verified") }
     static var profileKycBadgePending: String { Self.t("profile.kyc.badge.pending", "Pending") }
     static var profileKycBadgeRejected: String { Self.t("profile.kyc.badge.rejected", "Rejected") }
@@ -569,6 +585,19 @@ enum S {
     static var kycUpload: String { Self.t("kyc.upload", "Upload") }
     static var kycReplace: String { Self.t("kyc.replace", "Replace") }
     static var kycReupload: String { Self.t("kyc.reupload", "Re-upload") }
+    static var kycRejectedFallback: String { Self.t("kyc.rejected.fallback", "rejected") }
+    /// VoiceOver label for a rejected document row's action button.
+    /// `%1$@` is the doc kind, `%2$@` is the rejection reason.
+    static func kycRowA11yReupload(_ kind: String, _ reason: String) -> String {
+        let template = Self.t("kyc.a11y.reupload", "Re-upload %1$@ — %2$@")
+        return String(format: template, kind, reason)
+    }
+    /// VoiceOver label for a fresh / replace action button.
+    /// `%1$@` is the action verb, `%2$@` is the doc kind.
+    static func kycRowA11yAction(_ action: String, _ kind: String) -> String {
+        let template = Self.t("kyc.a11y.action", "%1$@ %2$@")
+        return String(format: template, action, kind)
+    }
     static func kycRejected(reason: String) -> String {
         let template = Self.t("kyc.rejected", "Rejected — %@")
         return String(format: template, reason)

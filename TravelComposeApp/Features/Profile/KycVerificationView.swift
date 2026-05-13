@@ -235,7 +235,11 @@ struct KycVerificationView: View {
             }
             .buttonStyle(.plain)
             .disabled(isLoading)
-            .accessibilityLabel(wasRejected ? "Re-upload \(kind.label) — \(doc?.rejectionReason ?? "rejected")" : "\(buttonLabel) \(kind.label)")
+            .accessibilityLabel(
+                wasRejected
+                    ? S.kycRowA11yReupload(kind.label, doc?.rejectionReason ?? S.kycRejectedFallback)
+                    : S.kycRowA11yAction(buttonLabel, kind.label)
+            )
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
     }
