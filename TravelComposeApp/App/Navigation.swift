@@ -147,9 +147,18 @@ struct MainTabView: View {
             // accessibility sizes. AccessibilityXXL still works;
             // we cap at the third accessibility size to balance
             // readability and the existing fixed-size layouts.
+            // Each tab's content gets a fade transition tied to the
+            // `.id(appLanguage)` remount, so a language change reads
+            // as a smooth cross-fade across the entire app rather
+            // than a hard cut. `.animation(value: appLanguage)` on
+            // each tab is what makes the .id swap animatable — the
+            // .transition modifier alone won't fire without a
+            // matching animation context.
             Tab(S.tabHome, systemImage: "house.fill", value: VoygoTab.home) {
                 HomeTab()
                     .id(appLanguage)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.32), value: appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Home tab")
@@ -158,6 +167,8 @@ struct MainTabView: View {
             Tab(S.tabSearch, systemImage: "magnifyingglass", value: VoygoTab.search) {
                 CommuteTab(pendingRouteDeepLink: $pendingRouteDeepLink)
                     .id(appLanguage)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.32), value: appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Search tab")
@@ -166,6 +177,8 @@ struct MainTabView: View {
             Tab(S.tabCalendar, systemImage: "calendar", value: VoygoTab.calendar) {
                 TripsTab()
                     .id(appLanguage)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.32), value: appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Calendar tab")
@@ -174,6 +187,8 @@ struct MainTabView: View {
             Tab(S.tabInbox, systemImage: "bubble.left.fill", value: VoygoTab.inbox) {
                 InboxView()
                     .id(appLanguage)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.32), value: appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             // Sum of per-thread unread counts. Native `.badge` shows
@@ -187,6 +202,8 @@ struct MainTabView: View {
             Tab(S.tabProfile, systemImage: "person.fill", value: VoygoTab.profile) {
                 ProfileView()
                     .id(appLanguage)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.32), value: appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Profile tab")
@@ -425,5 +442,10 @@ private struct LanguageCoverWrapper: View {
         LanguageSettingsView(onBack: { showLanguagePicker = false })
             .environment(\.locale, AppLocale.current.locale)
             .id(appLanguage)
+            // Smooth cross-fade when the inner picker re-mounts on
+            // a language tap — matches the tab-content fades so the
+            // whole app feels cohesive during the switch.
+            .transition(.opacity)
+            .animation(.easeInOut(duration: 0.32), value: appLanguage)
     }
 }
