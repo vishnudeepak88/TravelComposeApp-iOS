@@ -44,29 +44,14 @@ struct ProfileView: View {
     @AppStorage("voygo.showLanguagePicker") private var showLanguagePicker: Bool = false
 
     init() {
-        // Seed the nav path FROM init (not `.task`) when the rider
-        // is returning from a language change. The previous flow
-        // started with an empty path and then re-pushed `.language`
-        // inside `.task`, which made the rider see a brief flash of
-        // the Profile root before the Language view re-appeared.
-        // Reading the flag here means NavigationStack renders with
-        // the Language view already on top — zero bounce.
-        //
-        // IMPORTANT: we READ the flag here but do NOT clear it.
-        // SwiftUI may construct the View struct multiple times
-        // before allocating @State storage; if init also cleared the
-        // flag, only the first construction would see `true` and the
-        // subsequent ones would seed an empty path. Whichever struct
-        // SwiftUI actually uses to commit @State could be a later
-        // one — landing the rider back on Profile root.
-        // Clearing happens once in `LanguageSettingsView.onAppear`
-        // after the view actually shows.
-        let defaults = UserDefaults.standard
-        if defaults.bool(forKey: AppLocale.restoreToLanguageKey) {
-            _path = State(initialValue: [.language])
-        } else {
-            _path = State(initialValue: [])
-        }
+        // Language picker now opens as a fullScreenCover anchored on
+        // RootView — no nav-path push, no restore flag, no init-time
+        // seeding. The old logic was the source of the "tap Back
+        // twice" bug: the cover dismissed on the first tap but the
+        // stale `.language` route stayed in the path, popping into
+        // view as a second Language screen until a second Back tap
+        // popped it off too.
+        _path = State(initialValue: [])
     }
 
     var body: some View {
@@ -183,20 +168,6 @@ struct ProfileView: View {
                 .presentationDetents([.height(440)])
             }
             .task {
-                // Fallback restore — push BEFORE the await so the
-                // path includes .language on the same frame the
-                // body first renders. If we awaited refreshMe first
-                // the rider sees a Profile-root flash before the
-                // language page slides in.
-                let defaults = UserDefaults.standard
-                if defaults.bool(forKey: AppLocale.restoreToLanguageKey),
-                   path.last != .language {
-                    var t = Transaction()
-                    t.disablesAnimations = true
-                    withTransaction(t) {
-                        path.append(.language)
-                    }
-                }
                 await store.refreshMe()
             }
             .enableSwipeBack()

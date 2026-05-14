@@ -59,11 +59,11 @@ struct LanguageSettingsView: View {
         }
         .navigationBarHidden(true)
         .onAppear {
-            // Consume the restore flag once we're actually on this
-            // view. ProfileView.init() reads but doesn't clear it
-            // (multiple inits before @State commits would race on a
-            // clear), so this is the single source of truth for
-            // resetting the one-shot signal.
+            // Defensive cleanup — the picker is now a fullScreenCover
+            // anchored on RootView, so the restore-flag mechanism is
+            // obsolete. Clear any leftover flag from a previous build
+            // so it can't accidentally trigger a re-push if the old
+            // path-based handler ever resurfaces.
             UserDefaults.standard.removeObject(forKey: AppLocale.restoreToLanguageKey)
         }
     }
@@ -71,16 +71,10 @@ struct LanguageSettingsView: View {
     private func row(_ option: AppLocale) -> some View {
         let isSelected = selected == option
         return Button {
-            // Writing to @AppStorage fires RootView's `.id(...)` change
-            // which hot-remounts the tree. Without the restore flag
-            // below, the remount tears down Profile's NavigationStack
-            // path and the rider lands back on the Profile root —
-            // confusing. We flag a one-shot "land me back on the
-            // Language page" signal that ProfileView's task reads
-            // immediately after the remount and re-pushes `.language`.
-            // The flag clears itself after the push so a later cold
-            // launch doesn't auto-navigate.
-            UserDefaults.standard.set(true, forKey: AppLocale.restoreToLanguageKey)
+            // Just write the @AppStorage. The picker lives in a
+            // fullScreenCover on RootView, so the cover stays open
+            // through the language change and the rider sees the
+            // strings refresh in place — no restore flag needed.
             stored = option.rawValue
         } label: {
             HStack(spacing: 12) {
