@@ -137,8 +137,13 @@ struct MySubscriptionsView: View {
 
                                 ForEach(items) { item in
                                     subscriptionRow(item)
+                                        .transition(.asymmetric(
+                                            insertion: .opacity,
+                                            removal: .move(edge: .leading).combined(with: .opacity)
+                                        ))
                                 }
                             }
+                            .animation(.easeInOut(duration: 0.28), value: items.map(\.id))
                             .padding(.vertical, 16)
                         }
                         .refreshable {
@@ -704,6 +709,7 @@ struct UpcomingCalendarView: View {
                         }
                         let sortedKeys = grouped.keys.sorted()
 
+                        let allItemIds = sortedKeys.flatMap { (grouped[$0] ?? []).map(\.id) }
                         VStack(alignment: .leading, spacing: 20) {
                             ForEach(sortedKeys, id: \.self) { key in
                                 VStack(alignment: .leading, spacing: 10) {
@@ -792,9 +798,19 @@ struct UpcomingCalendarView: View {
                                                 )
                                         }
                                     }
+                                    // Slide-left + fade exit so bulk-
+                                    // skipped rides animate out rather
+                                    // than popping. Applies to both
+                                    // select-mode and non-select-mode
+                                    // render paths.
+                                    .transition(.asymmetric(
+                                        insertion: .opacity,
+                                        removal: .move(edge: .leading).combined(with: .opacity)
+                                    ))
                                 }
                             }
                         }
+                        .animation(.easeInOut(duration: 0.28), value: allItemIds)
                         .padding(.vertical, 16)
                     }
                     .refreshable {

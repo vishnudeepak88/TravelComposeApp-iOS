@@ -107,8 +107,17 @@ struct NotificationsView: View {
                                                 .swipeToClear(label: S.notifClear) {
                                                     store.dismissNotificationLocally(n.id)
                                                 }
+                                                // Combined leading-slide + opacity transition so
+                                                // the row reads as continuing leftward off-screen
+                                                // even after the sweep animation hands off to the
+                                                // parent's ForEach diff.
+                                                .transition(.asymmetric(
+                                                    insertion: .opacity,
+                                                    removal: .move(edge: .leading).combined(with: .opacity)
+                                                ))
                                         }
                                     }
+                                    .animation(.easeInOut(duration: 0.28), value: group.items.map(\.id))
                                 }
                             }
                         }

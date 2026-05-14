@@ -18,19 +18,37 @@ struct RootView: View {
         Group {
             if store.isAuthenticated {
                 MainTabView()
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                        removal: .opacity
+                    ))
             } else {
-                switch authStep {
-                case .phone:
-                    AuthPhoneView { _ in
-                        authStep = .otp(phone: store.phoneNumber)
+                Group {
+                    switch authStep {
+                    case .phone:
+                        AuthPhoneView { _ in
+                            withAnimation(.easeInOut(duration: 0.28)) {
+                                authStep = .otp(phone: store.phoneNumber)
+                            }
+                        }
+                    case .otp(let phone):
+                        AuthOtpView(phoneNumber: phone, onBack: {
+                            withAnimation(.easeInOut(duration: 0.28)) {
+                                authStep = .phone
+                            }
+                        })
                     }
-                case .otp(let phone):
-                    AuthOtpView(phoneNumber: phone, onBack: {
-                        authStep = .phone
-                    })
                 }
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
             }
         }
+        // Smooth the auth ↔ home swap and the phone ↔ otp swap so
+        // they read as continuous flows rather than abrupt cuts.
+        .animation(.easeInOut(duration: 0.32), value: store.isAuthenticated)
+        .animation(.easeInOut(duration: 0.28), value: authStep)
         // `.id(appLanguage)` is the key trick: when the rider taps a
         // new language, the SwiftUI engine sees a different identity
         // and rebuilds the subtree from scratch — every `S.t(...)`

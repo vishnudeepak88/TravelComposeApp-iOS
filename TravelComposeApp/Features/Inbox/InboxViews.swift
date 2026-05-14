@@ -87,8 +87,16 @@ struct InboxView: View {
                                                     hasUsedLongPress = true
                                                 }
                                         )
+                                        // Slide-left + fade exit so a
+                                        // hidden chat reads as continuing
+                                        // off-screen rather than popping.
+                                        .transition(.asymmetric(
+                                            insertion: .opacity,
+                                            removal: .move(edge: .leading).combined(with: .opacity)
+                                        ))
                                     }
                                 }
+                                .animation(.easeInOut(duration: 0.28), value: store.threads.map(\.id))
                                 .padding(.vertical, 12)
                                 .padding(.bottom, VTabBarLayout.clearance)
                             }
@@ -165,7 +173,9 @@ struct InboxView: View {
             presenting: pendingHideThread
         ) { thread in
             Button(S.inboxDeleteConfirm, role: .destructive) {
-                store.dismissThreadLocally(thread.id)
+                withAnimation(.easeInOut(duration: 0.28)) {
+                    store.dismissThreadLocally(thread.id)
+                }
                 pendingHideThread = nil
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
             }

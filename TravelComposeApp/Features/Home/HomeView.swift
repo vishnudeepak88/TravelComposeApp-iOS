@@ -802,7 +802,15 @@ struct HomeView: View {
                                   background: VPalette.textHint) {
                         dismissRide(key: stableKey(for: row))
                     }
+                    // Slide-left + fade removal so the dismissed card
+                    // reads as continuing in the swipe direction
+                    // rather than popping out abruptly.
+                    .transition(.asymmetric(
+                        insertion: .opacity,
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
             }
+            .animation(.easeInOut(duration: 0.28), value: visible.map(\.id))
         }
         .padding(.horizontal, 20)
         .padding(.top, 22)

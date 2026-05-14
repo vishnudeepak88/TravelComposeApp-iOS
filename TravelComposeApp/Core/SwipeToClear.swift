@@ -173,11 +173,23 @@ private struct SwipeToClearModifier: ViewModifier {
         guard !hasCleared else { return }
         hasCleared = true
         UINotificationFeedbackGenerator().notificationOccurred(.success)
-        withAnimation(.easeOut(duration: 0.22)) {
-            offset = -actionWidth * 1.4
+        // First leg: row sweeps off-screen to the left. Slightly
+        // overshoots so the action button trails off cleanly instead
+        // of clipping at the edge.
+        withAnimation(.easeIn(duration: 0.2)) {
+            offset = -actionWidth * 1.6
         }
+        // Second leg: parent removes the row from its collection
+        // inside a withAnimation so the ForEach diff-animates the
+        // height collapse + neighbour shuffle. Pair with a
+        // `.transition(.move(edge: .leading).combined(with: .opacity))`
+        // on the row in the parent for the cleanest exit — without
+        // an explicit transition, ForEach falls back to a fade,
+        // which still reads fine.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            onClear()
+            withAnimation(.easeInOut(duration: 0.28)) {
+                onClear()
+            }
         }
     }
 }
