@@ -48,22 +48,31 @@ struct RootView: View {
                     ))
                 }
             }
+
+            // Language picker as a right-to-left slide overlay
+            // (replaces the previous fullScreenCover, which forced
+            // a bottom-to-top presentation). Sits on top of the
+            // underlying tabs at the RootView level so the cover's
+            // open state survives the language-change `.id`
+            // remount in MainTabView. The trailing-edge transition
+            // matches iOS push semantics — opens from the right,
+            // closes back to the right.
+            if showLanguagePicker {
+                LanguageCoverWrapper()
+                    .transition(.move(edge: .trailing))
+                    .zIndex(1)
+            }
         }
         // Smooth the auth ↔ home swap and the phone ↔ otp swap so
         // they read as continuous flows rather than abrupt cuts.
         .animation(.easeInOut(duration: 0.32), value: store.isAuthenticated)
         .animation(.easeInOut(duration: 0.28), value: authStep)
-        // Language picker as a full-screen cover anchored on
-        // RootView (outside the `.id` scope inside MainTabView's
-        // tabs). RootView doesn't observe appLanguage, so its body
-        // doesn't re-evaluate during a language switch — the
-        // cover's presentation state survives intact and the rider
-        // sees the picker refresh in place.
-        .fullScreenCover(isPresented: $showLanguagePicker) {
-            // LanguageSettingsView gets its own .id(appLanguage)
-            // so it re-renders strings on every language tap.
-            LanguageCoverWrapper()
-        }
+        // Spring on the picker open/close so the slide reads as
+        // tactile, not just a linear translate. easeInOut on the
+        // tab cross-fade keeps the language-content swap subtle;
+        // the spring on the picker presentation is louder so the
+        // entry/exit reads as deliberate navigation.
+        .animation(.spring(response: 0.38, dampingFraction: 0.86), value: showLanguagePicker)
         // Ask for push permission the first time the user lands
         // signed-in, then re-register on every subsequent
         // authenticated launch so token rotations get picked up.
