@@ -10,20 +10,29 @@ import SwiftUI
 //
 //   row.swipeToClear { store.dismiss(notification.id) }
 //
-// Behaviour mirrors iOS Mail's partial swipe:
+// Behaviour (iOS-Mail-style partial swipe, but no auto-commit):
 //   - Drag left → row offsets along with the finger, exposing a
 //     destructive button (defaults to `trash.fill` + Voygo danger).
-//   - Release past the reveal threshold → row LATCHES at the action
-//     width; the destructive button is now revealed. Nothing is
-//     committed yet — the rider must tap the button to confirm.
-//   - Release inside the threshold → spring back to rest.
-//   - Tap the content area while revealed → spring back to rest.
+//   - Release past the reveal threshold → row LATCHES open at the
+//     action width (light haptic). Nothing committed yet.
+//   - Tap the destructive button → fires the callback (success
+//     haptic, row sweeps away).
+//   - Drag right past the close threshold → springs closed.
 //   - Vertical pans bail out so the parent ScrollView still scrolls.
 //
-// This intentionally departs from the iOS Mail "full-swipe-to-commit"
-// shortcut: riders told us the auto-commit felt accidental ("I just
-// peeked at the button and it deleted the row"). The latch-and-tap
-// flow keeps every destructive action explicit.
+// We intentionally don't auto-commit on release past the threshold —
+// riders reported the auto-commit felt accidental, so every
+// destructive action now requires the deliberate tap on the button.
+//
+// Architecture: ZStack with the action button at the trailing edge
+// and content on top. Content's offset shifts it left to reveal the
+// button. We deliberately don't use `.allowsHitTesting(false)` or a
+// tap-to-close overlay — both interfere with the Clear button's tap
+// recognizer. The trade-off: tapping content while revealed fires
+// the content's tap action. Acceptable in practice because:
+//   - The rider's eye is already on the visible Clear button.
+//   - Underlying content taps are non-destructive navigation.
+//   - The latch is easy to dismiss by swiping the row back right.
 
 extension View {
     /// Adds a leftward swipe gesture that reveals a destructive
@@ -56,106 +65,62 @@ private struct SwipeToClearModifier: ViewModifier {
     let background: Color
     let onClear: () -> Void
 
+    /// Negative = swiped left.
     @State private var offset: CGFloat = 0
-    /// True once the row has latched open. Drives both visual state
-    /// and gesture routing — a tap on the content area while open
-    /// snaps back instead of forwarding to the underlying view.
-    @State private var isRevealed: Bool = false
+    /// Snapshot of `offset` at the moment a new drag begins so a
+    /// drag started from an already-latched row extends / closes
+    /// the reveal smoothly instead of snapping to zero.
+    @State private var dragStartOffset: CGFloat = 0
     /// Locked once a horizontal pan is detected; bypassed for
     /// vertical pans so the parent ScrollView still scrolls.
     @State private var direction: Direction = .undecided
     /// Latches once the row has been cleared so the spring-back
-    /// animation doesn't immediately re-fire the callback.
+    /// animation doesn't re-fire the callback.
     @State private var hasCleared: Bool = false
 
     private enum Direction { case undecided, horizontal, vertical }
 
-    /// Distance the row must travel before the latch engages. Tied
-    /// to actionWidth so taller actions need a proportionally bigger
-    /// commit gesture.
     private var latchThreshold: CGFloat { actionWidth * 0.55 }
+
+    /// True when the row is far enough open for the action to be a
+    /// meaningful target. Drives the Button's hit-testing so at rest
+    /// the underlying content's tap action stays usable (we can't
+    /// just put the Button on top with opacity=0 — invisible buttons
+    /// still steal taps in SwiftUI unless hit-testing is disabled).
+    private var isRevealed: Bool { offset < -2 }
 
     func body(content: Content) -> some View {
         ZStack(alignment: .trailing) {
-            // Destructive action revealed behind the row. Tapping
-            // this is the ONLY way to commit the clear — releasing a
-            // swipe past the threshold latches the row open here
-            // and waits for the deliberate tap.
-            Button(action: triggerClear) {
-                HStack {
-                    Spacer(minLength: 0)
-                    VStack(spacing: 4) {
-                        Image(systemName: systemImage)
-                            .font(.subheadline.weight(.bold))
-                        Text(label)
-                            .font(.caption2.weight(.heavy))
-                    }
-                    .foregroundColor(.white)
-                    Spacer(minLength: 0)
-                }
-                .frame(width: actionWidth)
-                .frame(maxHeight: .infinity)
-                .background(background)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            // Hide the button when the row is at rest so it doesn't
-            // poke out beyond rounded corners. Opacity ramp ties
-            // visibility to drag progress.
-            .opacity(min(1, abs(offset) / actionWidth))
-
+            // Content first (back). Background fills the row so the
+            // action button doesn't bleed through transparent areas
+            // before the rider has actually swiped.
             content
                 .background(VPalette.surface)
                 .offset(x: offset)
-                // Tap-to-close when latched open. Suppress hits to
-                // the underlying view's gestures while revealed so a
-                // stray tap doesn't navigate the rider away from the
-                // destructive choice they're about to commit.
-                .allowsHitTesting(!isRevealed)
-                .overlay(
-                    Group {
-                        if isRevealed {
-                            Color.clear
-                                .contentShape(Rectangle())
-                                .onTapGesture { closeReveal() }
-                        }
-                    }
-                )
                 .highPriorityGesture(
                     // highPriorityGesture (not `.gesture`) so child
                     // Buttons inside the row don't claim the touch
-                    // first. minimumDistance: 12 lets genuine taps
-                    // (under that threshold) fall through to the
-                    // child Button when the row is at rest.
+                    // first. minimumDistance: 12 keeps taps under
+                    // that threshold flowing through to child views.
                     DragGesture(minimumDistance: 12)
                         .onChanged { value in
                             if direction == .undecided {
                                 if abs(value.translation.width) > abs(value.translation.height) {
                                     direction = .horizontal
+                                    dragStartOffset = offset
                                 } else {
                                     direction = .vertical
                                 }
                             }
                             guard direction == .horizontal else { return }
-                            // Base offset depends on whether the row
-                            // is already latched open — a swipe while
-                            // revealed should be able to extend or
-                            // close the reveal smoothly.
-                            let base: CGFloat = isRevealed ? -actionWidth : 0
-                            let candidate = base + value.translation.width
-                            // Clamp to leftward only, capping at
-                            // 1.3× the action width so the row
-                            // doesn't keep travelling.
+                            let candidate = dragStartOffset + value.translation.width
+                            // Clamp leftward only; allow a small
+                            // rubber-band overswipe.
                             offset = max(min(0, candidate), -actionWidth * 1.3)
                         }
-                        .onEnded { value in
+                        .onEnded { _ in
                             defer { direction = .undecided }
                             guard direction == .horizontal else { return }
-                            // Latch open / snap closed based on the
-                            // final offset, NOT the velocity. We do
-                            // NOT auto-fire `triggerClear` here —
-                            // the destructive action always requires
-                            // an explicit tap on the revealed button.
                             if offset < -latchThreshold {
                                 latchOpen()
                             } else {
@@ -163,24 +128,44 @@ private struct SwipeToClearModifier: ViewModifier {
                             }
                         }
                 )
+
+            // Action button ON TOP at the trailing edge — Swift's
+            // hit-test goes front-to-back, so this is the first
+            // thing checked at the trailing 88pt. allowsHitTesting
+            // turns it off at rest so the underlying content's
+            // tap (open route, etc.) still works through the
+            // invisible button area. Opacity ramps in with the
+            // swipe so it visually fades into view.
+            Button(action: triggerClear) {
+                VStack(spacing: 4) {
+                    Image(systemName: systemImage)
+                        .font(.subheadline.weight(.bold))
+                    Text(label)
+                        .font(.caption2.weight(.heavy))
+                }
+                .foregroundColor(.white)
+                .frame(width: actionWidth)
+                .frame(maxHeight: .infinity)
+                .background(background)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .opacity(min(1, abs(offset) / actionWidth))
+            .allowsHitTesting(isRevealed)
         }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func latchOpen() {
-        // Light haptic to confirm the row latched open. The
-        // destructive haptic fires later when the rider taps Clear.
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
             offset = -actionWidth
-            isRevealed = true
         }
     }
 
     private func closeReveal() {
         withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
             offset = 0
-            isRevealed = false
         }
     }
 
@@ -191,9 +176,6 @@ private struct SwipeToClearModifier: ViewModifier {
         withAnimation(.easeOut(duration: 0.22)) {
             offset = -actionWidth * 1.4
         }
-        // Slight delay so the row's exit animation reads as
-        // "swept away" before the parent removes it from its
-        // collection.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             onClear()
         }
