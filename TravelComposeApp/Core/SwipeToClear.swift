@@ -94,8 +94,18 @@ private struct SwipeToClearModifier: ViewModifier {
             content
                 .background(VPalette.surface)
                 .offset(x: offset)
-                .gesture(
-                    DragGesture(minimumDistance: 4)
+                // `highPriorityGesture` (not `.gesture` or
+                // `.simultaneousGesture`) so child Buttons inside the
+                // row don't claim the touch first. The previous
+                // `.gesture` form lost every short drag to the inner
+                // tap recognizer — the row scrolled less than the
+                // action width and the rider got navigated to the
+                // tap destination instead of seeing the destructive
+                // action. We still respect minimumDistance: 12 so
+                // genuine taps (under that threshold) fall through
+                // to the child Button.
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 12)
                         .onChanged { value in
                             // Lock direction on the first sample so
                             // we don't hijack vertical scrolls.
