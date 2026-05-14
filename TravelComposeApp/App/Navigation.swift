@@ -17,62 +17,46 @@ struct RootView: View {
     enum AuthStep: Equatable { case phone, otp(phone: String) }
 
     var body: some View {
-        ZStack {
-            Group {
-                if store.isAuthenticated {
-                    MainTabView()
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                            removal: .opacity
-                        ))
-                } else {
-                    Group {
-                        switch authStep {
-                        case .phone:
-                            AuthPhoneView { _ in
-                                withAnimation(.easeInOut(duration: 0.28)) {
-                                    authStep = .otp(phone: store.phoneNumber)
-                                }
-                            }
-                        case .otp(let phone):
-                            AuthOtpView(phoneNumber: phone, onBack: {
-                                withAnimation(.easeInOut(duration: 0.28)) {
-                                    authStep = .phone
-                                }
-                            })
-                        }
-                    }
+        Group {
+            if store.isAuthenticated {
+                MainTabView()
                     .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
+                        insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                        removal: .opacity
                     ))
+            } else {
+                Group {
+                    switch authStep {
+                    case .phone:
+                        AuthPhoneView { _ in
+                            withAnimation(.easeInOut(duration: 0.28)) {
+                                authStep = .otp(phone: store.phoneNumber)
+                            }
+                        }
+                    case .otp(let phone):
+                        AuthOtpView(phoneNumber: phone, onBack: {
+                            withAnimation(.easeInOut(duration: 0.28)) {
+                                authStep = .phone
+                            }
+                        })
+                    }
                 }
-            }
-
-            // Language picker as a right-to-left slide overlay
-            // (replaces the previous fullScreenCover, which forced
-            // a bottom-to-top presentation). Sits on top of the
-            // underlying tabs at the RootView level so the cover's
-            // open state survives the language-change `.id`
-            // remount in MainTabView. The trailing-edge transition
-            // matches iOS push semantics — opens from the right,
-            // closes back to the right.
-            if showLanguagePicker {
-                LanguageCoverWrapper()
-                    .transition(.move(edge: .trailing))
-                    .zIndex(1)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
             }
         }
         // Smooth the auth ↔ home swap and the phone ↔ otp swap so
         // they read as continuous flows rather than abrupt cuts.
         .animation(.easeInOut(duration: 0.32), value: store.isAuthenticated)
         .animation(.easeInOut(duration: 0.28), value: authStep)
-        // Spring on the picker open/close so the slide reads as
-        // tactile, not just a linear translate. easeInOut on the
-        // tab cross-fade keeps the language-content swap subtle;
-        // the spring on the picker presentation is louder so the
-        // entry/exit reads as deliberate navigation.
-        .animation(.spring(response: 0.38, dampingFraction: 0.86), value: showLanguagePicker)
+        // Language picker uses the shared slide-from-right modifier
+        // so its transition matches every other slide-over page
+        // in the app.
+        .slideOver(isPresented: $showLanguagePicker) {
+            LanguageCoverWrapper()
+        }
         // Ask for push permission the first time the user lands
         // signed-in, then re-register on every subsequent
         // authenticated launch so token rotations get picked up.

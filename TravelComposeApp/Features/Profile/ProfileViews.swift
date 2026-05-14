@@ -141,31 +141,46 @@ struct ProfileView: View {
                 }
                 Button(S.cancel, role: .cancel, action: {})
             } message: { Text(S.profileLogOutMessage) }
-            .sheet(isPresented: $showEditName) {
-                EditDisplayNameSheet(
-                    initialName: store.currentUser.name,
-                    onCancel: { showEditName = false },
-                    onSave:   { newName in
-                        let result = await store.updateDisplayName(newName)
-                        if case .success = result { showEditName = false }
-                        return result
-                    }
-                )
-                .presentationDetents([.height(280)])
+            // Slide-from-right overlays (not native `.sheet`) so the
+            // edit pages feel like forward navigation, matching every
+            // other page transition in the app. The presentation
+            // detent that previously kept these as partial sheets is
+            // gone — full-screen pages are easier to focus on and
+            // form fields stay above the keyboard reliably. Wrap each
+            // sheet content in a full-screen ZStack with the app
+            // background so it doesn't show the underlying view
+            // bleeding through.
+            .slideOver(isPresented: $showEditName) {
+                ZStack(alignment: .top) {
+                    VPalette.bg.ignoresSafeArea()
+                    EditDisplayNameSheet(
+                        initialName: store.currentUser.name,
+                        onCancel: { showEditName = false },
+                        onSave:   { newName in
+                            let result = await store.updateDisplayName(newName)
+                            if case .success = result { showEditName = false }
+                            return result
+                        }
+                    )
+                    .padding(.top, 60)
+                }
             }
-            .sheet(isPresented: $showEditVehicle) {
-                EditVehicleSheet(
-                    initialPlate: store.currentUser.plateNumber ?? "",
-                    initialColor: store.currentUser.carColor ?? "",
-                    initialModel: store.currentUser.carModel ?? "",
-                    onCancel: { showEditVehicle = false },
-                    onSave: { plate, color, model in
-                        let result = await store.updateVehicle(plate: plate, color: color, model: model)
-                        if case .success = result { showEditVehicle = false }
-                        return result
-                    }
-                )
-                .presentationDetents([.height(440)])
+            .slideOver(isPresented: $showEditVehicle) {
+                ZStack(alignment: .top) {
+                    VPalette.bg.ignoresSafeArea()
+                    EditVehicleSheet(
+                        initialPlate: store.currentUser.plateNumber ?? "",
+                        initialColor: store.currentUser.carColor ?? "",
+                        initialModel: store.currentUser.carModel ?? "",
+                        onCancel: { showEditVehicle = false },
+                        onSave: { plate, color, model in
+                            let result = await store.updateVehicle(plate: plate, color: color, model: model)
+                            if case .success = result { showEditVehicle = false }
+                            return result
+                        }
+                    )
+                    .padding(.top, 60)
+                }
             }
             .task {
                 await store.refreshMe()
