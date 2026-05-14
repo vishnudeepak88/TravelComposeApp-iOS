@@ -13,7 +13,7 @@ import CoreLocation
 
 struct ProfileView: View {
     @Environment(AppStore.self) private var store
-    @State private var path: [AppRoute] = []
+    @State private var path: [AppRoute]
     @State private var filtersQuery: String = ""
     @State private var filtersEarliest: String = "06:30"
     @State private var filtersLatest: String = "09:00"
@@ -36,6 +36,38 @@ struct ProfileView: View {
     /// so a driver can't bait riders with one plate on a route and
     /// arrive in a different car.
     @State private var showEditVehicle = false
+    /// Mirrors the same @AppStorage RootView watches. Writing here
+    /// opens the language picker as a full-screen cover anchored at
+    /// RootView level — that placement is what lets the picker
+    /// survive the `.id(appLanguage)` remount instead of bouncing
+    /// the rider back to Profile root mid-switch.
+    @AppStorage("voygo.showLanguagePicker") private var showLanguagePicker: Bool = false
+
+    init() {
+        // Seed the nav path FROM init (not `.task`) when the rider
+        // is returning from a language change. The previous flow
+        // started with an empty path and then re-pushed `.language`
+        // inside `.task`, which made the rider see a brief flash of
+        // the Profile root before the Language view re-appeared.
+        // Reading the flag here means NavigationStack renders with
+        // the Language view already on top — zero bounce.
+        //
+        // IMPORTANT: we READ the flag here but do NOT clear it.
+        // SwiftUI may construct the View struct multiple times
+        // before allocating @State storage; if init also cleared the
+        // flag, only the first construction would see `true` and the
+        // subsequent ones would seed an empty path. Whichever struct
+        // SwiftUI actually uses to commit @State could be a later
+        // one — landing the rider back on Profile root.
+        // Clearing happens once in `LanguageSettingsView.onAppear`
+        // after the view actually shows.
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: AppLocale.restoreToLanguageKey) {
+            _path = State(initialValue: [.language])
+        } else {
+            _path = State(initialValue: [])
+        }
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -151,21 +183,21 @@ struct ProfileView: View {
                 .presentationDetents([.height(440)])
             }
             .task {
-                await store.refreshMe()
-                // One-shot restore after a language-switch hot-remount.
-                // LanguageSettingsView writes this flag right before
-                // mutating the app-language @AppStorage; we read it
-                // on the very first task tick AFTER the remount,
-                // re-push the Language route, and clear the flag so
-                // a normal cold launch never triggers this.
+                // Fallback restore — push BEFORE the await so the
+                // path includes .language on the same frame the
+                // body first renders. If we awaited refreshMe first
+                // the rider sees a Profile-root flash before the
+                // language page slides in.
                 let defaults = UserDefaults.standard
-                if defaults.bool(forKey: AppLocale.restoreToLanguageKey) {
-                    defaults.removeObject(forKey: AppLocale.restoreToLanguageKey)
-                    // Avoid duplicate-push if user navigated quickly.
-                    if path.last != .language {
+                if defaults.bool(forKey: AppLocale.restoreToLanguageKey),
+                   path.last != .language {
+                    var t = Transaction()
+                    t.disablesAnimations = true
+                    withTransaction(t) {
                         path.append(.language)
                     }
                 }
+                await store.refreshMe()
             }
             .enableSwipeBack()
         }
@@ -391,7 +423,14 @@ struct ProfileView: View {
                     title: S.profileSettingsLanguage,
                     chevron: true,
                     trailingText: AppLocale.current.displayName,
-                    action: { path.append(.language) })
+                    action: {
+                        // Opens the picker as a full-screen cover
+                        // anchored on RootView — its presentation
+                        // state lives in @AppStorage so it survives
+                        // the language-change hot-remount, keeping
+                        // the rider on the picker through the swap.
+                        showLanguagePicker = true
+                    })
                 divider()
                 // Payment methods row no longer lies about a default
                 // method when no methods are configured. Subtitle is

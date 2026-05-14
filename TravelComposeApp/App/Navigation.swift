@@ -5,58 +5,65 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppStore.self) private var store
     @State private var authStep: AuthStep = .phone
-    /// In-app language override. When the rider picks a non-`.system`
-    /// value from Profile → Settings → Language, this @AppStorage
-    /// fires a refresh and the `.id(...)` on the view tree below
-    /// remounts everything — the entire app re-resolves its strings
-    /// through the chosen `.lproj` without requiring a cold restart.
-    @AppStorage(AppLocale.storageKey) private var appLanguage: String = AppLocale.system.rawValue
+    /// Drives the language picker's full-screen cover. Lives on
+    /// RootView so the presentation state survives the hot-remount
+    /// of the inner tabs when the rider picks a new language.
+    /// Critically, RootView does NOT observe `voygo.appLanguage` —
+    /// that observation lives inside each tab so RootView's body
+    /// (and the fullScreenCover modifier on it) doesn't re-evaluate
+    /// on language change, which would dismiss the cover.
+    @AppStorage("voygo.showLanguagePicker") private var showLanguagePicker: Bool = false
 
     enum AuthStep: Equatable { case phone, otp(phone: String) }
 
     var body: some View {
-        Group {
-            if store.isAuthenticated {
-                MainTabView()
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                        removal: .opacity
-                    ))
-            } else {
-                Group {
-                    switch authStep {
-                    case .phone:
-                        AuthPhoneView { _ in
-                            withAnimation(.easeInOut(duration: 0.28)) {
-                                authStep = .otp(phone: store.phoneNumber)
+        ZStack {
+            Group {
+                if store.isAuthenticated {
+                    MainTabView()
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.98)),
+                            removal: .opacity
+                        ))
+                } else {
+                    Group {
+                        switch authStep {
+                        case .phone:
+                            AuthPhoneView { _ in
+                                withAnimation(.easeInOut(duration: 0.28)) {
+                                    authStep = .otp(phone: store.phoneNumber)
+                                }
                             }
+                        case .otp(let phone):
+                            AuthOtpView(phoneNumber: phone, onBack: {
+                                withAnimation(.easeInOut(duration: 0.28)) {
+                                    authStep = .phone
+                                }
+                            })
                         }
-                    case .otp(let phone):
-                        AuthOtpView(phoneNumber: phone, onBack: {
-                            withAnimation(.easeInOut(duration: 0.28)) {
-                                authStep = .phone
-                            }
-                        })
                     }
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
                 }
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .leading).combined(with: .opacity)
-                ))
             }
         }
         // Smooth the auth ↔ home swap and the phone ↔ otp swap so
         // they read as continuous flows rather than abrupt cuts.
         .animation(.easeInOut(duration: 0.32), value: store.isAuthenticated)
         .animation(.easeInOut(duration: 0.28), value: authStep)
-        // `.id(appLanguage)` is the key trick: when the rider taps a
-        // new language, the SwiftUI engine sees a different identity
-        // and rebuilds the subtree from scratch — every `S.t(...)`
-        // call below this point re-resolves against the new bundle.
-        // Combined with `.environment(\.locale, ...)` it also
-        // refreshes Date/Number formatters that follow Locale.
-        .id(appLanguage)
-        .environment(\.locale, AppLocale.current.locale)
+        // Language picker as a full-screen cover anchored on
+        // RootView (outside the `.id` scope inside MainTabView's
+        // tabs). RootView doesn't observe appLanguage, so its body
+        // doesn't re-evaluate during a language switch — the
+        // cover's presentation state survives intact and the rider
+        // sees the picker refresh in place.
+        .fullScreenCover(isPresented: $showLanguagePicker) {
+            // LanguageSettingsView gets its own .id(appLanguage)
+            // so it re-renders strings on every language tap.
+            LanguageCoverWrapper()
+        }
         // Ask for push permission the first time the user lands
         // signed-in, then re-register on every subsequent
         // authenticated launch so token rotations get picked up.
@@ -91,6 +98,14 @@ struct MainTabView: View {
     /// Reading the int rawValue from AppStorage on init keeps the
     /// rider on the same tab through a language hot-remount.
     @AppStorage("voygo.selectedTab") private var selectedTabRaw: Int = VoygoTab.home.rawValue
+    /// `.id(appLanguage)` lives on each tab's content (below) so
+    /// changing the language remounts only the active tab tree —
+    /// not the whole MainTabView. Keeping MainTabView itself
+    /// stable means the TabView's selected-tab indicator doesn't
+    /// flicker, and the surrounding RootView's fullScreenCover
+    /// (which holds the language picker) doesn't get dismissed
+    /// during the swap.
+    @AppStorage(AppLocale.storageKey) private var appLanguage: String = AppLocale.system.rawValue
     @State private var pendingRouteDeepLink: String?
 
     private var selectedTab: VoygoTab {
@@ -134,6 +149,7 @@ struct MainTabView: View {
             // readability and the existing fixed-size layouts.
             Tab(S.tabHome, systemImage: "house.fill", value: VoygoTab.home) {
                 HomeTab()
+                    .id(appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Home tab")
@@ -141,6 +157,7 @@ struct MainTabView: View {
 
             Tab(S.tabSearch, systemImage: "magnifyingglass", value: VoygoTab.search) {
                 CommuteTab(pendingRouteDeepLink: $pendingRouteDeepLink)
+                    .id(appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Search tab")
@@ -148,6 +165,7 @@ struct MainTabView: View {
 
             Tab(S.tabCalendar, systemImage: "calendar", value: VoygoTab.calendar) {
                 TripsTab()
+                    .id(appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Calendar tab")
@@ -155,6 +173,7 @@ struct MainTabView: View {
 
             Tab(S.tabInbox, systemImage: "bubble.left.fill", value: VoygoTab.inbox) {
                 InboxView()
+                    .id(appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             // Sum of per-thread unread counts. Native `.badge` shows
@@ -167,6 +186,7 @@ struct MainTabView: View {
 
             Tab(S.tabProfile, systemImage: "person.fill", value: VoygoTab.profile) {
                 ProfileView()
+                    .id(appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Profile tab")
@@ -386,5 +406,24 @@ struct TripsTab: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Language picker cover wrapper
+//
+// Wraps LanguageSettingsView with its own `.id(appLanguage)` and
+// dismiss closure. Lives inside RootView's fullScreenCover, so the
+// outer RootView never observes appLanguage directly — only this
+// inner view (and the per-tab `.id()`) remounts on a language tap.
+// That isolation is what keeps the picker on screen while the
+// language swaps in place.
+private struct LanguageCoverWrapper: View {
+    @AppStorage(AppLocale.storageKey) private var appLanguage: String = AppLocale.system.rawValue
+    @AppStorage("voygo.showLanguagePicker") private var showLanguagePicker: Bool = false
+
+    var body: some View {
+        LanguageSettingsView(onBack: { showLanguagePicker = false })
+            .environment(\.locale, AppLocale.current.locale)
+            .id(appLanguage)
     }
 }

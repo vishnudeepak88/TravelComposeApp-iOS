@@ -58,6 +58,14 @@ struct LanguageSettingsView: View {
             }
         }
         .navigationBarHidden(true)
+        .onAppear {
+            // Consume the restore flag once we're actually on this
+            // view. ProfileView.init() reads but doesn't clear it
+            // (multiple inits before @State commits would race on a
+            // clear), so this is the single source of truth for
+            // resetting the one-shot signal.
+            UserDefaults.standard.removeObject(forKey: AppLocale.restoreToLanguageKey)
+        }
     }
 
     private func row(_ option: AppLocale) -> some View {
