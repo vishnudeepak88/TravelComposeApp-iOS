@@ -29,13 +29,13 @@ struct RootView: View {
                     switch authStep {
                     case .phone:
                         AuthPhoneView { _ in
-                            withAnimation(.easeInOut(duration: 0.28)) {
+                            withAnimation(reduceMotionAware(.easeInOut(duration: 0.28))) {
                                 authStep = .otp(phone: store.phoneNumber)
                             }
                         }
                     case .otp(let phone):
                         AuthOtpView(phoneNumber: phone, onBack: {
-                            withAnimation(.easeInOut(duration: 0.28)) {
+                            withAnimation(reduceMotionAware(.easeInOut(duration: 0.28))) {
                                 authStep = .phone
                             }
                         })
@@ -49,8 +49,8 @@ struct RootView: View {
         }
         // Smooth the auth ↔ home swap and the phone ↔ otp swap so
         // they read as continuous flows rather than abrupt cuts.
-        .animation(.easeInOut(duration: 0.32), value: store.isAuthenticated)
-        .animation(.easeInOut(duration: 0.28), value: authStep)
+        .voygoAnimation(.easeInOut(duration: 0.32), value: store.isAuthenticated)
+        .voygoAnimation(.easeInOut(duration: 0.28), value: authStep)
         // Language picker uses the shared slide-from-right modifier
         // so its transition matches every other slide-over page
         // in the app.
@@ -151,7 +151,7 @@ struct MainTabView: View {
                 HomeTab()
                     .id(appLanguage)
                     .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.32), value: appLanguage)
+                    .voygoAnimation(.easeInOut(duration: 0.32), value: appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Home tab")
@@ -161,7 +161,7 @@ struct MainTabView: View {
                 CommuteTab(pendingRouteDeepLink: $pendingRouteDeepLink)
                     .id(appLanguage)
                     .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.32), value: appLanguage)
+                    .voygoAnimation(.easeInOut(duration: 0.32), value: appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Search tab")
@@ -171,7 +171,7 @@ struct MainTabView: View {
                 TripsTab()
                     .id(appLanguage)
                     .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.32), value: appLanguage)
+                    .voygoAnimation(.easeInOut(duration: 0.32), value: appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Calendar tab")
@@ -181,7 +181,7 @@ struct MainTabView: View {
                 InboxView()
                     .id(appLanguage)
                     .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.32), value: appLanguage)
+                    .voygoAnimation(.easeInOut(duration: 0.32), value: appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             // Sum of per-thread unread counts. Native `.badge` shows
@@ -196,7 +196,7 @@ struct MainTabView: View {
                 ProfileView()
                     .id(appLanguage)
                     .transition(.opacity)
-                    .animation(.easeInOut(duration: 0.32), value: appLanguage)
+                    .voygoAnimation(.easeInOut(duration: 0.32), value: appLanguage)
                     .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             }
             .accessibilityLabel("Profile tab")
@@ -439,6 +439,6 @@ private struct LanguageCoverWrapper: View {
             // a language tap — matches the tab-content fades so the
             // whole app feels cohesive during the switch.
             .transition(.opacity)
-            .animation(.easeInOut(duration: 0.32), value: appLanguage)
+            .voygoAnimation(.easeInOut(duration: 0.32), value: appLanguage)
     }
 }

@@ -106,6 +106,8 @@
 "upcoming.bulkSkip.cta" = "Langkau %d";
 "upcoming.bulkSkip.failed.one" = "Tidak dapat langkau 1 perjalanan. Cuba lagi.";
 "upcoming.bulkSkip.failed.many" = "Tidak dapat langkau %d perjalanan. Cuba lagi.";
+"upcoming.bulkSkip.a11y.hint" = "Melangkau setiap perjalanan yang dipilih tanpa membatalkan langganan anda. Pemandu akan dimaklumkan.";
+"subs.bulkCancel.a11y.hint" = "Membatalkan setiap langganan yang dipilih. Bayaran balik dikira oleh enjin polisi dan dikreditkan ke Voygo Credit anda.";
 
 /* Driver dashboard — empty state */
 "driver.empty.title" = "Belum ada laluan";

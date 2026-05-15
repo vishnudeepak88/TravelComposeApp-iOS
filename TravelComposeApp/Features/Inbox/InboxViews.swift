@@ -96,7 +96,7 @@ struct InboxView: View {
                                         ))
                                     }
                                 }
-                                .animation(.easeInOut(duration: 0.28), value: store.threads.map(\.id))
+                                .voygoAnimation(.easeInOut(duration: 0.28), value: store.threads.map(\.id))
                                 .padding(.vertical, 12)
                                 .padding(.bottom, VTabBarLayout.clearance)
                             }
@@ -173,7 +173,7 @@ struct InboxView: View {
             presenting: pendingHideThread
         ) { thread in
             Button(S.inboxDeleteConfirm, role: .destructive) {
-                withAnimation(.easeInOut(duration: 0.28)) {
+                withAnimation(reduceMotionAware(.easeInOut(duration: 0.28))) {
                     store.dismissThreadLocally(thread.id)
                 }
                 pendingHideThread = nil

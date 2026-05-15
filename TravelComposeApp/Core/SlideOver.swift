@@ -84,7 +84,10 @@ private struct SlideOverModifier<SheetContent: View>: ViewModifier {
         }
         // Spring (response 0.38, damping 0.86) gives the slide a
         // tactile feel — matches the language picker so the whole
-        // app feels cohesive.
-        .animation(.spring(response: 0.38, dampingFraction: 0.86), value: isPresented)
+        // app feels cohesive. Wrapped through `voygoAnimation` so
+        // Settings → Accessibility → Reduce Motion suppresses the
+        // slide (the overlay still appears/disappears, just without
+        // the lateral motion).
+        .voygoAnimation(.spring(response: 0.38, dampingFraction: 0.86), value: isPresented)
     }
 }

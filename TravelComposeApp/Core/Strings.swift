@@ -643,6 +643,13 @@ enum S {
         let template = Self.t("subs.bulkCancel.failed", "Couldn't cancel: %@. Try again or cancel individually.")
         return String(format: template, routes)
     }
+    /// Accessibility hint read by VoiceOver after the bulk-cancel CTA's
+    /// label. Explains the destructive consequence so a rider relying
+    /// on screen reader can decide before activating.
+    static var subsBulkCancelHint: String { Self.t("subs.bulkCancel.a11y.hint", "Cancels every selected subscription. Refunds are calculated by policy engine and credited to your Voygo Credit.") }
+    /// Hint for the bulk-skip CTA. Skip is gentler than cancel — the
+    /// sub stays active — so the hint emphasises that.
+    static var bulkSkipHint: String { Self.t("upcoming.bulkSkip.a11y.hint", "Skips every selected ride without cancelling your subscription. Riders are notified.") }
 
     // MARK: Upcoming Commutes (calendar view) — multi-select bulk-skip
 

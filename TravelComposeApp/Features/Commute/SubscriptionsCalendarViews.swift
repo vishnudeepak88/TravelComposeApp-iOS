@@ -143,7 +143,7 @@ struct MySubscriptionsView: View {
                                         ))
                                 }
                             }
-                            .animation(.easeInOut(duration: 0.28), value: items.map(\.id))
+                            .voygoAnimation(.easeInOut(duration: 0.28), value: items.map(\.id))
                             .padding(.vertical, 16)
                         }
                         .refreshable {
@@ -170,7 +170,7 @@ struct MySubscriptionsView: View {
                 }
             }
         }
-        .animation(.easeOut(duration: 0.18), value: isSelectMode)
+        .voygoAnimation(.easeOut(duration: 0.18), value: isSelectMode)
         .task {
             await store.refreshAll()
             hasLoaded = true
@@ -247,6 +247,11 @@ struct MySubscriptionsView: View {
             .padding(.trailing, 16)
             .contentShape(Rectangle())
             .onTapGesture { toggleSubSelection(item) }
+            // Surface select-state to VoiceOver so the rider hears
+            // "Selected" / "Not selected" alongside the row contents.
+            .accessibilityAddTraits(
+                selectedSubIds.contains(item.subscription.id) ? .isSelected : []
+            )
         } else {
             SubscriptionCard(
                 item: item,
@@ -331,6 +336,7 @@ struct MySubscriptionsView: View {
             }
             .buttonStyle(.plain)
             .disabled(selectedSubIds.isEmpty || bulkCancelInFlight)
+            .accessibilityHint(S.subsBulkCancelHint)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -747,6 +753,9 @@ struct UpcomingCalendarView: View {
                                             .padding(.trailing, 16)
                                             .contentShape(Rectangle())
                                             .onTapGesture { toggleSelection(item) }
+                                            .accessibilityAddTraits(
+                                                item.rideInstanceId.map { selectedRideIds.contains($0) } == true ? .isSelected : []
+                                            )
                                         } else {
                                             // Per-row Skip pill on the card
                                             // is the only tap affordance —
@@ -810,7 +819,7 @@ struct UpcomingCalendarView: View {
                                 }
                             }
                         }
-                        .animation(.easeInOut(duration: 0.28), value: allItemIds)
+                        .voygoAnimation(.easeInOut(duration: 0.28), value: allItemIds)
                         .padding(.vertical, 16)
                     }
                     .refreshable {
@@ -828,7 +837,7 @@ struct UpcomingCalendarView: View {
                 }
             }
         }
-        .animation(.easeOut(duration: 0.18), value: isSelectMode)
+        .voygoAnimation(.easeOut(duration: 0.18), value: isSelectMode)
         .task(id: routeId ?? "all") {
             await store.refreshCalendar(routeId: routeId)
         }
@@ -913,6 +922,7 @@ struct UpcomingCalendarView: View {
             }
             .buttonStyle(.plain)
             .disabled(selectedRideIds.isEmpty || bulkSkipInFlight)
+            .accessibilityHint(S.bulkSkipHint)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

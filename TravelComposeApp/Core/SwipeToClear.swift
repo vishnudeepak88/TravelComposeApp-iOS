@@ -158,13 +158,13 @@ private struct SwipeToClearModifier: ViewModifier {
 
     private func latchOpen() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+        withAnimation(reduceMotionAware(.spring(response: 0.32, dampingFraction: 0.85))) {
             offset = -actionWidth
         }
     }
 
     private func closeReveal() {
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+        withAnimation(reduceMotionAware(.spring(response: 0.32, dampingFraction: 0.85))) {
             offset = 0
         }
     }
@@ -176,7 +176,7 @@ private struct SwipeToClearModifier: ViewModifier {
         // First leg: row sweeps off-screen to the left. Slightly
         // overshoots so the action button trails off cleanly instead
         // of clipping at the edge.
-        withAnimation(.easeIn(duration: 0.2)) {
+        withAnimation(reduceMotionAware(.easeIn(duration: 0.2))) {
             offset = -actionWidth * 1.6
         }
         // Second leg: parent removes the row from its collection
@@ -187,7 +187,7 @@ private struct SwipeToClearModifier: ViewModifier {
         // an explicit transition, ForEach falls back to a fade,
         // which still reads fine.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            withAnimation(.easeInOut(duration: 0.28)) {
+            withAnimation(reduceMotionAware(.easeInOut(duration: 0.28))) {
                 onClear()
             }
         }

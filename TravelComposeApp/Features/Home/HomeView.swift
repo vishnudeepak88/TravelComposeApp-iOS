@@ -810,7 +810,7 @@ struct HomeView: View {
                         removal: .move(edge: .leading).combined(with: .opacity)
                     ))
             }
-            .animation(.easeInOut(duration: 0.28), value: visible.map(\.id))
+            .voygoAnimation(.easeInOut(duration: 0.28), value: visible.map(\.id))
         }
         .padding(.horizontal, 20)
         .padding(.top, 22)

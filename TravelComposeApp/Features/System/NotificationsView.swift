@@ -117,7 +117,7 @@ struct NotificationsView: View {
                                                 ))
                                         }
                                     }
-                                    .animation(.easeInOut(duration: 0.28), value: group.items.map(\.id))
+                                    .voygoAnimation(.easeInOut(duration: 0.28), value: group.items.map(\.id))
                                 }
                             }
                         }

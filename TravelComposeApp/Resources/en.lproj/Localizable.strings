@@ -105,6 +105,8 @@
 "upcoming.bulkSkip.cta" = "Skip %d";
 "upcoming.bulkSkip.failed.one" = "Couldn't skip 1 ride. Try again.";
 "upcoming.bulkSkip.failed.many" = "Couldn't skip %d rides. Try again.";
+"upcoming.bulkSkip.a11y.hint" = "Skips every selected ride without cancelling your subscription. Riders are notified.";
+"subs.bulkCancel.a11y.hint" = "Cancels every selected subscription. Refunds are calculated by policy engine and credited to your Voygo Credit.";
 
 /* Driver dashboard — empty state */
 "driver.empty.title" = "No routes yet";
